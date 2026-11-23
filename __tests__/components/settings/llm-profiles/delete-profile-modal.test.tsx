@@ -41,10 +41,18 @@ const mockProfile: ProfileInfo = {
 describe("DeleteProfileModal", () => {
   let queryClient: QueryClient;
 
-  const renderModal = (profile: ProfileInfo | null, onClose = vi.fn()) => {
+  const renderModal = (
+    profile: ProfileInfo | null,
+    onClose = vi.fn(),
+    onDeleted = vi.fn(),
+  ) => {
     return render(
       <QueryClientProvider client={queryClient}>
-        <DeleteProfileModal profile={profile} onClose={onClose} />
+        <DeleteProfileModal
+          profile={profile}
+          onClose={onClose}
+          onDeleted={onDeleted}
+        />
       </QueryClientProvider>,
     );
   };
@@ -115,12 +123,13 @@ describe("DeleteProfileModal", () => {
   it("calls deleteProfile and shows success toast on successful delete", async () => {
     const user = userEvent.setup();
     const handleClose = vi.fn();
+    const onDeleted = vi.fn();
     vi.mocked(ProfilesService.deleteProfile).mockResolvedValue({
       name: "profile-to-delete",
       message: "Profile deleted",
     });
 
-    renderModal(mockProfile, handleClose);
+    renderModal(mockProfile, handleClose, onDeleted);
 
     await user.click(screen.getByTestId("delete-profile-confirm"));
 
@@ -133,6 +142,7 @@ describe("DeleteProfileModal", () => {
       expect(toastHandlers.displaySuccessToast).toHaveBeenCalledWith(
         'Profile "profile-to-delete" deleted',
       );
+      expect(onDeleted).toHaveBeenCalledWith("profile-to-delete");
       expect(handleClose).toHaveBeenCalled();
     });
   });
@@ -140,11 +150,12 @@ describe("DeleteProfileModal", () => {
   it("shows error toast on delete failure", async () => {
     const user = userEvent.setup();
     const handleClose = vi.fn();
+    const onDeleted = vi.fn();
     vi.mocked(ProfilesService.deleteProfile).mockRejectedValue(
       new Error("Delete failed"),
     );
 
-    renderModal(mockProfile, handleClose);
+    renderModal(mockProfile, handleClose, onDeleted);
 
     await user.click(screen.getByTestId("delete-profile-confirm"));
 
@@ -155,6 +166,7 @@ describe("DeleteProfileModal", () => {
     });
 
     expect(handleClose).not.toHaveBeenCalled();
+    expect(onDeleted).not.toHaveBeenCalled();
   });
 
   it("shows the server's `detail` instead of the raw HttpError text when the server refuses the delete", async () => {

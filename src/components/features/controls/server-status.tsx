@@ -54,7 +54,7 @@ export function ServerStatus({
     <div className={className} data-testid="server-status">
       <div className="flex items-center">
         <DebugStackframeDot className="w-6 h-6 shrink-0" color={statusColor} />
-        <span className="text-[13px] text-contrast font-normal">
+        <span className="text-xs-plus text-contrast font-normal">
           {statusText}
         </span>
       </div>

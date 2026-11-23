@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { act, render, screen, waitFor, within } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -41,7 +41,11 @@ vi.mock("#/hooks/query/use-acp-auth-status", () => ({
 // What the provider's own server reports; empty unless a test sets it.
 const acpModelDiscoveryMock = vi.hoisted(() => vi.fn());
 vi.mock("#/hooks/query/use-acp-model-discovery", () => ({
-  useAcpModelDiscovery: (...args: unknown[]) => acpModelDiscoveryMock(...args),
+  useAcpModelDiscovery: (...args: unknown[]) => ({
+    effortsFor: () => [],
+    defaultEffort: null,
+    ...acpModelDiscoveryMock(...args),
+  }),
 }));
 const NO_DISCOVERY = {
   discovery: null,
@@ -430,6 +434,90 @@ describe("AgentSettingsScreen", () => {
     expect(control().buildAgentProfileFields()).toMatchObject({
       acp_model: "haiku",
     });
+  });
+
+  it("saves the reasoning effort the chosen model offers", async () => {
+    const efforts = [
+      { value: "low", label: "Low" },
+      { value: "high", label: "High" },
+    ];
+    acpModelDiscoveryMock.mockReturnValue({
+      ...NO_DISCOVERY,
+      discovery: { efforts_by_model: { default: [], haiku: [] } },
+      models: CLAUDE_MODELS,
+      source: "live",
+      defaultModelId: "default",
+      defaultEffort: "high",
+      effortsFor: (model: string | null) => (model === "haiku" ? [] : efforts),
+    });
+    const user = userEvent.setup();
+    const { control } = renderAgentSettingsScreen({
+      agentSettingsOverride: {
+        ...CLAUDE_PROFILE,
+        acp_model: "default",
+        acp_effort: "low",
+      },
+    });
+
+    await screen.findByTestId("agent-effort-selector");
+    expect(
+      screen.getByLabelText("SCHEMA$LLM$REASONING_EFFORT$LABEL"),
+    ).toHaveValue("Low");
+
+    await user.click(
+      screen.getByLabelText("SCHEMA$LLM$REASONING_EFFORT$LABEL"),
+    );
+    await user.click(await screen.findByRole("option", { name: "High" }));
+    expect(control().buildAgentProfileFields()).toMatchObject({
+      acp_model: "default",
+      acp_effort: "high",
+    });
+
+    // Haiku offers no effort: the stored one is cleared explicitly.
+    await user.click(screen.getByLabelText("SETTINGS$AGENT_MODEL"));
+    await user.click(await screen.findByRole("option", { name: "Haiku" }));
+    expect(screen.queryByTestId("agent-effort-selector")).toBeNull();
+    expect(control().buildAgentProfileFields()).toMatchObject({
+      acp_model: "haiku",
+      acp_effort: null,
+    });
+  });
+
+  it("preserves stored effort when discovery has no result for the model", async () => {
+    acpModelDiscoveryMock.mockReturnValue({
+      ...NO_DISCOVERY,
+      discovery: { efforts_by_model: { haiku: [] } },
+      models: CLAUDE_MODELS,
+      source: "live",
+    });
+    const { control } = renderAgentSettingsScreen({
+      agentSettingsOverride: {
+        ...CLAUDE_PROFILE,
+        acp_model: "default",
+        acp_effort: "high",
+      },
+    });
+
+    await screen.findByTestId("agent-model-selector");
+    expect(control().buildAgentProfileFields()).toMatchObject({
+      acp_effort: "high",
+    });
+  });
+
+  it("sends no effort for a profile that never had one", async () => {
+    acpModelDiscoveryMock.mockReturnValue({
+      ...NO_DISCOVERY,
+      models: CLAUDE_MODELS,
+      source: "live",
+    });
+    const { control } = renderAgentSettingsScreen({
+      agentSettingsOverride: CLAUDE_PROFILE,
+    });
+
+    await screen.findByTestId("agent-model-selector");
+    expect(control().buildAgentProfileFields()).not.toHaveProperty(
+      "acp_effort",
+    );
   });
 
   it("offers OpenCode and leaves its default command to the profile resolver", async () => {
@@ -2030,24 +2118,24 @@ describe("AgentSettingsScreen — Model Router", () => {
     user: ReturnType<typeof userEvent.setup>,
     name: string,
   ) {
-    const combo = screen.getByTestId("agent-settings-router-select");
-    combo.focus();
-    await user.keyboard("{ArrowDown}");
-    await user.click(await screen.findByRole("option", { name }));
+    const section = await screen.findByTestId("agent-model-router-section");
+    if (!section.hasAttribute("open")) {
+      await user.click(section.querySelector("summary")!);
+    }
+    await user.click(await screen.findByRole("radio", { name }));
   }
 
   it("opens on the profile's router and saves a change to it", async () => {
     const { control } = renderAgentSettingsScreen({
       agentSettingsOverride: WITH_ROUTER,
     });
-    await waitFor(() =>
-      expect(screen.getByTestId("agent-settings-router-select")).toHaveValue(
-        "fast-router",
-      ),
-    );
+    const user = userEvent.setup();
+    await choose(user, "fast-router");
+    expect(
+      screen.getByTestId("agent-settings-router-choices-option-fast-router"),
+    ).toBeChecked();
     expect(control().isDirty).toBe(false);
 
-    const user = userEvent.setup();
     await choose(user, "pro-router");
     await waitFor(() => expect(control().isDirty).toBe(true));
     expect(control().buildAgentProfileFields()).toMatchObject({
@@ -2062,31 +2150,101 @@ describe("AgentSettingsScreen — Model Router", () => {
     });
   });
 
-  it("manages shared routers from an optional section of the agent form", async () => {
+  it("offers one router radio list with actions on every saved row", async () => {
+    vi.spyOn(MetaProfilesService, "getMetaProfile").mockResolvedValue({
+      name: "fast-router",
+      config: {
+        classifier_model: "fast",
+        prompt_template: "{{ instance_text }}",
+        model_table: "",
+      },
+    } as never);
     renderAgentSettingsScreen({ agentSettingsOverride: WITH_ROUTER });
     const user = userEvent.setup();
 
     const section = await screen.findByTestId("agent-model-router-section");
-    expect(section).toBeInTheDocument();
-    await user.click(within(section).getByText("SETTINGS$NAV_META_LLM"));
+    await user.click(section.querySelector("summary")!);
+    expect(await screen.findByTestId("add-meta-profile")).toBeInTheDocument();
     expect(
-      await screen.findByTestId("meta-profile-row-fast-router"),
+      screen.getByTestId("agent-settings-router-choices-option-fast-router"),
+    ).toBeChecked();
+    expect(screen.queryByTestId("meta-profile-list")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", {
+        name: "SETTINGS$META_PROFILES_AVAILABLE",
+      }),
+    ).not.toBeInTheDocument();
+
+    expect(
+      screen.getByTestId("agent-settings-router-choices-delete-pro-router"),
     ).toBeInTheDocument();
-    expect(screen.getByTestId("add-meta-profile")).toBeInTheDocument();
-    expect(screen.getByTestId("agent-settings-router-select")).toHaveValue(
+    await user.click(
+      screen.getByTestId("agent-settings-router-choices-edit-fast-router"),
+    );
+    expect(
+      await screen.findByTestId("meta-profile-editor"),
+    ).toBeInTheDocument();
+    expect(MetaProfilesService.getMetaProfile).toHaveBeenCalledWith(
       "fast-router",
     );
+  });
+
+  it("selects a new router and offers it in the same list after creation", async () => {
+    const routers = [
+      { name: "fast-router", classifier_model: null, num_classes: 2 },
+      { name: "pro-router", classifier_model: null, num_classes: 3 },
+    ];
+    vi.spyOn(MetaProfilesService, "listMetaProfiles").mockImplementation(
+      async () => ({ meta_profiles: [...routers], active_meta_profile: null }),
+    );
+    vi.spyOn(MetaProfilesService, "saveMetaProfile").mockImplementation(
+      async (name) => {
+        routers.push({ name, classifier_model: null, num_classes: 0 });
+        return { name } as never;
+      },
+    );
+    const { control } = renderAgentSettingsScreen({
+      agentSettingsOverride: WITH_ROUTER,
+    });
+    const user = userEvent.setup();
+    await user.click(
+      (await screen.findByTestId("agent-model-router-section")).querySelector(
+        "summary",
+      )!,
+    );
+    await user.click(await screen.findByTestId("add-meta-profile"));
+    await user.click(screen.getByTestId("meta-profile-template-router-pro"));
+    await user.clear(screen.getByTestId("meta-profile-name-input"));
+    await user.type(
+      screen.getByTestId("meta-profile-name-input"),
+      "new-router",
+    );
+    await user.click(screen.getByTestId("meta-profile-save"));
+
+    await waitFor(() =>
+      expect(
+        screen.getByTestId("agent-settings-router-choices-option-new-router"),
+      ).toBeChecked(),
+    );
+    expect(control().buildAgentProfileFields()).toMatchObject({
+      meta_profile_ref: "new-router",
+    });
+    await choose(user, "pro-router");
+    await choose(user, "new-router");
+    expect(
+      screen.getByTestId("agent-settings-router-choices-option-new-router"),
+    ).toBeChecked();
   });
 
   it("leaves the stored router alone when saving other changes", async () => {
     const { control } = renderAgentSettingsScreen({
       agentSettingsOverride: WITH_ROUTER,
     });
-    await waitFor(() =>
-      expect(screen.getByTestId("agent-settings-router-select")).toHaveValue(
-        "fast-router",
-      ),
-    );
+    const user = userEvent.setup();
+    await choose(user, "fast-router");
+    expect(
+      screen.getByTestId("agent-settings-router-choices-option-fast-router"),
+    ).toBeChecked();
 
     const fields = control().buildAgentProfileFields();
     expect(fields).not.toHaveProperty("enable_classify_and_switch_llm_tool");
@@ -2097,11 +2255,11 @@ describe("AgentSettingsScreen — Model Router", () => {
     const { control } = renderAgentSettingsScreen({
       agentSettingsOverride: { ...WITH_ROUTER, meta_profile_ref: null },
     });
-    await waitFor(() =>
-      expect(screen.getByTestId("agent-settings-router-select")).toHaveValue(
-        "SETTINGS$AGENT_PROFILE_ROUTER_FIRST",
-      ),
-    );
+    const user = userEvent.setup();
+    await choose(user, "SETTINGS$AGENT_PROFILE_ROUTER_FIRST");
+    expect(
+      screen.getByTestId("agent-settings-router-choices-option-__first__"),
+    ).toBeChecked();
     expect(
       screen.queryByTestId("agent-settings-router-dangling"),
     ).not.toBeInTheDocument();
@@ -2110,7 +2268,6 @@ describe("AgentSettingsScreen — Model Router", () => {
       "enable_classify_and_switch_llm_tool",
     );
 
-    const user = userEvent.setup();
     await choose(user, "SETTINGS$AGENT_PROFILE_ROUTER_OFF");
     await waitFor(() => expect(control().isDirty).toBe(true));
     expect(control().buildAgentProfileFields()).toMatchObject({

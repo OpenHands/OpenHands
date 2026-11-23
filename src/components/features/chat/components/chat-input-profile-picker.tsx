@@ -61,7 +61,7 @@ export function ChatInputProfileMenuContent({
           {/* role="presentation" keeps this a valid <li> child of the
               ContextMenu <ul> without exposing the label as a menu item. */}
           <li role="presentation" className="px-2 pt-1 pb-0.5">
-            <Typography.Text className="text-[11px] font-medium text-text-dim uppercase tracking-wide leading-4">
+            <Typography.Text className="menu-caption-text font-medium text-text-dim uppercase tracking-wide leading-4">
               {t(I18nKey.SETTINGS$AVAILABLE_PROFILES)}
             </Typography.Text>
           </li>
@@ -106,7 +106,7 @@ export function ChatInputProfileMenuContent({
           })}
           {isInConversation && (
             <li role="presentation" className="px-2 pt-0.5 pb-1">
-              <Typography.Text className="text-[11px] text-text-dim leading-4">
+              <Typography.Text className="menu-caption-text text-text-dim leading-4">
                 {t(I18nKey.CHAT$START_NEW_WITH_PROFILE_HINT)}
               </Typography.Text>
             </li>
@@ -188,7 +188,7 @@ export function ChatInputAgentProfilePicker() {
           position="top"
           alignment="left"
           spacing="none"
-          className="z-[60] mb-2 min-w-50 max-w-80 max-h-[60vh] overflow-y-auto"
+          className="z-60 mb-2 min-w-50 max-w-80 profile-menu-height overflow-y-auto"
         >
           <ChatInputProfileMenuContent onClose={() => setIsOpen(false)} />
         </ContextMenu>

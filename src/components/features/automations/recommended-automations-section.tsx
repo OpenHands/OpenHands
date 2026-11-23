@@ -31,6 +31,7 @@ import {
   getAutomationLaunchPrompt,
   getIntegrationIds,
   getTemplateIntegrationIds,
+  getTemplateLogoIds,
   getTemplateTriggerKinds,
   splitBySuggestion,
   type TemplateTriggerKind,
@@ -237,12 +238,10 @@ function buildRecommendedAutomationPills(
  */
 function AutomationCardIcon({
   automation,
-  integrations,
   size,
   testId,
 }: {
   automation: RecommendedAutomation;
-  integrations: AutomationIntegration[];
   size: "base" | "md";
   testId: string;
 }) {
@@ -262,7 +261,10 @@ function AutomationCardIcon({
   }
   return (
     <McpLogoStackBadge
-      entries={integrations.flatMap(({ entry }) => (entry ? [entry] : []))}
+      entries={getTemplateLogoIds(automation).flatMap((id) => {
+        const entry = getMarketplaceEntryById(id, MCP_MARKETPLACE);
+        return entry ? [entry] : [];
+      })}
       testId={testId}
     />
   );
@@ -341,7 +343,6 @@ function AutomationCardGrid({
             <div className="flex min-w-0 flex-1 items-start gap-3">
               <AutomationCardIcon
                 automation={automation}
-                integrations={integrations}
                 size="md"
                 testId={`recommended-automation-icon-${automation.id}`}
               />

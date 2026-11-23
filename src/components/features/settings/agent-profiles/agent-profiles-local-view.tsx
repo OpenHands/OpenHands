@@ -4,13 +4,16 @@ import { useActiveBackend } from "#/contexts/active-backend-context";
 import { ensureDefaultAgentProfileMigrated } from "#/hooks/use-migrate-default-agent-profile";
 import { useTranslation } from "react-i18next";
 import { AgentProfilesManager } from "./agent-profiles-manager";
-import { AgentFormSection } from "./agent-form-section";
+import { ProfileChoiceList } from "./profile-choice-list";
 import { mergeAgentProfileSaveInput } from "./merge-agent-profile-save-input";
 import { newProfileSeed } from "./new-profile-seed";
 import { ProfileNameInput } from "#/components/features/settings/llm-profiles/profile-name-input";
 import { LlmSettingsLocalView } from "#/components/features/settings/llm-profiles/llm-settings-local-view";
+import { DeleteProfileModal } from "#/components/features/settings/llm-profiles/delete-profile-modal";
+import { ApiKeyModalBase } from "#/components/features/settings/api-key-modal-base";
 import { BrandButton } from "#/components/features/settings/brand-button";
-import { SettingsDropdownInput } from "#/components/features/settings/settings-dropdown-input";
+import { useCanManageOrgProfiles } from "#/hooks/use-can-manage-org-profiles";
+import type { ProfileInfo } from "#/api/profiles-service/profiles-service.api";
 import {
   AgentSettingsScreen,
   type AgentSettingsSaveControl,
@@ -69,6 +72,7 @@ function toAgentSettingsOverride(
       acp_command: profile.acp_command ? parseCommand(profile.acp_command) : [],
       acp_args: profile.acp_args ?? [],
       acp_model: profile.acp_model ?? "",
+      acp_effort: profile.acp_effort ?? "",
     };
   }
   const stored = profile as typeof profile & {
@@ -123,6 +127,7 @@ export function AgentProfilesLocalView() {
   const { data: settings } = useSettings();
   const queryClient = useQueryClient();
   const { backend } = useActiveBackend();
+  const canManageLlmProfiles = useCanManageOrgProfiles();
   // Edits must build on, and land after, the one-time `default` migration.
   const waitForMigration = useCallback(
     () =>
@@ -151,7 +156,11 @@ export function AgentProfilesLocalView() {
     SettingsValue
   > | null>(null);
   const [llmProfileRef, setLlmProfileRef] = useState("");
-  const [creatingLlmProfile, setCreatingLlmProfile] = useState(false);
+  const [llmEditorTarget, setLlmEditorTarget] = useState<
+    ProfileInfo | "create" | null
+  >(null);
+  const [llmProfileToDelete, setLlmProfileToDelete] =
+    useState<ProfileInfo | null>(null);
   const [editingRouter, setEditingRouter] = useState(false);
   const [saveControl, setSaveControl] =
     useState<AgentSettingsSaveControl | null>(null);
@@ -204,7 +213,7 @@ export function AgentProfilesLocalView() {
       agent_kind: "openhands",
     });
     setLlmProfileRef(defaultLlmProfileRef);
-    setCreatingLlmProfile(false);
+    setLlmEditorTarget(null);
     setEditingRouter(false);
     setSaveControl(null);
     setViewMode("create");
@@ -255,7 +264,7 @@ export function AgentProfilesLocalView() {
           setLlmProfileRef("");
         }
         setProfileName(profile.name);
-        setCreatingLlmProfile(false);
+        setLlmEditorTarget(null);
         setEditingRouter(false);
         setSaveControl(null);
         setViewMode("edit");
@@ -282,13 +291,14 @@ export function AgentProfilesLocalView() {
     setProfileName("");
     setNameTouched(false);
     setOverride(null);
-    setCreatingLlmProfile(false);
+    setLlmEditorTarget(null);
     setEditingRouter(false);
     setSaveControl(null);
   }, []);
 
   const handleSave = useCallback(async () => {
-    if (!saveControl || !isNameValid || editingRouter) return;
+    if (!saveControl || !isNameValid || editingRouter || llmEditorTarget)
+      return;
 
     // Build the variant-specific fields from the embedded form (may throw on
     // invalid input, e.g. a bad concurrency value).
@@ -370,6 +380,7 @@ export function AgentProfilesLocalView() {
     saveControl,
     isNameValid,
     editingRouter,
+    llmEditorTarget,
     llmProfileRef,
     profileName,
     viewMode,
@@ -429,31 +440,38 @@ export function AgentProfilesLocalView() {
     llmRefDirty;
 
   // @spec FF-001 — Profile validation feedback follows the host error role
-  // OpenHands profiles reference an LLM profile (required).
   const llmPicker = (
     <div className="flex flex-col gap-2">
       {llmProfiles.length > 0 ? (
-        <div className="flex flex-col gap-2">
-          <SettingsDropdownInput
-            testId="agent-profile-llm-selector"
-            name="agent-profile-llm"
-            label={t(I18nKey.SETTINGS$AGENT_PROFILE_LLM_LABEL)}
-            items={llmProfiles.map((p) => ({
-              key: p.name,
-              label: p.model ? `${p.name} (${p.model})` : p.name,
-            }))}
-            selectedKey={llmProfileRef}
-            onSelectionChange={(key) => key && setLlmProfileRef(String(key))}
-          />
-          {isEditingDefault ? (
-            <p
-              data-testid="agent-profile-llm-default-note"
-              className="text-xs text-tertiary-alt"
-            >
-              {t(I18nKey.SETTINGS$AGENT_PROFILE_DEFAULT_LLM_NOTE)}
-            </p>
-          ) : null}
-        </div>
+        <ProfileChoiceList
+          testId="agent-profile-llm-choices"
+          name="agent-profile-llm"
+          label={t(I18nKey.SETTINGS$AGENT_PROFILE_LLM_LABEL)}
+          choices={llmProfiles.map((profile) => ({
+            name: profile.name,
+            description: profile.model,
+          }))}
+          selected={llmProfileRef}
+          onSelect={setLlmProfileRef}
+          onEdit={
+            canManageLlmProfiles
+              ? (name) =>
+                  setLlmEditorTarget(
+                    llmProfiles.find((profile) => profile.name === name) ??
+                      null,
+                  )
+              : undefined
+          }
+          onDelete={
+            canManageLlmProfiles
+              ? (name) =>
+                  setLlmProfileToDelete(
+                    llmProfiles.find((profile) => profile.name === name) ??
+                      null,
+                  )
+              : undefined
+          }
+        />
       ) : (
         <div className="flex flex-col gap-2">
           <p className="text-sm">
@@ -467,23 +485,25 @@ export function AgentProfilesLocalView() {
           </p>
         </div>
       )}
-      <AgentFormSection
-        testId="agent-profile-add-llm"
-        title={t(I18nKey.SETTINGS$ADD_LLM_PROFILE)}
-        optional={false}
-        open={creatingLlmProfile}
-        onToggle={setCreatingLlmProfile}
-      >
-        {creatingLlmProfile && (
-          <section data-testid="agent-inline-llm-editor">
-            <LlmSettingsLocalView
-              createInAgent
-              onSavedProfile={setLlmProfileRef}
-              onCancel={() => setCreatingLlmProfile(false)}
-            />
-          </section>
-        )}
-      </AgentFormSection>
+      {isEditingDefault ? (
+        <p
+          data-testid="agent-profile-llm-default-note"
+          className="text-xs text-tertiary-alt"
+        >
+          {t(I18nKey.SETTINGS$AGENT_PROFILE_DEFAULT_LLM_NOTE)}
+        </p>
+      ) : null}
+      {canManageLlmProfiles ? (
+        <BrandButton
+          testId="agent-profile-add-llm"
+          type="button"
+          variant="secondary"
+          className="self-start"
+          onClick={() => setLlmEditorTarget("create")}
+        >
+          {t(I18nKey.SETTINGS$ADD_LLM_PROFILE)}
+        </BrandButton>
+      ) : null}
     </div>
   );
 
@@ -540,6 +560,54 @@ export function AgentProfilesLocalView() {
         llmPicker={llmPicker}
       />
 
+      {llmEditorTarget ? (
+        <ApiKeyModalBase
+          isOpen
+          width="xl"
+          title={t(
+            llmEditorTarget === "create"
+              ? I18nKey.SETTINGS$ADD_LLM_PROFILE
+              : I18nKey.SETTINGS$EDIT_LLM_PROFILE,
+          )}
+          footer={null}
+          onClose={() => setLlmEditorTarget(null)}
+        >
+          <div
+            data-testid="agent-inline-llm-editor"
+            className="max-h-[70vh] overflow-y-auto"
+          >
+            <LlmSettingsLocalView
+              createInAgent
+              initialProfile={
+                llmEditorTarget === "create" ? undefined : llmEditorTarget
+              }
+              onSavedProfile={(name) => {
+                setLlmProfileRef((current) =>
+                  llmEditorTarget === "create" ||
+                  current === llmEditorTarget.name
+                    ? name
+                    : current,
+                );
+                setLlmEditorTarget(null);
+              }}
+              onCancel={() => setLlmEditorTarget(null)}
+            />
+          </div>
+        </ApiKeyModalBase>
+      ) : null}
+      <DeleteProfileModal
+        profile={llmProfileToDelete}
+        onClose={() => setLlmProfileToDelete(null)}
+        onDeleted={(name) =>
+          setLlmProfileRef((current) =>
+            current === name
+              ? (llmProfiles.find((profile) => profile.name !== name)?.name ??
+                "")
+              : current,
+          )
+        }
+      />
+
       <div className="flex justify-start gap-3 pt-4">
         <BrandButton
           testId="cancel-agent-profile-btn"
@@ -557,7 +625,7 @@ export function AgentProfilesLocalView() {
           isDisabled={
             !isNameValid ||
             isSaving ||
-            creatingLlmProfile ||
+            llmEditorTarget !== null ||
             editingRouter ||
             !saveControl?.isValid ||
             !hasUnsavedChanges

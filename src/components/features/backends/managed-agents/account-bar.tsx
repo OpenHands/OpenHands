@@ -63,7 +63,7 @@ export function AccountBar({
         type="button"
         onClick={onAddConnection}
         data-testid="managed-agents-add-connection"
-        className="cursor-pointer text-primary hover:underline"
+        className="cursor-pointer text-link hover:underline"
       >
         {t(I18nKey.BACKEND$DIGITALOCEAN_ADD_CONNECTION)}
       </button>

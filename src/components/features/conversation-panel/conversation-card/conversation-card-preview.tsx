@@ -1,3 +1,4 @@
+import { ConversationTitleText } from "#/components/features/conversation/conversation-title-text";
 import type { ReactNode } from "react";
 import { Folder } from "lucide-react";
 import { FaBitbucket, FaGithub, FaGitlab } from "react-icons/fa6";
@@ -20,6 +21,7 @@ import { getConversationTagIcon } from "./conversation-tag-icons";
 
 interface ConversationCardPreviewProps {
   title: string;
+  titlePending?: boolean;
   executionStatus?: ExecutionStatus | null;
   sandboxStatus?: SandboxStatus | null;
   selectedRepository: RepositorySelection | null;
@@ -121,6 +123,7 @@ function PreviewValueWithIcon({
 
 export function ConversationCardPreview({
   title,
+  titlePending,
   executionStatus,
   sandboxStatus,
   selectedRepository,
@@ -168,7 +171,7 @@ export function ConversationCardPreview({
           </span>
         ) : null}
         <span className="break-words text-sm font-medium leading-5 text-contrast">
-          {title}
+          <ConversationTitleText title={title} pending={titlePending} />
         </span>
       </div>
 

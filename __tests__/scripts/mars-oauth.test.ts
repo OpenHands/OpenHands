@@ -1,6 +1,7 @@
 // @vitest-environment node
 import { createServer } from "node:net";
-import { describe, expect, it, vi } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { server as mswServer } from "#/mocks/node";
 
 import {
   OAUTH_REDIRECT_PORT,
@@ -9,6 +10,9 @@ import {
   parseImplicitGrant,
   signInWithDigitalOcean,
 } from "../../scripts/mars-oauth.mjs";
+
+beforeAll(() => mswServer.close());
+afterAll(() => mswServer.listen({ onUnhandledFrame: "bypass" }));
 
 const STATE = "state-abc";
 

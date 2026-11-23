@@ -44,6 +44,8 @@ interface AutomationsDashboardControlsProps {
   trigger: DashboardTriggerValue;
   createdBy: DashboardCreatedByValue;
   canFilterByCreator: boolean;
+  /** Whether the owner filter may offer its Service accounts option. */
+  canFilterByServiceAccount: boolean;
   /** The selected tag, or null for any. */
   tag: string | null;
   /** The org's tags; the tag filter is hidden while this is empty. */
@@ -72,6 +74,7 @@ export function AutomationsDashboardControls({
   trigger,
   createdBy,
   canFilterByCreator,
+  canFilterByServiceAccount,
   tag,
   tagOptions,
   sort,
@@ -145,7 +148,7 @@ export function AutomationsDashboardControls({
         <ListFilter className="h-4 w-4 shrink-0" aria-hidden />
         <span className="whitespace-nowrap">{filtersLabel}</span>
         {activeCount > 0 ? (
-          <span className="rounded-full bg-contrast px-1.5 text-[11px] font-medium text-contrast-foreground">
+          <span className="rounded-full bg-contrast px-1.5 text-2xs font-medium text-contrast-foreground">
             {activeCount}
           </span>
         ) : null}
@@ -163,7 +166,7 @@ export function AutomationsDashboardControls({
           role="group"
           data-testid="automations-filters-menu"
           aria-label={filtersLabel}
-          className="absolute right-0 top-full z-50 mt-1 flex min-w-[16rem] w-max flex-col gap-3 overflow-visible rounded-md bg-tertiary p-3 context-menu-box-shadow"
+          className="absolute right-0 top-full z-50 mt-1 flex min-w-64 w-max flex-col gap-3 overflow-visible rounded-md bg-tertiary p-3 context-menu-box-shadow"
         >
           {statusFilter ? (
             <FilterField label={statusFilter.label}>
@@ -197,7 +200,14 @@ export function AutomationsDashboardControls({
                 testId="automations-filter-created-by"
                 value={createdBy}
                 onChange={onCreatedByChange}
-                options={createdByFilter.options.map((option) => option.value)}
+                // The Service accounts option is offered only where service
+                // accounts are on; the rest and every caption stay the manifest's.
+                options={createdByFilter.options
+                  .filter(
+                    (option) =>
+                      canFilterByServiceAccount || option.value !== "service",
+                  )
+                  .map((option) => option.value)}
                 labelByValue={toLabelMap(createdByFilter.options)}
                 ariaLabel={createdByFilter.label}
                 fullWidth

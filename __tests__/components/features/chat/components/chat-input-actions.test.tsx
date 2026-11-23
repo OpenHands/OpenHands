@@ -15,6 +15,7 @@ import {
   setRegisteredBackends,
 } from "#/api/backend-registry/active-store";
 import type { Backend } from "#/api/backend-registry/types";
+import type { CloudIntegrationsConfig } from "#/api/cloud/settings-service.api";
 import { I18nKey } from "#/i18n/declaration";
 
 const useActiveConversationMock = vi.fn<
@@ -30,7 +31,9 @@ const useActiveConversationMock = vi.fn<
 >(() => ({ data: undefined }));
 
 vi.mock("#/components/features/controls/agent-status", () => ({
-  AgentStatus: () => <div data-testid="agent-status-stub" />,
+  AgentStatus: ({ compact }: { compact?: boolean }) => (
+    <div data-testid="agent-status-stub" data-compact={String(!!compact)} />
+  ),
 }));
 
 vi.mock("#/components/features/chat/change-agent-button", () => ({
@@ -78,6 +81,30 @@ vi.mock("#/api/agent-profiles-service/agent-profiles-service.api", () => ({
   WELL_KNOWN_DEFAULT_AGENT_PROFILE_NAME: "default",
 }));
 
+// Service-level mock (not the hook): the instance config behind
+// useCloudIntegrationsConfig, which tells a self-hosted instance that turned
+// Agent Profiles off apart from OpenHands Cloud (OHE-3934).
+const saasInstanceConfig: CloudIntegrationsConfig = {
+  providersConfigured: [],
+  isJiraEnabled: false,
+  isJiraDcEnabled: false,
+  isLinearEnabled: false,
+  isSlackEnabled: false,
+  deploymentMode: "cloud",
+  isOrgMcpServersEnabled: false,
+  isAgentProfilesEnabled: false,
+  isServiceAccountsEnabled: false,
+  isOauthV2LoginEnabled: false,
+  isFactoriesEnabled: false,
+};
+const fetchCloudIntegrationsConfigMock = vi.fn(async () => saasInstanceConfig);
+vi.mock("#/api/cloud/settings-service.api", async () => ({
+  ...(await vi.importActual<typeof import("#/api/cloud/settings-service.api")>(
+    "#/api/cloud/settings-service.api",
+  )),
+  fetchCloudIntegrationsConfig: () => fetchCloudIntegrationsConfigMock(),
+}));
+
 vi.mock("#/hooks/mutation/conversation-mutation-utils", () => ({
   pauseConversation: vi.fn(),
   resumeConversation: vi.fn(),
@@ -106,7 +133,7 @@ describe("ChatInputActions", () => {
   });
 
   it.each(["local", "cloud"])(
-    "shows only the agent-profile picker on the %s home page",
+    "offers both agent and LLM profiles on the %s home page",
     async (backend) => {
       listAgentProfilesMock.mockResolvedValue({
         profiles: [{ id: "p1", name: "default", agent_kind: "openhands" }],
@@ -126,12 +153,12 @@ describe("ChatInputActions", () => {
       expect(
         await screen.findByTestId("agent-profile-pill-stub"),
       ).toBeVisible();
-      expect(screen.queryByTestId("llm-profile-picker-stub")).toBeNull();
+      expect(screen.getByTestId("llm-profile-picker-stub")).toBeVisible();
       expect(screen.queryByTestId("chat-input-llm-model")).toBeNull();
     },
   );
 
-  it("shows only the agent picker inside a blank local OpenHands conversation", async () => {
+  it("offers both selectors inside a blank local OpenHands conversation", async () => {
     listAgentProfilesMock.mockResolvedValue({
       profiles: [{ id: "p1", name: "default", agent_kind: "openhands" }],
       active_agent_profile_id: "p1",
@@ -146,7 +173,7 @@ describe("ChatInputActions", () => {
     );
 
     expect(await screen.findByTestId("agent-profile-pill-stub")).toBeVisible();
-    expect(screen.queryByTestId("llm-profile-picker-stub")).toBeNull();
+    expect(screen.getByTestId("llm-profile-picker-stub")).toBeVisible();
     expect(screen.queryByTestId("chat-input-llm-model")).toBeNull();
   });
 
@@ -432,6 +459,110 @@ describe("ChatInputActions — Switch agent profile gate (OSS-5735)", () => {
   });
 });
 
+describe("ChatInputActions — Agent Profiles turned off on a self-hosted instance (OHE-3934)", () => {
+  const instance = (overrides: Partial<CloudIntegrationsConfig>) => ({
+    ...saasInstanceConfig,
+    ...overrides,
+  });
+
+  beforeEach(() => {
+    setRegisteredBackends([cloudBackend]);
+    setActiveSelection({ backendId: cloudBackend.id });
+    useActiveConversationMock.mockReset();
+    useActiveConversationMock.mockReturnValue({ data: undefined });
+    listAgentProfilesMock.mockReset();
+    listAgentProfilesMock.mockResolvedValue({
+      profiles: [{ id: "p1", name: "default", agent_kind: "openhands" }],
+      active_agent_profile_id: "p1",
+    });
+  });
+
+  afterEach(() => {
+    window.localStorage.clear();
+    __resetActiveStoreForTests();
+    fetchCloudIntegrationsConfigMock.mockReset();
+  });
+
+  const openPlusMenu = () => {
+    fireEvent.click(screen.getByTestId("chat-plus-button"));
+  };
+
+  it("hides the agent profile pill and the + menu item once the instance reports Agent Profiles off", async () => {
+    let reportInstance!: (config: CloudIntegrationsConfig) => void;
+    fetchCloudIntegrationsConfigMock.mockReturnValue(
+      new Promise<CloudIntegrationsConfig>((resolve) => {
+        reportInstance = resolve;
+      }),
+    );
+
+    renderWithProviders(
+      <ActiveBackendProvider>
+        <ChatInputActions disabled={false} />
+      </ActiveBackendProvider>,
+      { navigation: { conversationId: null } },
+    );
+
+    // Open until the instance config arrives, as on OpenHands Cloud.
+    expect(
+      await screen.findByTestId("agent-profile-pill-stub"),
+    ).toBeInTheDocument();
+
+    await act(async () => {
+      reportInstance(
+        instance({
+          deploymentMode: "self_hosted",
+          isAgentProfilesEnabled: false,
+        }),
+      );
+    });
+
+    await waitFor(() =>
+      expect(
+        screen.queryByTestId("agent-profile-pill-stub"),
+      ).not.toBeInTheDocument(),
+    );
+    openPlusMenu();
+    expect(await screen.findByTestId("tools-context-menu")).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("switch-agent-profile-button"),
+    ).not.toBeInTheDocument();
+  });
+
+  it.each([
+    [
+      "OpenHands Cloud, which reports the flag off",
+      { deploymentMode: "cloud", isAgentProfilesEnabled: false },
+    ],
+    [
+      "a self-hosted instance with Agent Profiles on",
+      { deploymentMode: "self_hosted", isAgentProfilesEnabled: true },
+    ],
+  ])(
+    "keeps offering the agent profile switch on %s",
+    async (_name, overrides) => {
+      fetchCloudIntegrationsConfigMock.mockResolvedValue(instance(overrides));
+
+      renderWithProviders(
+        <ActiveBackendProvider>
+          <ChatInputActions disabled={false} />
+        </ActiveBackendProvider>,
+        { navigation: { conversationId: null } },
+      );
+
+      await waitFor(() =>
+        expect(fetchCloudIntegrationsConfigMock).toHaveBeenCalled(),
+      );
+      expect(
+        await screen.findByTestId("agent-profile-pill-stub"),
+      ).toBeInTheDocument();
+      openPlusMenu();
+      expect(
+        await screen.findByTestId("switch-agent-profile-button"),
+      ).toBeInTheDocument();
+    },
+  );
+});
+
 describe("ChatInputActions — More input actions overflow menu (#17925)", () => {
   // Agent Canvas hydrates on `document`, so the trigger's stopPropagation()
   // cannot keep a real click away from document-level listeners, and the
@@ -501,7 +632,7 @@ describe("ChatInputActions — More input actions overflow menu (#17925)", () =>
     });
   };
 
-  it("keeps a narrow home menu free of model selection", () => {
+  it("keeps the LLM profile available in a narrow home menu", () => {
     setRegisteredBackends([cloudBackend]);
     setActiveSelection({ backendId: cloudBackend.id });
     renderWithProviders(
@@ -516,7 +647,12 @@ describe("ChatInputActions — More input actions overflow menu (#17925)", () =>
     expect(getTrigger()).toHaveAttribute("aria-expanded", "true");
     expect(screen.getByTestId("chat-input-overflow-menu")).toBeInTheDocument();
     expect(screen.getByTestId("overflow-agent-button")).toBeInTheDocument();
-    expect(screen.queryByTestId("overflow-model-button")).toBeNull();
+    fireEvent.click(screen.getByTestId("overflow-model-button"));
+    expect(
+      within(screen.getByTestId("overflow-model-submenu")).getByTestId(
+        "llm-profile-menu-stub",
+      ),
+    ).toBeInTheDocument();
   });
 
   it("closes on a second trigger click and on a click outside", () => {
@@ -563,6 +699,17 @@ describe("ChatInputActions — More input actions overflow menu (#17925)", () =>
     expect(
       screen.getByTestId("overflow-model-submenu").parentElement,
     ).not.toHaveClass("visible");
+  });
+
+  it("keeps the agent status control in a narrow conversation row", () => {
+    renderWithProviders(<ChatInputActions disabled={false} />, {
+      navigation: { conversationId: "test-conversation-id" },
+    });
+
+    expect(screen.getByTestId("agent-status-stub")).toHaveAttribute(
+      "data-compact",
+      "true",
+    );
   });
 
   it("opens the Model submenu with the profile list once a conversation starts", () => {

@@ -16,7 +16,7 @@ import { McpLogoBadge } from "#/components/features/mcp-logo-badge";
 import { getMarketplaceEntryById } from "#/utils/mcp-marketplace-utils";
 import {
   getAutomationIcon,
-  getIntegrationIds,
+  getTemplateLogoIds,
 } from "#/utils/automation-catalog";
 import {
   flattenRecommendedRailGroups,
@@ -54,7 +54,7 @@ const RAIL_ICON_ROW_CLASS_NAME = "flex h-10 items-start";
 function integrationEntries(
   automation: RecommendedAutomation,
 ): MarketplaceEntry[] {
-  return getIntegrationIds(automation).flatMap((id) => {
+  return getTemplateLogoIds(automation).flatMap((id) => {
     const entry = getMarketplaceEntryById(id, MCP_MARKETPLACE);
     return entry ? [entry] : [];
   });
@@ -243,7 +243,7 @@ export function RecommendedAutomationsRail({
           data-visible={fadeState.left ? "true" : "false"}
           className={cn(
             "pointer-events-none absolute inset-y-0 left-0 z-10 w-10",
-            "bg-gradient-to-r from-[var(--oh-scroll-fade-from,var(--oh-color-base))] to-transparent",
+            "bg-gradient-to-r from-scroll-fade to-transparent",
             "transition-opacity duration-300 ease-out motion-reduce:transition-none",
             fadeState.left ? "opacity-100" : "opacity-0",
           )}
@@ -254,7 +254,7 @@ export function RecommendedAutomationsRail({
           data-visible={fadeState.right ? "true" : "false"}
           className={cn(
             "pointer-events-none absolute inset-y-0 right-0 z-10 w-10",
-            "bg-gradient-to-l from-[var(--oh-scroll-fade-from,var(--oh-color-base))] to-transparent",
+            "bg-gradient-to-l from-scroll-fade to-transparent",
             "transition-opacity duration-300 ease-out motion-reduce:transition-none",
             fadeState.right ? "opacity-100" : "opacity-0",
           )}

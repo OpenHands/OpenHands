@@ -42,6 +42,15 @@ vi.mock("react-i18next", async () => {
   };
 });
 
+const factoriesSupport = vi.hoisted(() => ({ isSupported: false }));
+
+vi.mock("#/hooks/query/use-factories", () => ({
+  useFactoriesSupported: () => ({
+    isLoading: false,
+    isSupported: factoriesSupport.isSupported,
+  }),
+}));
+
 vi.mock("#/hooks/query/use-config", () => ({
   useConfig: () => ({ data: { feature_flags: {} } }),
 }));
@@ -214,10 +223,11 @@ function getDesktopSidebar(collapsed?: boolean): HTMLElement {
   return sidebar;
 }
 
-function renderSidebar(currentPath: string) {
+function renderSidebar(currentPath: string, currentSearch = "") {
   const navigate = vi.fn();
   const value: NavigationContextValue = {
     currentPath,
+    currentSearch,
     conversationId: null,
     isNavigating: false,
     navigate,
@@ -243,6 +253,7 @@ describe("Sidebar", () => {
     // Zustand store is a module singleton; reset it so collapsed state from
     // a prior test doesn't bleed into this one.
     useSidebarStore.setState({ collapsed: false });
+    factoriesSupport.isSupported = false;
   });
 
   afterEach(() => {
@@ -270,6 +281,16 @@ describe("Sidebar", () => {
         screen.queryByTestId("sidebar-mobile-drawer"),
       ).not.toBeInTheDocument();
     });
+  });
+
+  it("applies safe-area padding to the fixed mobile drawer", () => {
+    renderSidebar("/conversations");
+
+    fireEvent.click(screen.getByTestId("sidebar-mobile-menu-toggle"));
+
+    const drawer = screen.getByTestId("sidebar-mobile-drawer");
+    expect(drawer).toHaveClass("mobile-sidebar-drawer-safe-area");
+    expect(drawer).not.toHaveClass("pb-2", "pl-2.5", "pr-0");
   });
 
   it("keeps the CSS drawer and backdrop timing in step with removal", async () => {
@@ -635,6 +656,53 @@ describe("Sidebar", () => {
       checklist.compareDocumentPosition(backendBar) &
         Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
+  });
+
+  it("hides the Factories link when the automation service has no factories", () => {
+    renderSidebar("/conversations");
+
+    expect(
+      screen.queryByTestId("sidebar-factories-link"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("links to the factories list when the automation service has factories", () => {
+    factoriesSupport.isSupported = true;
+
+    renderSidebar("/conversations");
+
+    const link = screen.getByTestId("sidebar-factories-link");
+    expect(link).toHaveTextContent("Factories");
+    expect(link).toHaveAttribute("href", "/factories");
+  });
+
+  it("keeps Factories selected on an automation page opened from a factory", () => {
+    factoriesSupport.isSupported = true;
+
+    renderSidebar("/automations/setup", "?factory=factory-1");
+
+    expect(screen.getByTestId("sidebar-factories-link")).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+    expect(screen.getByTestId("sidebar-automations-link")).toHaveAttribute(
+      "aria-current",
+      "false",
+    );
+  });
+
+  it("selects Automate on the same pages when no factory is in play", () => {
+    factoriesSupport.isSupported = true;
+
+    renderSidebar("/automations/setup");
+
+    expect(screen.getByTestId("sidebar-automations-link")).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+    expect(screen.getByTestId("sidebar-factories-link")).not.toHaveAttribute(
+      "aria-current",
+    );
   });
 
   it("renders icons for every top-level nav item so they remain meaningful in the collapsed rail", () => {

@@ -29,6 +29,7 @@ import { ProfileScopeList } from "#/components/features/settings/agent-profiles/
 import { AgentMcpSetup } from "#/components/features/settings/agent-profiles/agent-mcp-setup";
 import { AgentFormSection } from "#/components/features/settings/agent-profiles/agent-form-section";
 import { MetaLlmSettingsView } from "#/components/features/settings/meta-llm-profiles/meta-llm-settings-view";
+import { ROUTER_FIRST_KEY } from "#/components/features/settings/meta-llm-profiles/router-profiles";
 import { SecretForm } from "#/components/features/settings/secrets-settings/secret-form";
 import { ConfirmationModal } from "#/components/shared/modals/confirmation-modal";
 import { useDeleteSecret } from "#/hooks/mutation/use-delete-secret";
@@ -57,6 +58,8 @@ import {
   getAcpProvider,
   getAcpProvidersForBackend,
   getAcpProviderSecrets,
+  acpEffortOf,
+  labelForAcpEffort,
   labelForAcpModel,
   type ACPModelOption,
   type ACPProviderConfig,
@@ -110,12 +113,10 @@ type AgentSettingsSnapshot = {
   commandText: string;
   acpModel: string;
   isCustomAcpModel: boolean;
+  acpEffort: string;
 };
 
 const TOOL_CONCURRENCY_FIELD_KEY = "tool_concurrency_limit";
-// Not valid meta-profile names, so they can't collide with one.
-const ROUTER_OFF_KEY = "__off__";
-const ROUTER_FIRST_KEY = "__first__";
 const SKILL_SEARCH_MIN_ITEMS = 10;
 const MCP_SERVER_REFS_KEY = "mcp_server_refs";
 const SECRET_REFS_KEY = "secret_refs";
@@ -126,11 +127,13 @@ const SYSTEM_PROMPT_MAX_LENGTH = 65536;
 const COMMAND_PLACEHOLDER_FALLBACK = "npx -y <package-name>";
 const ACP_CUSTOM_MODEL_KEY = "__custom_model__";
 const ACP_AGENT_DEFAULT_MODEL_KEY = "__agent_default_model__";
+const ACP_AGENT_DEFAULT_EFFORT_KEY = "__agent_default_effort__";
 const EMPTY_AGENT_SETTINGS_SNAPSHOT: AgentSettingsSnapshot = {
   agentType: "openhands",
   commandText: "",
   acpModel: "",
   isCustomAcpModel: false,
+  acpEffort: "",
 };
 
 function toStringArray(value: unknown): string[] {
@@ -203,6 +206,7 @@ export type AgentProfileFieldsDraft =
       secret_refs?: string[] | null;
       acp_server: string;
       acp_model: string | null;
+      acp_effort?: string | null;
       acp_command: string | null;
       acp_args: string[] | null;
     };
@@ -216,6 +220,10 @@ export interface AgentProfileFieldsInput {
   isDefaultProviderCommand: boolean;
   commandTokens: string[];
   acpModel: string;
+  /** Effort to save; empty is the agent's own. */
+  acpEffort?: string;
+  /** Effort the stored profile had, so clearing it can be sent explicitly. */
+  loadedAcpEffort?: string;
   toolConcurrencyField?: SettingsFieldSchema;
   toolConcurrency: string | boolean;
   mcpMode: ProfileScopeMode;
@@ -270,6 +278,8 @@ export function buildAgentProfileFields(
     isDefaultProviderCommand,
     commandTokens,
     acpModel,
+    acpEffort = "",
+    loadedAcpEffort = "",
     toolConcurrencyField,
     toolConcurrency,
     mcpMode,
@@ -307,6 +317,10 @@ export function buildAgentProfileFields(
       ...secretRefs,
       acp_server: selectedPreset,
       acp_model: acpModel.trim() || null,
+      // Only sent when set or being cleared: older agent-servers reject it.
+      ...(acpEffort || loadedAcpEffort
+        ? { acp_effort: acpEffort || null }
+        : {}),
       acp_command: isBuiltinDefault
         ? null
         : formatCommand(commandTokens) || null,
@@ -669,6 +683,7 @@ export function AgentSettingsScreen({
   const [agentType, setAgentType] = useState<AgentType>("openhands");
   const [commandText, setCommandText] = useState("");
   const [acpModel, setAcpModel] = useState("");
+  const [acpEffort, setAcpEffort] = useState("");
   const [isCustomAcpModel, setIsCustomAcpModel] = useState(false);
 
   // ACP credentials live alongside the agent spec, so the form owns the
@@ -769,19 +784,23 @@ export function AgentSettingsScreen({
       const nextAcpModel =
         normalizedSavedModel || getAcpPreferredDefaultModel(acpServer) || "";
       const nextIsCustomAcpModel = !!normalizedSavedModel && !provider;
+      const nextAcpEffort = acpEffortOf(agentSettingsOverride) ?? "";
       setAcpModel(nextAcpModel);
       setIsCustomAcpModel(nextIsCustomAcpModel);
+      setAcpEffort(nextAcpEffort);
       setLoadedSnapshot({
         agentType: "acp",
         commandText: renderedCommandText,
         acpModel: nextAcpModel,
         isCustomAcpModel: nextIsCustomAcpModel,
+        acpEffort: nextAcpEffort,
       });
     } else {
       setAgentType("openhands");
       setCommandText("");
       setAcpModel("");
       setIsCustomAcpModel(false);
+      setAcpEffort("");
       setLoadedSnapshot(EMPTY_AGENT_SETTINGS_SNAPSHOT);
     }
   }, [agentSettingsOverride]);
@@ -997,7 +1016,8 @@ export function AgentSettingsScreen({
     (agentType === "acp"
       ? commandText !== loadedSnapshot.commandText ||
         acpModel !== loadedSnapshot.acpModel ||
-        isCustomAcpModel !== loadedSnapshot.isCustomAcpModel
+        isCustomAcpModel !== loadedSnapshot.isCustomAcpModel ||
+        acpEffort !== loadedSnapshot.acpEffort
       : toolConcurrency !== initialToolConcurrency ||
         systemPromptDirty ||
         behaviorDirty ||
@@ -1108,6 +1128,29 @@ export function AgentSettingsScreen({
   } else if (isCustomAcpModel || !selectedModelIsSuggestion) {
     selectedModelKey = ACP_CUSTOM_MODEL_KEY;
   }
+  const effortChoices =
+    selectedModelKey === ACP_CUSTOM_MODEL_KEY
+      ? []
+      : liveModels.effortsFor(
+          selectedModelKey === ACP_AGENT_DEFAULT_MODEL_KEY
+            ? null
+            : selectedModelKey,
+        );
+  // Before the agent reports its levels, keep the stored effort as is.
+  const effortToSave =
+    !Object.hasOwn(
+      liveModels.discovery?.efforts_by_model ?? {},
+      selectedModelKey === ACP_AGENT_DEFAULT_MODEL_KEY
+        ? (liveModels.defaultModelId ?? "")
+        : selectedModelKey,
+    ) || effortChoices.some(({ value }) => value === acpEffort)
+      ? acpEffort
+      : "";
+  const agentDefaultEffortLabel =
+    selectedModelKey === ACP_AGENT_DEFAULT_MODEL_KEY ||
+    selectedModelKey === liveModels.defaultModelId
+      ? labelForAcpEffort(liveModels.defaultEffort, effortChoices)
+      : null;
   const commandPlaceholder =
     formatCommand(acpProviders[0]?.default_command ?? []) ||
     COMMAND_PLACEHOLDER_FALLBACK;
@@ -1123,6 +1166,8 @@ export function AgentSettingsScreen({
       isDefaultProviderCommand,
       commandTokens,
       acpModel,
+      acpEffort: effortToSave,
+      loadedAcpEffort: loadedSnapshot.acpEffort,
       toolConcurrencyField,
       toolConcurrency,
       mcpMode,
@@ -1340,6 +1385,35 @@ export function AgentSettingsScreen({
                 }}
               />
             )}
+            {effortChoices.length > 0 && (
+              <SettingsDropdownInput
+                testId="agent-effort-selector"
+                name="agent-effort"
+                label={t(I18nKey.SCHEMA$LLM$REASONING_EFFORT$LABEL)}
+                items={[
+                  {
+                    key: ACP_AGENT_DEFAULT_EFFORT_KEY,
+                    label: agentDefaultEffortLabel
+                      ? t(I18nKey.SETTINGS$AGENT_MODEL_AGENT_DEFAULT_IS, {
+                          model: agentDefaultEffortLabel,
+                        })
+                      : t(I18nKey.SETTINGS$AGENT_MODEL_AGENT_DEFAULT),
+                  },
+                  ...effortChoices.map(({ value, label }) => ({
+                    key: value,
+                    label,
+                  })),
+                ]}
+                selectedKey={effortToSave || ACP_AGENT_DEFAULT_EFFORT_KEY}
+                onSelectionChange={(key) => {
+                  if (!key) return;
+                  const effortKey = String(key);
+                  setAcpEffort(
+                    effortKey === ACP_AGENT_DEFAULT_EFFORT_KEY ? "" : effortKey,
+                  );
+                }}
+              />
+            )}
             {selectedModelKey === ACP_CUSTOM_MODEL_KEY && (
               <SettingsInput
                 testId="agent-model-input"
@@ -1431,6 +1505,7 @@ export function AgentSettingsScreen({
                 testId="agent-settings-secrets-mode"
                 name="agent-secrets-mode"
                 label=""
+                ariaLabel={t(I18nKey.SETTINGS$AGENT_PROFILE_SECRETS)}
                 items={[
                   {
                     key: "standard",
@@ -1540,6 +1615,7 @@ export function AgentSettingsScreen({
             testId="agent-settings-mcp-mode"
             name="agent-mcp-mode"
             label=""
+            ariaLabel={t(I18nKey.SETTINGS$AGENT_PROFILE_MCP)}
             items={[
               {
                 key: "standard",
@@ -1807,6 +1883,7 @@ export function AgentSettingsScreen({
               testId="agent-settings-tools-mode"
               name="agent-tools-mode"
               label=""
+              ariaLabel={t(I18nKey.SETTINGS$AGENT_PROFILE_TOOLS)}
               items={[
                 {
                   key: "standard",
@@ -1921,35 +1998,6 @@ export function AgentSettingsScreen({
             className="flex flex-col gap-2.5"
             data-testid="agent-settings-router"
           >
-            <SettingsDropdownInput
-              testId="agent-settings-router-select"
-              name="agent-router"
-              label=""
-              items={[
-                {
-                  key: ROUTER_OFF_KEY,
-                  label: t(I18nKey.SETTINGS$AGENT_PROFILE_ROUTER_OFF),
-                },
-                ...(initialRouter === ROUTER_FIRST_KEY
-                  ? [
-                      {
-                        key: ROUTER_FIRST_KEY,
-                        label: t(I18nKey.SETTINGS$AGENT_PROFILE_ROUTER_FIRST),
-                      },
-                    ]
-                  : []),
-                ...[
-                  ...routerNames,
-                  ...(routerDangling && router ? [router] : []),
-                ].map((name) => ({ key: name, label: name })),
-              ]}
-              selectedKey={router ?? ROUTER_OFF_KEY}
-              isDisabled={isSaving}
-              onSelectionChange={(key) => {
-                if (key === null || key === undefined) return;
-                setRouter(key === ROUTER_OFF_KEY ? null : String(key));
-              }}
-            />
             {routerDangling ? (
               <Typography.Text
                 testId="agent-settings-router-dangling"
@@ -1966,6 +2014,10 @@ export function AgentSettingsScreen({
             {routerSectionVisited ? (
               <MetaLlmSettingsView
                 embedded
+                selectedRouter={router}
+                showFirstRouter={initialRouter === ROUTER_FIRST_KEY}
+                missingRouter={routerDangling ? router : null}
+                onSelected={setRouter}
                 onCreated={setRouter}
                 onDeleted={(name) =>
                   setRouter((current) => (current === name ? null : current))

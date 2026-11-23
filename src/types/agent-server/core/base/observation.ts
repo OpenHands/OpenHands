@@ -1,3 +1,4 @@
+import type { AskUserObservation } from "@openhands/typescript-client";
 import { ObservationBase } from "./base";
 import {
   CmdOutputMetadata,
@@ -5,6 +6,8 @@ import {
   TextContent,
   ImageContent,
 } from "./common";
+
+export type { AskUserObservation };
 
 export interface MCPToolObservation extends ObservationBase<"MCPToolObservation"> {
   /**
@@ -387,6 +390,7 @@ export interface ClassifyAndSwitchLLMObservation extends ObservationBase<"Classi
 }
 
 export type Observation =
+  | AskUserObservation
   | MCPToolObservation
   | FinishObservation
   | ThinkObservation

@@ -40,14 +40,17 @@ export function UploadedFile({
         </div>
         <div className="flex items-center gap-2">
           <FileIcon width={12} height={12} color="var(--oh-muted)" />
-          <span className="text-[9px] font-normal leading-5 text-muted">
+          <span className="text-4xs font-normal leading-5 text-muted">
             {fileExtension}
           </span>
         </div>
       </div>
       {isLoading && (
         <div className="flex items-center justify-center">
-          <LoaderCircle className="animate-spin w-5 h-5" color="white" />
+          <LoaderCircle
+            className="animate-spin w-5 h-5"
+            color="var(--oh-contrast)"
+          />
         </div>
       )}
     </div>

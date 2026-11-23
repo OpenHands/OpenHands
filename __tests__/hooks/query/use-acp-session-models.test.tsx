@@ -3,7 +3,10 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { useAcpSessionModels } from "#/hooks/query/use-acp-session-models";
+import {
+  useAcpSessionEffort,
+  useAcpSessionModels,
+} from "#/hooks/query/use-acp-session-models";
 import type { AppConversation } from "#/api/conversation-service/agent-server-conversation-service.types";
 import {
   acpModelScope,
@@ -140,5 +143,49 @@ describe("useAcpSessionModels", () => {
     );
 
     expect(readRememberedAcpModels("local-1", "custom")).toEqual([]);
+  });
+});
+
+describe("useAcpSessionEffort", () => {
+  const EFFORTS = [
+    { value: "low", label: "Low" },
+    { value: "high", label: "High" },
+  ];
+
+  it("reads a Cloud conversation's effort from its sandbox", async () => {
+    getRuntimeConversation.mockResolvedValue({
+      available_models: MODELS,
+      current_effort: "high",
+      available_efforts: EFFORTS,
+    });
+
+    const { result } = renderHook(() => useAcpSessionEffort(conversation()), {
+      wrapper,
+    });
+
+    await waitFor(() =>
+      expect(result.current).toEqual({
+        efforts: EFFORTS,
+        currentEffort: "high",
+      }),
+    );
+  });
+
+  it("reads a local conversation's effort from the conversation", () => {
+    backendMock.current = { backend: { id: "local-1", kind: "local" } };
+
+    const { result } = renderHook(
+      () =>
+        useAcpSessionEffort(
+          conversation({
+            acp_current_effort: "low",
+            acp_available_efforts: EFFORTS,
+          }),
+        ),
+      { wrapper },
+    );
+
+    expect(result.current).toEqual({ efforts: EFFORTS, currentEffort: "low" });
+    expect(getRuntimeConversation).not.toHaveBeenCalled();
   });
 });

@@ -1,4 +1,7 @@
+import { useLoadOlderEvents } from "#/hooks/use-load-older-events";
+import { useEventStore } from "#/stores/use-event-store";
 import { describe, it, expect, afterEach, beforeEach, vi } from "vitest";
+import { HttpError } from "@openhands/typescript-client";
 import React from "react";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import {
@@ -10,6 +13,7 @@ import {
 import {
   INITIAL_HISTORY_PAGE_SIZE,
   useConversationHistory,
+  usePersistedConversationHistory,
 } from "#/hooks/query/use-conversation-history";
 import EventService from "#/api/event-service/event-service.api";
 import {
@@ -110,6 +114,8 @@ describe("useConversationHistory", () => {
       {
         limit: INITIAL_HISTORY_PAGE_SIZE,
         sortOrder: "TIMESTAMP_DESC",
+        strictPagination: true,
+        excludeFullState: true,
       },
     );
   });
@@ -464,6 +470,63 @@ describe("useConversationHistory cache key stability", () => {
     expect(queries[0].options.gcTime).toBeGreaterThanOrEqual(30 * 60 * 1000);
   });
 
+  it.each(["PAUSED", "MISSING", "ERROR"])(
+    "loads saved Cloud history without contacting a %s runtime",
+    async (sandbox_status) => {
+      setRegisteredBackends([
+        {
+          id: "paused-cloud",
+          kind: "cloud",
+          name: "Cloud",
+          host: "https://cloud.test",
+          apiKey: "test",
+        },
+      ]);
+      setActiveSelection({ backendId: "paused-cloud", orgId: "org-a" });
+      vi.mocked(useUserConversation).mockReturnValue({
+        data: {
+          conversation_url: "https://old-runtime.test/api",
+          session_api_key: "old-key",
+          sandbox_status,
+        },
+      } as any);
+      vi.mocked(EventService.getEventCount).mockReturnValue(
+        new Promise(() => {}),
+      );
+      vi.mocked(EventService.searchEvents).mockResolvedValue(
+        makePage([makeEvent("saved-message")]),
+      );
+      const view = renderHook(() => useConversationHistory("paused-history"), {
+        wrapper: localWrapper,
+      });
+      try {
+        await waitFor(() =>
+          expect(view.result.current.data?.events[0].id).toBe("saved-message"),
+        );
+        expect(EventService.getEventCount).not.toHaveBeenCalled();
+        expect(EventService.searchEvents).toHaveBeenCalledTimes(1);
+        expect(view.result.current.data?.afterSeq).toBeNull();
+        vi.mocked(EventService.getEventCount).mockResolvedValue(80);
+        vi.mocked(useUserConversation).mockReturnValue({
+          data: {
+            conversation_url: "https://old-runtime.test/api",
+            session_api_key: "old-key",
+            sandbox_status: "RUNNING",
+          },
+        } as any);
+        view.rerender();
+        await waitFor(() =>
+          expect(view.result.current.data?.afterSeq).toBe(29),
+        );
+        expect(EventService.getEventCount).toHaveBeenCalledTimes(1);
+      } finally {
+        view.unmount();
+        window.localStorage.clear();
+        __resetActiveStoreForTests();
+      }
+    },
+  );
+
   describe("session-socket resume cursor (afterSeq)", () => {
     const withUrl = () =>
       vi.mocked(useUserConversation).mockReturnValue({
@@ -520,6 +583,35 @@ describe("useConversationHistory cache key stability", () => {
 
       expect(result.current.data?.events).toHaveLength(1);
       expect(result.current.data?.afterSeq).toBeNull();
+    });
+
+    // What an Agent Server up to 1.61 answers for a conversation with an
+    // empty event file.
+    const unreadableEventFile = () =>
+      new HttpError(500, "Internal Server Error", {
+        detail: "Internal Server Error",
+        exception: "Missing event file: events/event-00041-88ff0339.json",
+      });
+
+    it("fails once with the server's reason when the count hits an unreadable event file", async () => {
+      withUrl();
+      const error = unreadableEventFile();
+      const countSpy = vi
+        .spyOn(EventService, "getEventCount")
+        .mockRejectedValue(error);
+      const searchSpy = vi.spyOn(EventService, "searchEvents");
+
+      const { result } = renderHook(
+        () => useConversationHistory("conv-unreadable"),
+        { wrapper },
+      );
+      await waitFor(() => expect(result.current.isError).toBe(true));
+
+      // No page request (through the ingress it would only return a bare
+      // 502) and no retry: the failure is the same every time.
+      expect(result.current.error).toBe(error);
+      expect(countSpy).toHaveBeenCalledTimes(1);
+      expect(searchSpy).not.toHaveBeenCalled();
     });
 
     describe("on a Cloud backend", () => {
@@ -589,6 +681,151 @@ describe("useConversationHistory cache key stability", () => {
           119 - INITIAL_HISTORY_PAGE_SIZE,
         );
       });
+
+      it("still loads the App API page when the runtime count hits an unreadable event file", async () => {
+        withUrl();
+        vi.spyOn(EventService, "getEventCount").mockRejectedValue(
+          unreadableEventFile(),
+        );
+        vi.spyOn(EventService, "searchEvents").mockResolvedValue(
+          makePage([makeEvent("evt-a")]),
+        );
+
+        const { result } = renderHook(
+          () => useConversationHistory("conv-cloud-unreadable"),
+          { wrapper },
+        );
+        await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+        expect(result.current.data?.events).toHaveLength(1);
+        expect(result.current.data?.afterSeq).toBeNull();
+      });
     });
+  });
+});
+
+describe("persisted Cloud transcript", () => {
+  let client: QueryClient;
+  const backend = {
+    id: "history-cloud",
+    kind: "cloud" as const,
+    name: "Cloud",
+    host: "https://history.test",
+    apiKey: "test-key",
+    connectionRevision: 0,
+  };
+  const cloudWrapper = ({ children }: { children: React.ReactNode }) => (
+    <QueryClientProvider client={client}>{children}</QueryClientProvider>
+  );
+  beforeEach(() => {
+    client = new QueryClient({
+      defaultOptions: { queries: { retryDelay: 0 } },
+    });
+    setRegisteredBackends([backend]);
+    setActiveSelection({ backendId: backend.id, orgId: "org-a" });
+    vi.mocked(useUserConversation).mockReturnValue({
+      data: {
+        conversation_url: "https://runtime-a.test/api",
+        session_api_key: "runtime-a",
+      },
+    } as any);
+  });
+  afterEach(() => {
+    client.clear();
+    vi.clearAllMocks();
+    window.localStorage.clear();
+    __resetActiveStoreForTests();
+  });
+  it("keeps readable data through runtime rotation and isolates org and connection changes", async () => {
+    vi.mocked(EventService.searchEvents).mockResolvedValueOnce(
+      makePage([makeEvent("org-a-message")]),
+    );
+    const { result, rerender } = renderHook(
+      () => usePersistedConversationHistory("same-id"),
+      { wrapper: cloudWrapper },
+    );
+    await waitFor(() =>
+      expect(result.current.data?.events[0].id).toBe("org-a-message"),
+    );
+    vi.mocked(useUserConversation).mockReturnValue({
+      data: {
+        conversation_url: "https://runtime-b.test/api",
+        session_api_key: "runtime-b",
+      },
+    } as any);
+    rerender();
+    expect(result.current.data?.events[0].id).toBe("org-a-message");
+    expect(EventService.searchEvents).toHaveBeenCalledTimes(1);
+    vi.mocked(EventService.searchEvents).mockImplementation(
+      () => new Promise(() => {}),
+    );
+    act(() => setActiveSelection({ backendId: backend.id, orgId: "org-b" }));
+    rerender();
+    expect(result.current.data).toBeUndefined();
+    act(() => setActiveSelection({ backendId: backend.id, orgId: "org-a" }));
+    rerender();
+    expect(result.current.data?.events[0].id).toBe("org-a-message");
+    act(() => setRegisteredBackends([{ ...backend, connectionRevision: 1 }]));
+    rerender();
+    expect(result.current.data).toBeUndefined();
+  });
+  it("allows older pagination when ordered history outgrows the early display page", async () => {
+    let resolveCount!: (value: number) => void;
+    vi.mocked(EventService.getEventCount).mockReturnValue(
+      new Promise((resolve) => {
+        resolveCount = resolve;
+      }),
+    );
+    const first = makeEvent("recent", "2024-06-01T00:00:00Z");
+    const older = makeEvent("older", "2024-05-01T00:00:00Z");
+    vi.mocked(EventService.searchEvents)
+      .mockResolvedValueOnce(makePage([first]))
+      .mockResolvedValueOnce(makePage([first], "older-page"))
+      .mockResolvedValueOnce(makePage([older]));
+    act(() => {
+      useEventStore.getState().clearEventsForConversation("growing-history");
+      useEventStore.getState().addEvents([first]);
+    });
+    const { result } = renderHook(
+      () => {
+        usePersistedConversationHistory("growing-history");
+        return useLoadOlderEvents("growing-history");
+      },
+      { wrapper: cloudWrapper },
+    );
+    await waitFor(() => expect(result.current.hasMore).toBe(false));
+    await act(async () => {
+      resolveCount(80);
+    });
+    await waitFor(() => expect(result.current.hasMore).toBe(true));
+    await act(async () => {
+      await result.current.loadOlder();
+    });
+    expect(useEventStore.getState().events.map((event) => event.id)).toContain(
+      "older",
+    );
+    expect(EventService.searchEvents).toHaveBeenCalledTimes(3);
+    for (const [, , , options] of vi.mocked(EventService.searchEvents).mock
+      .calls) {
+      expect(options?.excludeFullState).toBe(true);
+    }
+  });
+
+  it("retries a history failure and never turns it into an empty success", async () => {
+    const failure = new Error("History unavailable");
+    vi.mocked(EventService.searchEvents).mockRejectedValue(failure);
+    const { result } = renderHook(
+      () => usePersistedConversationHistory("failed-history"),
+      { wrapper: cloudWrapper },
+    );
+    await waitFor(() => expect(result.current.isError).toBe(true));
+    expect(result.current.data).toBeUndefined();
+    expect(EventService.searchEvents).toHaveBeenCalledTimes(2);
+    expect(EventService.searchEvents).toHaveBeenCalledWith(
+      "failed-history",
+      null,
+      null,
+      expect.objectContaining({ strictPagination: true }),
+    );
   });
 });

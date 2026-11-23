@@ -5,6 +5,8 @@ import { ModalBackdrop } from "./modal-backdrop";
 
 interface ConfirmationModalProps {
   text: string;
+  children?: React.ReactNode;
+  confirmDisabled?: boolean;
   onConfirm: () => void;
   onCancel: () => void;
   confirmText?: string;
@@ -19,6 +21,8 @@ interface ConfirmationModalProps {
 
 export function ConfirmationModal({
   text,
+  children,
+  confirmDisabled = false,
   onConfirm,
   onCancel,
   confirmText,
@@ -40,6 +44,7 @@ export function ConfirmationModal({
         className="bg-base-secondary p-4 rounded-xl flex max-w-md flex-col gap-4 border border-border"
       >
         <p className="break-words">{text}</p>
+        {children}
         <div className="w-full flex justify-end gap-2">
           <BrandButton
             testId="cancel-button"
@@ -55,7 +60,7 @@ export function ConfirmationModal({
             type="button"
             onClick={onConfirm}
             variant={isDestructive ? "danger" : "primary"}
-            isDisabled={isConfirming}
+            isDisabled={isConfirming || confirmDisabled}
           >
             {confirmText ?? t(I18nKey.BUTTON$CONFIRM)}
           </BrandButton>

@@ -424,6 +424,30 @@ describe("optimistic-user-message-store", () => {
     expect(entry.errorMessage).toBe("Send timed out");
   });
 
+  it("gives each retry a fresh bounded delivery window", () => {
+    const store = useOptimisticUserMessageStore.getState();
+    const id = store.enqueuePendingMessage({
+      conversationId: CONVO,
+      text: "resume",
+    });
+    vi.advanceTimersByTime(PENDING_MESSAGE_TIMEOUT_MS - 1000);
+    store.markPendingMessageError(id);
+    store.markPendingMessageSending(id);
+    vi.advanceTimersByTime(1000);
+    expect(
+      useOptimisticUserMessageStore.getState().pendingMessages[0].status,
+    ).toBe("sending");
+    vi.advanceTimersByTime(PENDING_MESSAGE_TIMEOUT_MS - 1000);
+    expect(
+      useOptimisticUserMessageStore.getState().pendingMessages[0].status,
+    ).toBe("error");
+    store.markPendingMessageSending(id);
+    vi.advanceTimersByTime(PENDING_MESSAGE_TIMEOUT_MS);
+    expect(
+      useOptimisticUserMessageStore.getState().pendingMessages[0].status,
+    ).toBe("error");
+  });
+
   it("watchdog timeout does nothing if the echo already consumed the message", () => {
     const store = useOptimisticUserMessageStore.getState();
     store.enqueuePendingMessage({ conversationId: CONVO, text: "fast" });
@@ -544,6 +568,37 @@ describe("optimistic-user-message-store", () => {
       ["real-convo", "hello"],
       ["other-convo", "untouched"],
     ]);
+  });
+
+  it("removes a task's first message for its conversation before the pending route reassignment", () => {
+    const store = useOptimisticUserMessageStore.getState();
+    store.enqueuePendingMessage({ conversationId: "task-123", text: "hello" });
+    store.enqueuePendingMessage({
+      conversationId: "task-456",
+      text: "another launch",
+    });
+    linkPendingTaskMessages(CONVO, "task-123");
+
+    store.removeStartTaskMessages(CONVO);
+
+    const pending = useOptimisticUserMessageStore.getState().pendingMessages;
+    expect(pending.map((m) => m.text)).toEqual(["another launch"]);
+  });
+
+  it("keeps a first message the user retried when start-task messages are removed", () => {
+    const store = useOptimisticUserMessageStore.getState();
+    const id = store.enqueuePendingMessage({
+      conversationId: "task-123",
+      text: "hello from home",
+    });
+    store.reassignPendingMessages("task-123", CONVO);
+    store.markPendingMessageError(id, "Send timed out");
+    store.markPendingMessageSending(id);
+
+    store.removeStartTaskMessages(CONVO);
+
+    const pending = useOptimisticUserMessageStore.getState().pendingMessages;
+    expect(pending.map((m) => m.id)).toEqual([id]);
   });
 
   it("creates a complete fresh store whose actions remain scoped", async () => {

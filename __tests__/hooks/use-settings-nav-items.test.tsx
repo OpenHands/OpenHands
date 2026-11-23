@@ -95,7 +95,9 @@ describe("useSettingsNavItems", () => {
 
     const { result } = renderHook(() => useSettingsNavItems());
     expect(result.current).toEqual(
-      OSS_NAV_ITEMS.map((item) => ({ type: "item", item })),
+      OSS_NAV_ITEMS.filter((item) => item.to !== "/settings/experimental").map(
+        (item) => ({ type: "item", item }),
+      ),
     );
   });
 

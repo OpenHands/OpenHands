@@ -4,9 +4,12 @@ import type { Backend } from "../backend-registry/types";
 import { callCloudProxy } from "./proxy";
 import type {
   CloudApiKeyMetadata,
+  CloudMyBudget,
   CloudOrganization,
   CloudOrganizationMember,
   CloudOrganizationsResponse,
+  CloudServiceAccount,
+  CloudServiceAccountPage,
 } from "./types";
 
 interface OrganizationsResult {
@@ -144,4 +147,48 @@ export async function getCloudOrganizationMember(
     method: "GET",
     path: `/api/organizations/${encodeURIComponent(orgId)}/members/${encodeURIComponent(userId)}`,
   });
+}
+
+/**
+ * Fetch `GET /api/organizations/{orgId}/budgets/me`: the caller's own budget
+ * in `orgId`. Any org member may read it. Backends without budgets reject the
+ * call, so callers should treat a failure as "no budget details".
+ */
+export async function getCloudMyBudget(
+  orgId: string,
+  backend?: Backend,
+): Promise<CloudMyBudget> {
+  const target = resolveBackend(backend);
+  return callCloudProxy<CloudMyBudget>({
+    backend: target,
+    method: "GET",
+    path: `/api/organizations/${encodeURIComponent(orgId)}/budgets/me`,
+  });
+}
+
+/**
+ * Fetch every service account of `orgId` (`GET /api/organizations/{orgId}/
+ * service-accounts`), following `next_page_id`. Needs
+ * `manage_service_accounts` (org owners and admins); others get a 403.
+ */
+export async function listCloudServiceAccounts(
+  orgId: string,
+  backend?: Backend,
+): Promise<CloudServiceAccount[]> {
+  const target = resolveBackend(backend);
+  const accounts: CloudServiceAccount[] = [];
+  let pageId: string | null | undefined;
+  do {
+    const query = new URLSearchParams({ limit: "100" });
+    if (pageId) query.set("page_id", pageId);
+
+    const page = await callCloudProxy<CloudServiceAccountPage>({
+      backend: target,
+      method: "GET",
+      path: `/api/organizations/${encodeURIComponent(orgId)}/service-accounts?${query}`,
+    });
+    accounts.push(...(page?.items ?? []));
+    pageId = page?.next_page_id;
+  } while (pageId);
+  return accounts;
 }

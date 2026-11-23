@@ -60,6 +60,12 @@ candidate. Sources, roughly in order of yield:
 directories no entry references yet. Drive it to zero, or list each exclusion
 with its reason in the index's "Not mapped" section.
 
+Coverage counts a page as mapped once any part of it is. `control-openhands
+map controls [--family Fnn]` looks one level down: the buttons, inputs, menus
+and links in `src/` whose test id no map file mentions. Each is a control to
+operate in a bullet, or one a recipe already reaches by role or label. A
+control that only appears in a family's description has not been operated.
+
 ## 2. Group into families
 
 One file per user-facing job (for example "Secrets", "LLM profiles",
@@ -97,8 +103,37 @@ checks and `map affected`; keep other implementation detail out). Every path
 must exist (`map check` verifies it); a directory ends with `/`, names in
 parentheses after a directory are relative to it, and `name-*.tsx` matches by
 prefix. For a family spread over many files, list the route modules and
-top-level component directories, not every file. Then exactly four H2
-sections, in this order:
+top-level component directories, not every file.
+
+When the family calls the Agent Server, add one `Server:` line after `Source:`
+naming the server features it uses, as IDs of the verify-agent-server map
+(OpenHands/software-agent-sdk, `.agents/skills/verify-agent-server/`): a whole
+family (`F15`) or one sub-feature (`F15.changes`), comma-separated and not
+backticked, so they never read as this map's own IDs:
+`Server: F13, F14, F15, F16.` Read them from the code the `Source:` paths
+reach (the `src/api/` clients and the routes they request), not from memory,
+and name only the server features the family's own behaviors rest on.
+
+The line is an index, not a check. A Canvas behavior that passes already
+proves the server path under it, so a `Server:` line never adds server
+checks or recipes here. It answers one question: a server change, or an
+Agent Server bump in Canvas, touches `F15`; which Canvas families should a
+run drive? (`grep -l 'Server:.*F15' references/feature-map/`). The consumer
+declares the link because only its code knows what it calls; the server
+map keeps only its prose "Agent Canvas (context only)" notes and never
+lists Canvas IDs, which change with every map pass here. `map check`
+rejects an ID that is not shaped like one; `map check --server-map
+<software-agent-sdk checkout>` also rejects one the server map does not
+declare.
+
+Name a server feature on a single bullet or Gotcha only where Canvas hides
+or only partly shows the server's behavior, so a reader would otherwise
+blame Canvas or miss the server's part (F08's empty `.git` comes from the
+Agent Server's F04 start). A server bug that a `Server:` family shows to
+users gets a known-bug block here, citing the software-agent-sdk issue; one
+that no Canvas path reaches stays in the server map only.
+
+Then exactly four H2 sections, in this order:
 
 1. `## Sub-features`: one bullet per ID: `` - `F14.create`: add a dummy secret; it persists after reload. ``
 2. `## How to get to it (user POV)`: every entry point, in user language: the
@@ -124,6 +159,12 @@ sections, in this order:
    that matter, and a `browser screenshot --feature <ID> --name <label>` where the
    proof is visual. Include phone-viewport checks (`browser viewport phone`) for
    layouts that change on small screens.
+
+   The happy path is the first bullet of a sub-feature, not the last. Walk
+   [scenarios.md](scenarios.md) for each one: the user who edits the item
+   later, acts while it is still saving, has long or many or oddly named
+   data, or runs under a base path or in another time zone. Those are the
+   situations bug reports come from on pages that were already mapped.
 4. `## Gotchas`: traps that waste or invalidate a run: debounces, focus traps,
    items that only appear after the agent runs, features hidden behind a
    prerequisite, and known open issues (link them; they are repro candidates, not
@@ -182,6 +223,13 @@ will run them that way:
   option click otherwise goes unnoticed until a later step.
 - Assert deterministic text (what the UI sent, a file the agent wrote, a tool
   observation), not the model's wording.
+- A claim about how many ("the only toast", "once", "exactly one", "no
+  duplicate", "a single request") names a command that counts, and the
+  number it must give: the entries of `browser toasts --history` (cleared
+  before the action) with that text, `browser count`, a `browser network`
+  `total`. Checking that one other text is absent proves only that it is
+  absent: write it as its own check, never as the proof of "only". A
+  duplicate of the expected item passes a presence or absence check.
 - Secret and credential checks assert the tool's output, not the model's
   reply: models refuse to echo secrets. Compare inside the command
   (`test "$QA_SECRET" = expected && echo match`) and read the observation
@@ -238,6 +286,7 @@ cheaper routes that earlier mappers missed:
 control-openhands map check --file Fnn-name.md   # one entry while others are being written
 control-openhands map check      # whole map: structure, unique IDs, index links, valid commands
 control-openhands map coverage   # unmapped routes and feature component dirs
+control-openhands map controls --family Fnn   # controls on those pages that no bullet names
 control-openhands map ids        # every ID with its file, for the index tables
 ```
 

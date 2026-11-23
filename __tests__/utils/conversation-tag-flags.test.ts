@@ -2,8 +2,11 @@ import { describe, expect, it } from "vitest";
 import {
   ARCHIVED_CONVERSATION_TAG_KEY,
   conversationTagFlagPatch,
+  getConversationResolution,
   hasConversationTagFlag,
+  parseAutoResolveNote,
   PINNED_CONVERSATION_TAG_KEY,
+  RESOLVED_CONVERSATION_TAG_KEY,
   withConversationTagFlags,
 } from "#/utils/conversation-tag-flags";
 import { getDisplayConversationTags } from "#/api/agent-server-adapter";
@@ -75,5 +78,52 @@ describe("conversation tag flags", () => {
         origin: "slack",
       }),
     ).toEqual([["origin", "slack"]]);
+  });
+});
+
+describe("getConversationResolution", () => {
+  it("reads the user and auto resolutions", () => {
+    expect(getConversationResolution({ resolved: "user" })).toBe("user");
+    expect(getConversationResolution({ resolved: "auto" })).toBe("auto");
+  });
+
+  it("treats a missing or unknown value as unresolved", () => {
+    expect(getConversationResolution(undefined)).toBeNull();
+    expect(getConversationResolution(null)).toBeNull();
+    expect(getConversationResolution({})).toBeNull();
+    expect(getConversationResolution({ resolved: "" })).toBeNull();
+    expect(getConversationResolution({ resolved: "true" })).toBeNull();
+  });
+
+  it("removes resolved like any other flag when reopening", () => {
+    expect(
+      withConversationTagFlags(
+        { resolved: "auto", project: "abc" },
+        { [RESOLVED_CONVERSATION_TAG_KEY]: false },
+      ),
+    ).toEqual({ project: "abc" });
+    expect(
+      conversationTagFlagPatch({ [RESOLVED_CONVERSATION_TAG_KEY]: false }),
+    ).toEqual({ resolved: null });
+  });
+
+  it("reads the server's auto-resolve note", () => {
+    expect(parseAutoResolveNote("0.93 nothing")).toEqual({
+      percent: 93,
+      source: "judge",
+    });
+    expect(parseAutoResolveNote("1.00 nothing")).toEqual({
+      percent: 100,
+      source: "judge",
+    });
+    expect(parseAutoResolveNote("0.95 critic")).toEqual({
+      percent: 95,
+      source: "critic",
+    });
+    // resolve_conversation: the agent resolved its own conversation.
+    expect(parseAutoResolveNote("agent")).toEqual({ source: "agent" });
+    for (const bad of [null, undefined, "", "sure", "1.5 nothing", "0.9"]) {
+      expect(parseAutoResolveNote(bad)).toBeNull();
+    }
   });
 });

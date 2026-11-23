@@ -5,12 +5,21 @@ import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter, Route, Routes } from "react-router";
 import { HttpError } from "@openhands/typescript-client";
+import { AUTOMATION_CATALOG } from "@openhands/extensions/automations";
 
 import { I18nKey } from "#/i18n/declaration";
 
 import AutomationService from "#/api/automation-service/automation-service.api";
-import { getCloudOrganizationMember } from "#/api/cloud/organization-service.api";
+import { experimentalFeaturesService } from "#/api/experimental-features-service/experimental-features-service.api";
+import {
+  getCloudOrganizationMember,
+  listCloudServiceAccounts,
+} from "#/api/cloud/organization-service.api";
 import ProfilesService from "#/api/profiles-service/profiles-service.api";
+import {
+  fetchCloudIntegrationsConfig,
+  type CloudIntegrationsConfig,
+} from "#/api/cloud/settings-service.api";
 import {
   __resetActiveStoreForTests,
   setActiveSelection,
@@ -22,7 +31,9 @@ import type { Backend } from "#/api/backend-registry/types";
 import { AutomationRunStatus } from "#/types/automation";
 import type { Automation, AutomationRunsResponse } from "#/types/automation";
 import { withPresetSources } from "#/utils/automation-preset-sources";
+import { bytesToBase64 } from "#/utils/base64";
 import { packTarGzip } from "#/utils/tar-gzip";
+import * as ToastHandlers from "#/utils/custom-toast-handlers";
 
 vi.mock("#/api/automation-service/automation-service.api", () => ({
   default: {
@@ -31,8 +42,16 @@ vi.mock("#/api/automation-service/automation-service.api", () => ({
     toggleAutomation: vi.fn(),
     deleteAutomation: vi.fn(),
     dispatchAutomation: vi.fn(),
+    updateAutomation: vi.fn(),
     fetchTarballBytes: vi.fn(),
     checkHealth: vi.fn(),
+    getCapabilities: vi.fn(),
+    listKvKeys: vi.fn(),
+    getKvEntry: vi.fn(),
+    setKvEntries: vi.fn(),
+    changeRunAs: vi.fn(),
+    supportsFactories: vi.fn(),
+    listFactories: vi.fn(),
   },
 }));
 
@@ -42,14 +61,32 @@ vi.mock("#/api/profiles-service/profiles-service.api", () => ({
   },
 }));
 
+// Spy on the success toast; the test tree does not render a toaster.
+const displaySuccessToast = vi.hoisted(() => vi.fn());
+const displayErrorToast = vi.hoisted(() => vi.fn());
+vi.mock("#/utils/custom-toast-handlers", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("#/utils/custom-toast-handlers")>()),
+  displaySuccessToast,
+  displayErrorToast,
+}));
+
+// Spy on the file download; jsdom has no object URLs to hand a real one.
+const downloadBlob = vi.hoisted(() => vi.fn());
+vi.mock("#/utils/utils", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("#/utils/utils")>()),
+  downloadBlob,
+}));
+
 // Mock permission hooks so cloud-backend tests don't need a real /me endpoint.
+const permissionMocks = vi.hoisted(() => ({ isOwner: true, canManage: true }));
 vi.mock("#/hooks/use-automation-permissions", () => ({
   useAutomationPermissions: () => ({
     canView: true,
-    canManage: true,
+    canManage: permissionMocks.canManage,
+    userId: "admin-user",
     isLoading: false,
   }),
-  useIsAutomationOwner: () => true,
+  useIsAutomationOwner: () => permissionMocks.isOwner,
 }));
 
 // Mock only the member lookup the "Automation Runs As" field depends on; the
@@ -59,12 +96,51 @@ vi.mock("#/api/cloud/organization-service.api", async (importOriginal) => ({
     typeof import("#/api/cloud/organization-service.api")
   >()),
   getCloudOrganizationMember: vi.fn(),
+  listCloudServiceAccounts: vi.fn(),
 }));
+
+// Mock only the web-client config read, which gates the service account run-as
+// UI on the instance's `enable_service_accounts` flag.
+vi.mock("#/api/cloud/settings-service.api", async (importOriginal) => ({
+  ...(await importOriginal<
+    typeof import("#/api/cloud/settings-service.api")
+  >()),
+  fetchCloudIntegrationsConfig: vi.fn(),
+}));
+
+function mockServiceAccountsEnabled(
+  isServiceAccountsEnabled: boolean,
+  isFactoriesEnabled = false,
+) {
+  const config: CloudIntegrationsConfig = {
+    providersConfigured: [],
+    isJiraEnabled: false,
+    isJiraDcEnabled: false,
+    isLinearEnabled: false,
+    isSlackEnabled: false,
+    deploymentMode: null,
+    isOrgMcpServersEnabled: false,
+    isAgentProfilesEnabled: false,
+    isServiceAccountsEnabled,
+    isOauthV2LoginEnabled: false,
+    isFactoriesEnabled,
+  };
+  vi.mocked(fetchCloudIntegrationsConfig).mockResolvedValue(config);
+}
 
 const detailMocks = vi.hoisted(() => ({
   createConversationMutate: vi.fn(),
   navigate: vi.fn(),
 }));
+
+const mermaidMock = vi.hoisted(() => ({
+  initialize: vi.fn(),
+  parse: vi.fn().mockResolvedValue({ diagramType: "flowchart" }),
+  render: vi
+    .fn()
+    .mockResolvedValue({ svg: '<svg data-testid="flow-diagram-svg"></svg>' }),
+}));
+vi.mock("mermaid", () => ({ default: mermaidMock }));
 
 vi.mock("#/hooks/mutation/use-create-conversation", () => ({
   useCreateConversation: () => ({
@@ -131,7 +207,40 @@ function renderDetail() {
   );
 }
 
+let errorToast: ReturnType<typeof vi.spyOn>;
+
 beforeEach(() => {
+  errorToast = vi
+    .spyOn(ToastHandlers, "displayErrorToast")
+    .mockImplementation(() => "toast-id");
+  permissionMocks.isOwner = true;
+  permissionMocks.canManage = true;
+  vi.mocked(AutomationService.getCapabilities).mockReset();
+  vi.mocked(AutomationService.getCapabilities).mockResolvedValue({
+    ready: true,
+    triggerKinds: [],
+    eventSources: [],
+    eventTypes: [],
+    triggers: {},
+    features: [],
+  });
+  vi.mocked(AutomationService.supportsFactories).mockReset();
+  vi.mocked(AutomationService.supportsFactories).mockReturnValue(false);
+  vi.spyOn(
+    experimentalFeaturesService,
+    "listExperimentalFeatures",
+  ).mockResolvedValue([
+    {
+      key: "factories",
+      label: "Factories",
+      description: "Shows Factories in the sidebar.",
+      enabled: true,
+    },
+  ]);
+  vi.mocked(AutomationService.listKvKeys).mockReset();
+  vi.mocked(AutomationService.getKvEntry).mockReset();
+  vi.mocked(AutomationService.setKvEntries).mockReset();
+  displaySuccessToast.mockClear();
   window.localStorage.clear();
   __resetActiveStoreForTests();
   vi.mocked(AutomationService.checkHealth).mockReset();
@@ -157,19 +266,24 @@ beforeEach(() => {
     profiles: [],
     active_profile: null,
   });
+  vi.mocked(fetchCloudIntegrationsConfig).mockReset();
+  mockServiceAccountsEnabled(false);
   detailMocks.createConversationMutate.mockReset();
   detailMocks.navigate.mockReset();
+  downloadBlob.mockReset();
+  displayErrorToast.mockReset();
   setRegisteredBackends([localBackend, cloudBackend]);
   setActiveSelection({ backendId: localBackend.id });
 });
 
 afterEach(() => {
+  errorToast.mockRestore();
   window.localStorage.clear();
   __resetActiveStoreForTests();
 });
 
-describe("AutomationDetail — Edit in the kebab menu", () => {
-  it("shows Edit in the kebab menu when the active backend is local", async () => {
+describe("AutomationDetail — Edit in the header", () => {
+  it("shows Edit beside Run now instead of inside the actions menu", async () => {
     // Arrange — default beforeEach selects the local backend.
     const user = userEvent.setup();
     renderDetail();
@@ -181,13 +295,13 @@ describe("AutomationDetail — Edit in the kebab menu", () => {
     // in tests because `t` is mocked to return the key itself.
     await user.click(screen.getByLabelText(I18nKey.AUTOMATIONS$ACTIONS_MENU));
 
-    // Assert — Edit entry is present alongside the other actions.
+    // Assert — one Edit control, and it is the header button.
     expect(
-      screen.getByRole("button", { name: I18nKey.AUTOMATIONS$EDIT }),
-    ).toBeInTheDocument();
+      screen.getAllByRole("button", { name: I18nKey.AUTOMATIONS$EDIT }),
+    ).toEqual([screen.getByTestId("automation-detail-edit")]);
   });
 
-  it("opens the setup page from the kebab menu when the active backend is cloud", async () => {
+  it("opens the setup page from the header when the active backend is cloud", async () => {
     // Arrange — switch to the cloud backend BEFORE rendering so the
     // detail page mounts under cloud (the backend-change guard would
     // otherwise stop the fetch).
@@ -198,11 +312,8 @@ describe("AutomationDetail — Edit in the kebab menu", () => {
       expect(AutomationService.getAutomation).toHaveBeenCalledTimes(1);
     });
 
-    // Act — open the kebab menu and pick Edit.
-    await user.click(screen.getByLabelText(I18nKey.AUTOMATIONS$ACTIONS_MENU));
-    await user.click(
-      screen.getByRole("button", { name: I18nKey.AUTOMATIONS$EDIT }),
-    );
+    // Act
+    await user.click(await screen.findByTestId("automation-detail-edit"));
 
     // Assert — Edit opens the setup form without starting or seeding an agent
     // conversation. The permission model (mocked to canManage above) decides
@@ -211,9 +322,385 @@ describe("AutomationDetail — Edit in the kebab menu", () => {
     expect(detailMocks.navigate).toHaveBeenCalledWith(
       "/automations/setup?automationId=auto-1",
     );
+  });
+});
+
+describe("AutomationDetail — key-value store", () => {
+  const kvEntry = (key: string, value: unknown, version: number) => ({
+    key,
+    value,
+    version,
+    created_at: "2026-01-01T00:00:00Z",
+    updated_at: "2026-01-02T00:00:00Z",
+  });
+
+  const withKvStore = (features: string[]) =>
+    vi.mocked(AutomationService.getCapabilities).mockResolvedValue({
+      ready: true,
+      triggerKinds: [],
+      eventSources: [],
+      eventTypes: [],
+      triggers: {},
+      features,
+    });
+
+  async function openKvMenuItem(user: ReturnType<typeof userEvent.setup>) {
+    await user.click(
+      await screen.findByLabelText(I18nKey.AUTOMATIONS$ACTIONS_MENU),
+    );
+    await user.click(
+      await screen.findByRole("button", {
+        name: I18nKey.AUTOMATIONS$DETAIL$KV_VIEW_STORE,
+      }),
+    );
+  }
+
+  async function openKvDialog(
+    entries: ReturnType<typeof kvEntry>[],
+    total = entries.length,
+  ) {
+    withKvStore(["kvStore"]);
+    vi.mocked(AutomationService.listKvKeys).mockResolvedValue({
+      keys: entries.map((entry) => entry.key),
+      count: entries.length,
+      total,
+      limit: 100,
+      offset: 0,
+    });
+    vi.mocked(AutomationService.getKvEntry).mockImplementation(async (_, key) =>
+      entries.find((entry) => entry.key === key)!,
+    );
+    const user = userEvent.setup();
+    renderDetail();
+    await openKvMenuItem(user);
+    await screen.findAllByTestId("automation-kv-entry");
+    return user;
+  }
+
+  const editValue = (key: string, text: string) =>
+    fireEvent.change(screen.getByLabelText(key), { target: { value: text } });
+
+  it("shows the stored keys and values in a dialog opened from the actions menu", async () => {
+    // Arrange
+    const user = await openKvDialog([kvEntry("cursor", { page: 7 }, 1)], 3);
+
+    // Assert
+    expect(AutomationService.getKvEntry).toHaveBeenCalledWith(
+      "auto-1",
+      "cursor",
+    );
+    expect(screen.getByLabelText("cursor")).toHaveValue(
+      JSON.stringify({ page: 7 }, null, 2),
+    );
     expect(
-      screen.queryByTestId("edit-automation-name"),
+      screen.getByText("AUTOMATIONS$DETAIL$KV_TRUNCATED"),
+    ).toBeInTheDocument();
+
+    // Act
+    await user.click(screen.getByLabelText(I18nKey.BUTTON$CLOSE));
+
+    // Assert
+    expect(screen.queryByTestId("automation-kv-modal")).not.toBeInTheDocument();
+  });
+
+  it("saves only the values that changed, in one write against the oldest version", async () => {
+    // Arrange
+    const user = await openKvDialog([
+      kvEntry("cursor", { page: 7 }, 5),
+      kvEntry("seen", [1, 2], 4),
+      kvEntry("note", "hi", 5),
+    ]);
+    vi.mocked(AutomationService.setKvEntries).mockResolvedValue({
+      version: 6,
+      results: [],
+    });
+    expect(screen.getByTestId("automation-kv-save")).toBeDisabled();
+
+    // Act — one real edit, and one reformat that leaves the value unchanged
+    editValue("cursor", '{"page": 8}');
+    editValue("note", '"hi"');
+    await user.click(screen.getByTestId("automation-kv-save"));
+
+    // Assert
+    await waitFor(() => {
+      expect(AutomationService.setKvEntries).toHaveBeenCalledWith(
+        "auto-1",
+        [{ key: "cursor", value: { page: 8 } }],
+        4,
+      );
+    });
+    expect(AutomationService.setKvEntries).toHaveBeenCalledTimes(1);
+    await waitFor(() => {
+      expect(displaySuccessToast).toHaveBeenCalledWith(
+        "AUTOMATIONS$DETAIL$KV_SAVED",
+      );
+    });
+    // The saved values are reloaded and the draft is gone.
+    expect(AutomationService.listKvKeys).toHaveBeenCalledTimes(2);
+    expect(screen.getByTestId("automation-kv-save")).toBeDisabled();
+  });
+
+  it("blocks saving while a changed value is not valid JSON", async () => {
+    // Arrange
+    const user = await openKvDialog([
+      kvEntry("cursor", { page: 7 }, 1),
+      kvEntry("note", "hi", 1),
+    ]);
+
+    // Act
+    editValue("note", '"bye"');
+    editValue("cursor", "{ not json");
+
+    // Assert
+    expect(
+      screen.getByText("AUTOMATIONS$DETAIL$KV_INVALID_JSON"),
+    ).toBeVisible();
+    expect(screen.getByLabelText("cursor")).toHaveAttribute(
+      "aria-invalid",
+      "true",
+    );
+    expect(screen.getByTestId("automation-kv-save")).toBeDisabled();
+
+    // Act — fix it
+    editValue("cursor", "{}");
+
+    // Assert
+    expect(screen.getByTestId("automation-kv-save")).toBeEnabled();
+    await user.click(screen.getByTestId("automation-kv-save"));
+    await waitFor(() => {
+      expect(AutomationService.setKvEntries).toHaveBeenCalledWith(
+        "auto-1",
+        [
+          { key: "cursor", value: {} },
+          { key: "note", value: "bye" },
+        ],
+        1,
+      );
+    });
+  });
+
+  it("keeps the edit and offers a reload when a run changed the store meanwhile", async () => {
+    // Arrange
+    const user = await openKvDialog([kvEntry("cursor", { page: 7 }, 1)]);
+    vi.mocked(AutomationService.setKvEntries).mockRejectedValue(
+      new HttpError(409, "Conflict", { detail: { error: "version_mismatch" } }),
+    );
+    editValue("cursor", '{"page": 8}');
+
+    // Act
+    await user.click(screen.getByTestId("automation-kv-save"));
+
+    // Assert
+    expect(
+      await screen.findByText("AUTOMATIONS$DETAIL$KV_CONFLICT"),
+    ).toBeVisible();
+    expect(screen.getByLabelText("cursor")).toHaveValue('{"page": 8}');
+
+    // Act — reload picks up the run's value and drops the edit
+    vi.mocked(AutomationService.getKvEntry).mockResolvedValue(
+      kvEntry("cursor", { page: 9 }, 2),
+    );
+    await user.click(screen.getByTestId("automation-kv-reload"));
+
+    // Assert
+    await waitFor(() => {
+      expect(screen.getByLabelText("cursor")).toHaveValue(
+        JSON.stringify({ page: 9 }, null, 2),
+      );
+    });
+    expect(
+      screen.queryByText("AUTOMATIONS$DETAIL$KV_CONFLICT"),
     ).not.toBeInTheDocument();
+  });
+
+  it("reports a value that is too large to save", async () => {
+    // Arrange
+    const user = await openKvDialog([kvEntry("cursor", 1, 1)]);
+    vi.mocked(AutomationService.setKvEntries).mockRejectedValue(
+      new HttpError(413, "Payload Too Large", {}),
+    );
+    editValue("cursor", "2");
+
+    // Act
+    await user.click(screen.getByTestId("automation-kv-save"));
+
+    // Assert
+    expect(
+      await screen.findByText("AUTOMATIONS$DETAIL$KV_TOO_LARGE"),
+    ).toBeVisible();
+  });
+
+  it("asks before closing the dialog with unsaved edits", async () => {
+    // Arrange
+    const user = await openKvDialog([kvEntry("cursor", 1, 1)]);
+    editValue("cursor", "2");
+
+    // Act — closing is held back
+    await user.click(screen.getByLabelText(I18nKey.BUTTON$CLOSE));
+
+    // Assert
+    expect(
+      screen.getByText("AUTOMATIONS$DETAIL$KV_DISCARD_PROMPT"),
+    ).toBeVisible();
+    expect(screen.getByTestId("automation-kv-modal")).toBeInTheDocument();
+
+    // Act — keep editing, then close and confirm
+    await user.click(screen.getByText("AUTOMATIONS$DETAIL$KV_KEEP_EDITING"));
+    expect(screen.getByLabelText("cursor")).toHaveValue("2");
+    await user.click(screen.getByLabelText(I18nKey.BUTTON$CLOSE));
+    await user.click(screen.getByTestId("automation-kv-confirm-discard"));
+
+    // Assert
+    expect(screen.queryByTestId("automation-kv-modal")).not.toBeInTheDocument();
+    expect(AutomationService.setKvEntries).not.toHaveBeenCalled();
+  });
+
+  it("shows the values read-only to someone who cannot manage the automation", async () => {
+    // Arrange
+    permissionMocks.canManage = false;
+    permissionMocks.isOwner = false;
+
+    // Act
+    await openKvDialog([kvEntry("cursor", { page: 7 }, 1)]);
+
+    // Assert
+    expect(screen.getByTestId("automation-kv-modal")).toHaveTextContent(
+      '"page": 7',
+    );
+    expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("automation-kv-save")).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("automation-kv-warning"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("warns a manager that editing the values may break the automation", async () => {
+    // Act
+    await openKvDialog([kvEntry("cursor", { page: 7 }, 1)]);
+
+    // Assert
+    const warning = screen.getByTestId("automation-kv-warning");
+    expect(warning).toHaveTextContent("AUTOMATIONS$DETAIL$KV_WARNING_TITLE");
+    expect(warning).toHaveTextContent("AUTOMATIONS$DETAIL$KV_WARNING");
+  });
+
+  it("reports a store that cannot be read", async () => {
+    // Arrange
+    withKvStore(["kvStore"]);
+    vi.mocked(AutomationService.listKvKeys).mockRejectedValue(new Error("503"));
+    const user = userEvent.setup();
+    renderDetail();
+
+    // Act
+    await openKvMenuItem(user);
+
+    // Assert
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "AUTOMATIONS$DETAIL$KV_ERROR",
+    );
+  });
+
+  it("offers no viewer when the deployment has no key-value store", async () => {
+    // Arrange
+    withKvStore([]);
+    const user = userEvent.setup();
+    renderDetail();
+    await waitFor(() => {
+      expect(AutomationService.getCapabilities).toHaveBeenCalled();
+    });
+
+    // Act
+    await user.click(
+      await screen.findByLabelText(I18nKey.AUTOMATIONS$ACTIONS_MENU),
+    );
+
+    // Assert
+    expect(
+      screen.queryByRole("button", {
+        name: I18nKey.AUTOMATIONS$DETAIL$KV_VIEW_STORE,
+      }),
+    ).not.toBeInTheDocument();
+  });
+});
+
+describe("AutomationDetail — another user's automation", () => {
+  const disabledAutomation: Automation = {
+    ...automation,
+    enabled: false,
+    tags: ["qa"],
+  };
+
+  async function renderAndOpenMenu() {
+    vi.mocked(AutomationService.getAutomation).mockResolvedValue(
+      disabledAutomation,
+    );
+    setActiveSelection({ backendId: cloudBackend.id });
+    const user = userEvent.setup();
+    renderDetail();
+    await user.click(
+      await screen.findByLabelText(I18nKey.AUTOMATIONS$ACTIONS_MENU),
+    );
+  }
+
+  it("lets an admin or owner edit, tag, turn on and delete it", async () => {
+    // Arrange — manage permission, but not the creator.
+    permissionMocks.canManage = true;
+    permissionMocks.isOwner = false;
+
+    // Act
+    await renderAndOpenMenu();
+
+    // Assert
+    expect(
+      screen.getByRole("switch", { name: I18nKey.AUTOMATIONS$TURN_ON }),
+    ).toBeInTheDocument();
+    for (const name of [
+      I18nKey.AUTOMATIONS$EDIT,
+      I18nKey.AUTOMATIONS$TURN_ON,
+      I18nKey.AUTOMATIONS$DELETE,
+    ]) {
+      expect(screen.getByRole("button", { name })).toBeInTheDocument();
+    }
+    expect(screen.getByTestId("automation-tags-edit")).toBeInTheDocument();
+  });
+
+  it("offers a member no write actions", async () => {
+    // Arrange — view only, and not the creator.
+    permissionMocks.canManage = false;
+    permissionMocks.isOwner = false;
+
+    // Act
+    await renderAndOpenMenu();
+
+    // Assert
+    expect(screen.queryByRole("switch")).not.toBeInTheDocument();
+    for (const name of [
+      I18nKey.AUTOMATIONS$EDIT,
+      I18nKey.AUTOMATIONS$TURN_ON,
+      I18nKey.AUTOMATIONS$DELETE,
+    ]) {
+      expect(screen.queryByRole("button", { name })).not.toBeInTheDocument();
+    }
+    expect(
+      screen.queryByTestId("automation-tags-edit"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("lets a member who created it turn it back on", async () => {
+    // Arrange — view only, but the creator (escape hatch).
+    permissionMocks.canManage = false;
+    permissionMocks.isOwner = true;
+
+    // Act
+    await renderAndOpenMenu();
+
+    // Assert
+    expect(
+      screen.getByRole("switch", { name: I18nKey.AUTOMATIONS$TURN_ON }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: I18nKey.AUTOMATIONS$EDIT }),
+    ).toBeInTheDocument();
   });
 });
 
@@ -329,6 +816,70 @@ describe("AutomationDetail — backend-change guard", () => {
   });
 });
 
+describe("AutomationDetail — description", () => {
+  const templateEntry = AUTOMATION_CATALOG.find(
+    (entry) => entry.id === "github-pr-reviewer",
+  )!;
+  // The whole route renders before the section does, which can exceed the
+  // default 1 s wait when the suite runs alongside others.
+  const LOAD = { timeout: 5000 };
+  const fromTemplate: Automation = {
+    ...automation,
+    description: null,
+    preset_metadata: {
+      template: { id: templateEntry.id, version: "1.0.0", config: {} },
+    },
+  };
+
+  it("shows the template's description when the automation has none", async () => {
+    // Arrange
+    vi.mocked(AutomationService.getAutomation).mockResolvedValue(fromTemplate);
+
+    // Act
+    renderDetail();
+
+    // Assert
+    expect(
+      await screen.findByTestId("automation-description-content", {}, LOAD),
+    ).toHaveTextContent(templateEntry.description);
+  });
+
+  it("prefers the automation's own description over its template's", async () => {
+    // Arrange
+    vi.mocked(AutomationService.getAutomation).mockResolvedValue({
+      ...fromTemplate,
+      description: "Written for this automation.",
+    });
+
+    // Act
+    renderDetail();
+
+    // Assert
+    const content = await screen.findByTestId(
+      "automation-description-content",
+      {},
+      LOAD,
+    );
+    expect(content).toHaveTextContent("Written for this automation.");
+    expect(content).not.toHaveTextContent(templateEntry.description);
+  });
+
+  it("draws how it runs when there is no description or template", async () => {
+    // Act
+    renderDetail();
+
+    // Assert
+    expect(
+      await screen.findByText(I18nKey.AUTOMATIONS$DETAIL$HOW_IT_RUNS, {}, LOAD),
+    ).toBeInTheDocument();
+    // Earlier tests may have drawn this automation already; rendered SVGs
+    // are cached, so assert what is shown rather than the Mermaid call.
+    expect(
+      await screen.findByTestId("mermaid-diagram", {}, LOAD),
+    ).toContainElement(screen.getByTestId("flow-diagram-svg"));
+  });
+});
+
 describe("AutomationDetail — repositories and plugins", () => {
   it("shows the repositories and plugins a preset response stores in preset_metadata", async () => {
     // Arrange — the automation service returns repos and plugins only inside
@@ -432,6 +983,444 @@ describe("AutomationDetail — Automation Runs As", () => {
   });
 });
 
+describe("AutomationDetail — runs as a service account", () => {
+  const orgId = "0b93b5f2-5396-49f2-8d98-61f906184270";
+  const saId = "5a1d2f60-1c1b-4b43-8a5f-0f8e8e2f7c11";
+  const creatorId = "7c0a3f1e-5d2b-4e8a-9b6c-1f2e3d4c5b6a";
+  const serviceAutomation: Automation = {
+    ...automation,
+    user_id: saId,
+    run_as_kind: "service",
+    created_by_user_id: creatorId,
+  };
+
+  beforeEach(() => {
+    permissionMocks.isOwner = false;
+    setActiveSelection({ backendId: cloudBackend.id, orgId });
+    vi.mocked(getCloudOrganizationMember).mockReset();
+    vi.mocked(listCloudServiceAccounts).mockReset();
+    vi.mocked(listCloudServiceAccounts).mockResolvedValue([
+      { id: saId, org_id: orgId, name: "ci-bot", is_disabled: false },
+      { id: "sa-2", org_id: orgId, name: "deploy-bot", is_disabled: false },
+    ]);
+    vi.mocked(AutomationService.getCapabilities).mockResolvedValue({
+      ready: true,
+      triggerKinds: [],
+      eventSources: [],
+      eventTypes: [],
+      triggers: {},
+      features: ["serviceAccountRunAs"],
+    });
+    mockServiceAccountsEnabled(true);
+    vi.mocked(AutomationService.getAutomation).mockResolvedValue(
+      serviceAutomation,
+    );
+  });
+
+  it("lists View key-value store directly below Change Runs As", async () => {
+    // Arrange
+    vi.mocked(AutomationService.getCapabilities).mockResolvedValue({
+      ready: true,
+      triggerKinds: [],
+      eventSources: [],
+      eventTypes: [],
+      triggers: {},
+      features: ["serviceAccountRunAs", "kvStore"],
+    });
+    const user = userEvent.setup();
+    renderDetail();
+
+    // Act
+    await user.click(
+      await screen.findByLabelText(I18nKey.AUTOMATIONS$ACTIONS_MENU),
+    );
+    const changeRunAs = await screen.findByRole("button", {
+      name: I18nKey.AUTOMATIONS$CHANGE_RUN_AS,
+    });
+    const viewStore = await screen.findByRole("button", {
+      name: I18nKey.AUTOMATIONS$DETAIL$KV_VIEW_STORE,
+    });
+
+    // Assert
+    expect(changeRunAs.closest("li")?.nextElementSibling).toBe(
+      viewStore.closest("li"),
+    );
+    expect(AutomationService.listKvKeys).not.toHaveBeenCalled();
+  });
+
+  it("shows the service account under Runs As and the person under Created By", async () => {
+    // Arrange — the creator is an org member; the service account is not.
+    vi.mocked(getCloudOrganizationMember).mockResolvedValue({
+      org_id: orgId,
+      user_id: creatorId,
+      email: "jdoe@acme.com",
+    });
+
+    // Act
+    renderDetail();
+
+    // Assert
+    expect(await screen.findByText("ci-bot")).toBeInTheDocument();
+    expect(
+      screen.getByText(I18nKey.AUTOMATIONS$DETAIL$RUNS_AS),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId("service-account-badge")).toBeInTheDocument();
+    expect(await screen.findByText("jdoe@acme.com")).toBeInTheDocument();
+    expect(
+      screen.getByText(I18nKey.AUTOMATIONS$DETAIL$CREATED_BY),
+    ).toBeInTheDocument();
+    expect(getCloudOrganizationMember).toHaveBeenCalledWith(
+      orgId,
+      creatorId,
+      expect.anything(),
+    );
+    expect(getCloudOrganizationMember).not.toHaveBeenCalledWith(
+      orgId,
+      saId,
+      expect.anything(),
+    );
+  });
+
+  it("falls back to the raw id when the service account list is unavailable", async () => {
+    // Arrange — e.g. the list needs a permission the caller lacks.
+    vi.mocked(listCloudServiceAccounts).mockRejectedValue(
+      new HttpError(403, "Forbidden", { detail: "Forbidden" }),
+    );
+
+    // Act
+    renderDetail();
+
+    // Assert
+    expect(await screen.findByText(saId)).toBeInTheDocument();
+    expect(screen.getByTestId("service-account-badge")).toBeInTheDocument();
+  });
+
+  it("lets a manager edit the tags of a automation that runs as a service account", async () => {
+    // Arrange — the manager is not the creator; it runs as the service account. A
+    // service with tag support sends `tags`.
+    vi.mocked(AutomationService.getAutomation).mockResolvedValue({
+      ...serviceAutomation,
+      tags: [],
+    });
+
+    // Act
+    renderDetail();
+    await screen.findByTestId("service-account-badge");
+
+    // Assert — tags follow the same edit rule as the rest of the page.
+    expect(screen.getByTestId("automation-tags-edit")).toBeInTheDocument();
+  });
+
+  it("does not let a manager edit the tags of a draft that runs as a service account", async () => {
+    // Arrange — drafts are finished through the setup flow.
+    vi.mocked(AutomationService.getAutomation).mockResolvedValue({
+      ...serviceAutomation,
+      tags: [],
+      state: "DRAFT",
+    });
+
+    // Act
+    renderDetail();
+    await screen.findByTestId("service-account-badge");
+
+    // Assert
+    expect(
+      screen.queryByTestId("automation-tags-edit"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("lets an admin edit the tags of another member's automation", async () => {
+    // Arrange — runs as a person, and the caller is a manager but not the creator.
+    permissionMocks.isOwner = false;
+    vi.mocked(AutomationService.getAutomation).mockResolvedValue({
+      ...automation,
+      user_id: "another-member",
+      run_as_kind: "user",
+      // A saved tag, so the read-only tags render and the button can be absent.
+      tags: ["nightly"],
+    });
+
+    // Act
+    renderDetail();
+    await screen.findByTestId("automation-tags");
+
+    // Assert
+    expect(screen.getByTestId("automation-tags-edit")).toBeInTheDocument();
+  });
+
+  it("shows a member the generic label and never the service account id", async () => {
+    // Arrange — a member cannot read the service account list.
+    permissionMocks.canManage = false;
+    const { container } = renderDetail();
+
+    // Act
+    await screen.findByTestId("service-account-badge");
+
+    // Assert
+    expect(
+      screen.getByText(I18nKey.AUTOMATIONS$DETAIL$RUNS_AS),
+    ).toBeInTheDocument();
+    expect(
+      screen.getAllByText(I18nKey.AUTOMATIONS$SERVICE_ACCOUNT_LABEL).length,
+    ).toBeGreaterThan(0);
+    expect(container.innerHTML).not.toContain(saId);
+    expect(listCloudServiceAccounts).not.toHaveBeenCalled();
+  });
+
+  it("hides Change Runs As and skips the list when service accounts are disabled", async () => {
+    // Arrange
+    const user = userEvent.setup();
+    mockServiceAccountsEnabled(false);
+    renderDetail();
+    await screen.findByText(automation.name);
+
+    // Act
+    await waitFor(() =>
+      expect(fetchCloudIntegrationsConfig).toHaveBeenCalled(),
+    );
+    await user.click(screen.getByLabelText(I18nKey.AUTOMATIONS$ACTIONS_MENU));
+
+    // Assert
+    expect(listCloudServiceAccounts).not.toHaveBeenCalled();
+    expect(
+      screen.queryByRole("button", { name: I18nKey.AUTOMATIONS$CHANGE_RUN_AS }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("changes the automation to run as the chosen service account", async () => {
+    // Arrange
+    const user = userEvent.setup();
+    vi.mocked(AutomationService.changeRunAs).mockResolvedValue({
+      ...automation,
+      enabled: false,
+    });
+    renderDetail();
+    await screen.findByText(automation.name);
+
+    // Act
+    await user.click(screen.getByLabelText(I18nKey.AUTOMATIONS$ACTIONS_MENU));
+    await user.click(
+      screen.getByRole("button", { name: I18nKey.AUTOMATIONS$CHANGE_RUN_AS }),
+    );
+    await user.selectOptions(
+      screen.getByTestId("change-run-as-target"),
+      "sa-2",
+    );
+    await user.click(screen.getByTestId("change-run-as-confirm"));
+
+    // Assert — the API is called and the detail query is refetched.
+    await waitFor(() => {
+      expect(AutomationService.changeRunAs).toHaveBeenCalledWith("auto-1", {
+        to: "service",
+        service_account_id: "sa-2",
+      });
+    });
+    await waitFor(() => {
+      expect(AutomationService.getAutomation).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  describe("changing the factory", () => {
+    const coreFactory = {
+      id: "f-core",
+      name: "Core SDLC",
+      automation_count: 2,
+      created_at: "2026-01-01T00:00:00Z",
+      updated_at: "2026-01-01T00:00:00Z",
+    };
+
+    beforeEach(() => {
+      mockServiceAccountsEnabled(true, true);
+      vi.mocked(AutomationService.supportsFactories).mockReturnValue(true);
+      vi.mocked(AutomationService.listFactories).mockResolvedValue({
+        factories: [coreFactory],
+        total: 1,
+      });
+      vi.mocked(AutomationService.updateAutomation).mockResolvedValue(
+        automation,
+      );
+    });
+
+    async function openChangeFactory() {
+      const user = userEvent.setup();
+      renderDetail();
+      await screen.findByText(automation.name);
+      await user.click(screen.getByLabelText(I18nKey.AUTOMATIONS$ACTIONS_MENU));
+      await user.click(
+        screen.getByRole("button", {
+          name: I18nKey.AUTOMATIONS$CHANGE_FACTORY,
+        }),
+      );
+      return user;
+    }
+
+    it("puts the automation in the chosen factory", async () => {
+      // Arrange + Act
+      const user = await openChangeFactory();
+      await screen.findByRole("option", { name: coreFactory.name });
+      await user.selectOptions(
+        screen.getByTestId("change-factory-target"),
+        coreFactory.name,
+      );
+      await user.click(screen.getByTestId("change-factory-confirm"));
+
+      // Assert
+      await waitFor(() =>
+        expect(AutomationService.updateAutomation).toHaveBeenCalledWith(
+          "auto-1",
+          { factory_id: "f-core" },
+        ),
+      );
+    });
+
+    it("takes the automation out of its factory with a null factory_id", async () => {
+      // Arrange
+      vi.mocked(AutomationService.getAutomation).mockResolvedValue({
+        ...automation,
+        factory_id: "f-core",
+      });
+
+      // Act
+      const user = await openChangeFactory();
+      await screen.findByRole("option", { name: coreFactory.name });
+      await user.selectOptions(
+        screen.getByTestId("change-factory-target"),
+        I18nKey.AUTOMATIONS$CHANGE_FACTORY_NONE,
+      );
+      await user.click(screen.getByTestId("change-factory-confirm"));
+
+      // Assert
+      await waitFor(() =>
+        expect(AutomationService.updateAutomation).toHaveBeenCalledWith(
+          "auto-1",
+          { factory_id: null },
+        ),
+      );
+    });
+
+    it("is not offered to the owner without manage_automations", async () => {
+      // Arrange
+      permissionMocks.canManage = false;
+      permissionMocks.isOwner = true;
+      const user = userEvent.setup();
+
+      // Act
+      renderDetail();
+      await screen.findByText(automation.name);
+      await user.click(screen.getByLabelText(I18nKey.AUTOMATIONS$ACTIONS_MENU));
+
+      // Assert
+      expect(
+        screen.queryByRole("button", {
+          name: I18nKey.AUTOMATIONS$CHANGE_FACTORY,
+        }),
+      ).not.toBeInTheDocument();
+    });
+
+    it("is not offered when the instance has Factories off", async () => {
+      // Arrange
+      mockServiceAccountsEnabled(true, false);
+      const user = userEvent.setup();
+
+      // Act
+      renderDetail();
+      await screen.findByText(automation.name);
+      await user.click(screen.getByLabelText(I18nKey.AUTOMATIONS$ACTIONS_MENU));
+
+      // Assert
+      expect(
+        screen.queryByRole("button", {
+          name: I18nKey.AUTOMATIONS$CHANGE_FACTORY,
+        }),
+      ).not.toBeInTheDocument();
+    });
+
+    it("is not offered when the service has no factories", async () => {
+      // Arrange
+      vi.mocked(AutomationService.supportsFactories).mockReturnValue(false);
+      const user = userEvent.setup();
+
+      // Act
+      renderDetail();
+      await screen.findByText(automation.name);
+      await user.click(screen.getByLabelText(I18nKey.AUTOMATIONS$ACTIONS_MENU));
+
+      // Assert
+      expect(
+        screen.queryByRole("button", {
+          name: I18nKey.AUTOMATIONS$CHANGE_FACTORY,
+        }),
+      ).not.toBeInTheDocument();
+    });
+  });
+
+  it("shows the service's reason and keeps the modal open when the run-as change fails", async () => {
+    // Arrange
+    const user = userEvent.setup();
+    vi.mocked(AutomationService.changeRunAs).mockRejectedValue(
+      new HttpError(409, "Conflict", {
+        detail: "The automation has a pending or running run",
+      }),
+    );
+    renderDetail();
+    await screen.findByText("ci-bot");
+
+    // Act
+    await user.click(screen.getByLabelText(I18nKey.AUTOMATIONS$ACTIONS_MENU));
+    await user.click(
+      screen.getByRole("button", { name: I18nKey.AUTOMATIONS$CHANGE_RUN_AS }),
+    );
+    await user.click(screen.getByTestId("change-run-as-confirm"));
+
+    // Assert
+    await waitFor(() => {
+      expect(errorToast).toHaveBeenCalledWith(
+        "The automation has a pending or running run",
+      );
+    });
+    expect(screen.getByTestId("change-run-as-confirm")).toBeEnabled();
+  });
+
+  it("does not offer Change Runs As without the capability", async () => {
+    // Arrange
+    vi.mocked(AutomationService.getCapabilities).mockResolvedValue({
+      ready: true,
+      triggerKinds: [],
+      eventSources: [],
+      eventTypes: [],
+      triggers: {},
+      features: [],
+    });
+    const user = userEvent.setup();
+    renderDetail();
+    await screen.findByText(automation.name);
+
+    // Act
+    await user.click(screen.getByLabelText(I18nKey.AUTOMATIONS$ACTIONS_MENU));
+
+    // Assert
+    expect(
+      screen.queryByRole("button", { name: I18nKey.AUTOMATIONS$CHANGE_RUN_AS }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("does not offer Change Runs As on a local backend", async () => {
+    // Arrange — default selection is the local backend.
+    setActiveSelection({ backendId: localBackend.id });
+    const user = userEvent.setup();
+    renderDetail();
+    await screen.findByText(automation.name);
+
+    // Act
+    await user.click(screen.getByLabelText(I18nKey.AUTOMATIONS$ACTIONS_MENU));
+
+    // Assert
+    expect(
+      screen.queryByRole("button", { name: I18nKey.AUTOMATIONS$CHANGE_RUN_AS }),
+    ).not.toBeInTheDocument();
+  });
+});
+
 describe("AutomationDetail — disabled reason banner", () => {
   it("surfaces the latest disablement reason on an inactive automation", async () => {
     // Arrange — an automation paused automatically for a permanent config fault.
@@ -504,5 +1493,233 @@ describe("AutomationDetail — script automations", () => {
     expect(
       screen.queryByTestId("automation-prompt-content"),
     ).not.toBeInTheDocument();
+  });
+
+  it("exports a script automation with its bundle", async () => {
+    // Arrange
+    const bundle = new Uint8Array(
+      await packTarGzip([{ name: "main.py", content: "print('hi')\n" }]),
+    );
+    vi.mocked(AutomationService.getAutomation).mockResolvedValue({
+      ...automation,
+      prompt: null,
+      entrypoint: "python main.py",
+    });
+    vi.mocked(AutomationService.fetchTarballBytes).mockResolvedValue(bundle);
+    const user = userEvent.setup();
+    renderDetail();
+    await screen.findByTestId("automation-script-file");
+
+    // Act
+    await user.click(screen.getByLabelText(I18nKey.AUTOMATIONS$ACTIONS_MENU));
+    await user.click(
+      screen.getByRole("button", { name: I18nKey.AUTOMATIONS$EXPORT }),
+    );
+
+    // Assert — the file carries the bundle the detail page showed.
+    await waitFor(() => expect(downloadBlob).toHaveBeenCalledTimes(1));
+    const [blob, filename] = downloadBlob.mock.calls[0] as [Blob, string];
+    expect(filename).toBe("test-automation.automation.json");
+    expect(JSON.parse(await readBlobText(blob)).spec).toMatchObject({
+      prompt: null,
+      script: {
+        entrypoint: "python main.py",
+        tarball_base64: bytesToBase64(bundle),
+      },
+    });
+  });
+
+  it("reports the error instead of writing a file when the bundle cannot be fetched", async () => {
+    // Arrange
+    vi.mocked(AutomationService.getAutomation).mockResolvedValue({
+      ...automation,
+      prompt: null,
+      entrypoint: "python main.py",
+    });
+    vi.mocked(AutomationService.fetchTarballBytes).mockRejectedValue(
+      new Error("Upload not found"),
+    );
+    const user = userEvent.setup();
+    renderDetail();
+    await screen.findByTestId("automation-script-entrypoint");
+
+    // Act
+    await user.click(screen.getByLabelText(I18nKey.AUTOMATIONS$ACTIONS_MENU));
+    await user.click(
+      screen.getByRole("button", { name: I18nKey.AUTOMATIONS$EXPORT }),
+    );
+
+    // Assert
+    await waitFor(() =>
+      expect(displayErrorToast).toHaveBeenCalledWith("Upload not found"),
+    );
+    expect(downloadBlob).not.toHaveBeenCalled();
+  });
+});
+
+function readBlobText(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.addEventListener("load", () => resolve(String(reader.result)));
+    reader.addEventListener("error", () => reject(reader.error));
+    reader.readAsText(blob);
+  });
+}
+
+describe("AutomationDetail — keep sandbox alive", () => {
+  beforeEach(() => {
+    setActiveSelection({ backendId: cloudBackend.id });
+  });
+
+  it.each([
+    {
+      saved: false,
+      label: I18nKey.AUTOMATIONS$KEEP_SANDBOX_ALIVE,
+      next: true,
+      toast: I18nKey.AUTOMATIONS$KEEP_SANDBOX_ALIVE_ON_SUCCESS,
+    },
+    {
+      saved: true,
+      label: I18nKey.AUTOMATIONS$STOP_KEEPING_SANDBOX_ALIVE,
+      next: false,
+      toast: I18nKey.AUTOMATIONS$KEEP_SANDBOX_ALIVE_OFF_SUCCESS,
+    },
+  ])(
+    "saves keep_alive $next from the actions menu and confirms with a toast",
+    async ({ saved, label, next, toast }) => {
+      // Arrange
+      vi.mocked(AutomationService.getAutomation).mockResolvedValue({
+        ...automation,
+        keep_alive: saved,
+      });
+      vi.mocked(AutomationService.updateAutomation).mockResolvedValue({
+        ...automation,
+        keep_alive: next,
+      });
+      displaySuccessToast.mockClear();
+      const user = userEvent.setup();
+      renderDetail();
+      await user.click(
+        await screen.findByLabelText(I18nKey.AUTOMATIONS$ACTIONS_MENU),
+      );
+
+      // Act
+      await user.click(screen.getByRole("button", { name: label }));
+
+      // Assert
+      expect(AutomationService.updateAutomation).toHaveBeenCalledWith(
+        automation.id,
+        { keep_alive: next },
+      );
+      await waitFor(() =>
+        expect(displaySuccessToast).toHaveBeenCalledWith(toast),
+      );
+    },
+  );
+
+  it.each([
+    {
+      reason: "a local backend",
+      backendId: localBackend.id,
+      overrides: { keep_alive: false },
+    },
+    { reason: "a draft", overrides: { state: "DRAFT", keep_alive: false } },
+    {
+      reason: "a continue_conversation trigger",
+      overrides: {
+        keep_alive: true,
+        trigger: {
+          type: "event" as const,
+          source: "github",
+          on: "issue_comment.created",
+          destination: "continue_conversation" as const,
+        },
+      },
+    },
+    { reason: "a service without the field", overrides: {} },
+  ])(
+    "leaves the item out of the menu for $reason",
+    async ({ backendId, overrides }) => {
+      // Arrange
+      if (backendId) setActiveSelection({ backendId });
+      vi.mocked(AutomationService.getAutomation).mockResolvedValue({
+        ...automation,
+        ...overrides,
+      });
+      const user = userEvent.setup();
+      renderDetail();
+
+      // Act
+      await user.click(
+        await screen.findByLabelText(I18nKey.AUTOMATIONS$ACTIONS_MENU),
+      );
+
+      // Assert
+      expect(
+        screen.getByRole("button", { name: I18nKey.AUTOMATIONS$DELETE }),
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByRole("button", {
+          name: I18nKey.AUTOMATIONS$KEEP_SANDBOX_ALIVE,
+        }),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole("button", {
+          name: I18nKey.AUTOMATIONS$STOP_KEEPING_SANDBOX_ALIVE,
+        }),
+      ).not.toBeInTheDocument();
+    },
+  );
+
+  it("offers the item to a manager who did not create a user-owned automation", async () => {
+    // Arrange — managers may edit an automation that runs as another person.
+    permissionMocks.isOwner = false;
+    permissionMocks.canManage = true;
+    vi.mocked(AutomationService.getAutomation).mockResolvedValue({
+      ...automation,
+      user_id: "another-member",
+      run_as_kind: "user",
+      keep_alive: false,
+    });
+    const user = userEvent.setup();
+    renderDetail();
+
+    // Act
+    await user.click(
+      await screen.findByLabelText(I18nKey.AUTOMATIONS$ACTIONS_MENU),
+    );
+
+    // Assert
+    expect(
+      screen.getByRole("button", {
+        name: I18nKey.AUTOMATIONS$KEEP_SANDBOX_ALIVE,
+      }),
+    ).toBeInTheDocument();
+  });
+
+  it("offers the item to a manager of an automation that runs as a service account", async () => {
+    // Arrange — managers may edit an automation that runs as a service account.
+    permissionMocks.isOwner = false;
+    permissionMocks.canManage = true;
+    vi.mocked(AutomationService.getAutomation).mockResolvedValue({
+      ...automation,
+      user_id: "service-account-id",
+      run_as_kind: "service",
+      keep_alive: false,
+    });
+    const user = userEvent.setup();
+    renderDetail();
+
+    // Act
+    await user.click(
+      await screen.findByLabelText(I18nKey.AUTOMATIONS$ACTIONS_MENU),
+    );
+
+    // Assert
+    expect(
+      screen.getByRole("button", {
+        name: I18nKey.AUTOMATIONS$KEEP_SANDBOX_ALIVE,
+      }),
+    ).toBeInTheDocument();
   });
 });

@@ -1091,24 +1091,70 @@ describe("AgentProfilesLocalView save mapping", () => {
     expect(screen.getByTestId("save-agent-profile-btn")).toBeDisabled();
   });
 
-  it("keeps the agent draft while creating a reusable LLM profile inline", async () => {
+  it("keeps the agent draft while creating a reusable LLM profile in a dialog", async () => {
     llmProfilesData = { profiles: [], active_profile: null };
     renderView();
     const user = await openCreateAndName("my-agent");
 
-    await user.click(
-      screen.getByTestId("agent-profile-add-llm").querySelector("summary")!,
-    );
+    await user.click(screen.getByTestId("agent-profile-add-llm"));
 
     expect(await screen.findByTestId("agent-inline-llm-editor")).toBeVisible();
-    expect(screen.queryByTestId("back-to-profiles")).not.toBeInTheDocument();
-    expect(
-      screen.queryByTestId("profile-editor-title"),
-    ).not.toBeInTheDocument();
+    expect(screen.getAllByRole("dialog")[0]).toHaveTextContent(
+      "SETTINGS$ADD_LLM_PROFILE",
+    );
     expect(screen.getByTestId("agent-profile-name-input")).toHaveValue(
       "my-agent",
     );
     expect(screen.getByTestId("save-agent-profile-btn")).toBeDisabled();
+  });
+
+  it("selects one LLM and manages any saved profile without changing the selection", async () => {
+    llmProfilesData = {
+      profiles: [
+        { name: "default", model: "gpt-5" },
+        { name: "fast", model: "gpt-5-mini" },
+      ],
+      active_profile: "default",
+    };
+    emitControl = {
+      agentType: "openhands",
+      isValid: true,
+      isDirty: true,
+      buildAgentProfileFields: () => ({
+        agent_kind: "openhands",
+        mcp_server_refs: null,
+      }),
+      credentials: { isDirty: false, save: vi.fn(), reset: vi.fn() },
+    };
+    renderView();
+    const user = await openCreateAndName("my-agent");
+    const defaultChoice = screen.getByTestId(
+      "agent-profile-llm-choices-option-default",
+    );
+    const fastChoice = screen.getByTestId(
+      "agent-profile-llm-choices-option-fast",
+    );
+    expect(defaultChoice).toBeChecked();
+    await user.click(fastChoice);
+    expect(fastChoice).toBeChecked();
+    expect(defaultChoice).not.toBeChecked();
+
+    await user.click(
+      screen.getByTestId("agent-profile-llm-choices-delete-default"),
+    );
+    expect(screen.getAllByRole("dialog")[0]).toHaveTextContent(
+      "SETTINGS$PROFILE_DELETE_CONFIRMATION",
+    );
+    expect(fastChoice).toBeChecked();
+    await user.click(
+      screen.getAllByRole("button", { name: "BUTTON$CANCEL" }).at(-1)!,
+    );
+
+    await user.click(screen.getByTestId("save-agent-profile-btn"));
+    await waitFor(() => expect(saveMutate).toHaveBeenCalledTimes(1));
+    expect(saveMutate.mock.calls[0][0].profile).toMatchObject({
+      llm_profile_ref: "fast",
+    });
   });
 
   it("blocks an OpenHands save when no LLM profile is available", async () => {

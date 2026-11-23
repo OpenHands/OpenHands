@@ -123,3 +123,11 @@ silently ignored `--min-release-age`. For manual npm dependency resolution, run
 `npm install --min-release-age=7` (days), or verify registry timestamps before
 committing the result. The option requires npm >= 11.10. `npm ci` replays the
 lock and is not proof that newly locked versions meet the age rule.
+
+## Release E2E isolation
+
+When reproducing release E2E locally, unset `OH_AGENT_SERVER_LOCAL_PATH` and
+`OH_AUTOMATION_LOCAL_PATH` (and git-ref overrides) to test `config/defaults.json`
+versions rather than developer checkouts. Confirm the package versions in the
+runtime log. On a running Canvas host, use isolated backend/automation/ingress
+ports and a dedicated state directory; never stop the host stack to free ports.

@@ -55,13 +55,14 @@ function isBashObservation(event: OHEvent): boolean {
  * without requiring the user to click refresh manually.
  *
  * Bash observations also refresh the git-diff queries (`file_changes` /
- * `file_diff`) — a `git commit` or `git push` changes what the Diff view
- * should display, and shell commands can edit files too. They deliberately
- * do NOT touch the workspace file queries or the workspace mutation
- * counter: bumping the counter reloads canvas iframes, and doing that for
- * every shell command the agent runs would cause constant flicker.
- * Invalidation only refetches actively-mounted queries, so the cost is
- * limited to when the Files tab is open.
+ * `file_diff`) and the workspace file tree. A `git commit` or `git push`
+ * changes what the Diff view should display, and shell commands can create,
+ * delete, or rename workspace files. They deliberately do NOT touch the
+ * workspace file-content queries or the workspace mutation counter: bumping
+ * the counter reloads canvas iframes, and doing that for every shell command
+ * the agent runs would cause constant flicker. Invalidation only refetches
+ * actively-mounted queries, so the cost is limited to when the Files tab is
+ * open.
  *
  * Mount this hook inside any component that should drive auto-refresh —
  * the Files tab is the obvious caller. Multiple mounts are safe because
@@ -136,8 +137,11 @@ export function useAutoRefreshFilesOnEdit(): void {
     queryClient.invalidateQueries({ queryKey: ["file_diff"] });
     queryClient.invalidateQueries({ queryKey: ["git_commits"] });
 
-    if (hasNewFileEdits) {
+    if (hasNewFileEdits || hasNewBashCommands) {
       queryClient.invalidateQueries({ queryKey: ["workspace-files"] });
+    }
+
+    if (hasNewFileEdits) {
       queryClient.invalidateQueries({ queryKey: ["workspace-file-content"] });
       // Force iframes / <img> tags pointing at the static workspace
       // fileserver to re-fetch. Without this they happily keep showing the

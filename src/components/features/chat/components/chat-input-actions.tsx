@@ -1,5 +1,4 @@
 import React from "react";
-import ReactDOM from "react-dom";
 import { useTranslation } from "react-i18next";
 import { Cpu } from "lucide-react";
 import { AgentStatus } from "#/components/features/controls/agent-status";
@@ -25,6 +24,7 @@ import { usePauseConversation } from "#/hooks/mutation/use-pause-conversation";
 import { useResumeConversation } from "#/hooks/mutation/use-resume-conversation";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import { useAgentProfiles } from "#/hooks/query/use-agent-profiles";
+import { useAgentProfileAvailability } from "#/hooks/use-agent-profile-availability";
 import { useChatInputModelState } from "#/hooks/use-chat-input-model-state";
 import { useChatInputLlmProfileState } from "#/hooks/use-chat-input-llm-profile-state";
 import { getLockedCloudHost } from "#/api/agent-server-config";
@@ -45,6 +45,7 @@ import {
   chatInputIconButtonClassName,
   formControlTransitionClassName,
 } from "#/utils/form-control-classes";
+import { AppearancePortal } from "#/components/shared/appearance-portal";
 
 interface ChatInputActionsProps {
   disabled: boolean;
@@ -80,13 +81,12 @@ export function ChatInputActions({
   const isCloud = backend.kind === "cloud";
   const modelState = useChatInputModelState();
   const llmProfileState = useChatInputLlmProfileState();
-  // Before starting, the agent profile is the sole configuration selector.
-  // Once started, the model picker permits live LLM/model switching.
   const isPreStart = !conversationId || hasStartedConversation === false;
-  const showModelPicker = !isPreStart;
   const agentProfilesForStart = useAgentProfiles({ enabled: isPreStart });
+  const agentProfilesAvailable = useAgentProfileAvailability();
   const showAgentProfileSwitch =
     isPreStart &&
+    agentProfilesAvailable &&
     !(conversationId?.startsWith("task-") ?? false) &&
     (agentProfilesForStart.data?.profiles?.length ?? 0) > 0;
   // Code/Plan mode switching is a cloud OpenHands feature — it doesn't apply
@@ -131,7 +131,7 @@ export function ChatInputActions({
       !rowEl ||
       !rightEl ||
       !addEl ||
-      (showModelPicker && !modelEl) ||
+      !modelEl ||
       (showChangeAgentButton && !codeEl) ||
       typeof ResizeObserver === "undefined"
     ) {
@@ -145,10 +145,8 @@ export function ChatInputActions({
       if (nextRowWidth > 0) setActionsRowWidth(nextRowWidth);
       if (nextRightWidth > 0) setRightSectionWidth(nextRightWidth);
       if (nextAddWidth > 0) setAddFileWidth(nextAddWidth);
-      if (modelEl) {
-        const nextModelWidth = modelEl.getBoundingClientRect().width;
-        if (nextModelWidth > 0) setModelWidth(nextModelWidth);
-      }
+      const nextModelWidth = modelEl.getBoundingClientRect().width;
+      if (nextModelWidth > 0) setModelWidth(nextModelWidth);
 
       if (codeEl) {
         const nextCodeWidth = codeEl.getBoundingClientRect().width;
@@ -167,9 +165,7 @@ export function ChatInputActions({
     observer.observe(rowEl);
     observer.observe(rightEl);
     observer.observe(addEl);
-    if (modelEl) {
-      observer.observe(modelEl);
-    }
+    observer.observe(modelEl);
     if (codeEl) {
       observer.observe(codeEl);
     }
@@ -180,7 +176,7 @@ export function ChatInputActions({
     syncWidths();
 
     return () => observer.disconnect();
-  }, [showChangeAgentButton, showAgentProfileSwitch, showModelPicker]);
+  }, [showChangeAgentButton, showAgentProfileSwitch]);
 
   const handlePauseAgent = () => {
     if (!conversationId) return;
@@ -213,7 +209,7 @@ export function ChatInputActions({
         remaining -= codeWidth + INLINE_GAP;
       }
 
-      if (showModelPicker && remaining >= modelWidth) {
+      if (remaining >= modelWidth) {
         next.showModelInline = true;
         remaining -= modelWidth + INLINE_GAP;
       }
@@ -228,7 +224,6 @@ export function ChatInputActions({
       showChangeAgentButton,
       codeWidth,
       modelWidth,
-      showModelPicker,
       showAgentProfileSwitch,
       agentProfileWidth,
     ],
@@ -240,7 +235,7 @@ export function ChatInputActions({
   const fitWithoutOverflow = fitOptionalItems(leftBaseWidth);
   const allOptionalFit =
     (!showChangeAgentButton || fitWithoutOverflow.showCodeInline) &&
-    (!showModelPicker || fitWithoutOverflow.showModelInline);
+    fitWithoutOverflow.showModelInline;
 
   const fitWithOverflow = allOptionalFit
     ? fitWithoutOverflow
@@ -252,7 +247,9 @@ export function ChatInputActions({
   const showModelInline = fitWithOverflow.showModelInline;
   const showAgentProfileInline = fitWithOverflow.showAgentProfileInline;
   const showAddFileInline = true;
-  const showAgentStatusInline = actionsRowWidth >= 360;
+  // Below this width the status label is visually hidden, but the status
+  // control itself (Stop, Resume, progress) always stays in the row.
+  const showAgentStatusLabel = actionsRowWidth >= 360;
 
   // Which chat-input LLM picker to show — the constrained ACP model picker or
   // the LLM-profile picker (unit-tested in `resolve-picker-kind.test.ts`).
@@ -269,9 +266,7 @@ export function ChatInputActions({
         (!llmProfileState.canSwitchProfile &&
           Boolean(llmProfileState.currentProfileName));
   const showOverflowModel =
-    showModelPicker &&
-    !showModelInline &&
-    (getLockedCloudHost() === null || hasModelMenuRows);
+    !showModelInline && (getLockedCloudHost() === null || hasModelMenuRows);
 
   const hasOverflowItems =
     !showAddFileInline ||
@@ -531,15 +526,13 @@ export function ChatInputActions({
               <ChatInputAgentProfilePicker />
             </div>
           )}
-          {showModelPicker && (
-            <div ref={modelRef} className={cn(!showModelInline && "hidden")}>
-              {pickerKind === "model" ? (
-                <ChatInputModel />
-              ) : (
-                <ChatInputLlmProfilePicker />
-              )}
-            </div>
-          )}
+          <div ref={modelRef} className={cn(!showModelInline && "hidden")}>
+            {pickerKind === "model" ? (
+              <ChatInputModel />
+            ) : (
+              <ChatInputLlmProfilePicker />
+            )}
+          </div>
 
           {hasOverflowItems && (
             <div className="relative shrink-0">
@@ -565,10 +558,10 @@ export function ChatInputActions({
 
               {isOverflowOpen &&
                 typeof document !== "undefined" &&
-                overflowPortalStyle &&
-                ReactDOM.createPortal(
-                  <div style={overflowPortalStyle}>{overflowMenu}</div>,
-                  document.body,
+                overflowPortalStyle && (
+                  <AppearancePortal>
+                    <div style={overflowPortalStyle}>{overflowMenu}</div>
+                  </AppearancePortal>
                 )}
             </div>
           )}
@@ -578,8 +571,9 @@ export function ChatInputActions({
         ref={rightSectionRef}
         className="ml-auto flex shrink-0 items-center gap-2"
       >
-        {showAgentStatusInline && conversationId && (
+        {conversationId && (
           <AgentStatus
+            compact={!showAgentStatusLabel}
             handleStop={handlePauseAgent}
             handleResumeAgent={handleResumeAgentClick}
             disabled={disabled}

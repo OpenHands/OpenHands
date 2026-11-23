@@ -19,6 +19,8 @@ import type {
   GitSyncConfigUpdateRequest,
   GitSyncStatus,
 } from "#/types/git-sync";
+import { statusToneBannerClassName } from "#/utils/status-tone-classes";
+import { cn } from "#/utils/utils";
 
 /**
  * Identifies the save-and-sync button in the submit event. Read from the
@@ -418,7 +420,11 @@ export function GitSyncConfigForm({
           <div
             role="alert"
             data-testid="git-sync-check-failure"
-            className="rounded-md border border-danger/40 bg-danger/5 p-3 text-sm text-feedback-error whitespace-pre-wrap break-words"
+            className={cn(
+              "rounded-md p-3 text-sm whitespace-pre-wrap break-words dark:border-danger/40 dark:bg-danger/5",
+              statusToneBannerClassName.danger,
+              "text-feedback-error",
+            )}
           >
             <p className="font-medium">
               {t(I18nKey.AUTOMATIONS$GIT_SYNC$CHECK_FAILED_TITLE)}

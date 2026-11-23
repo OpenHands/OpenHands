@@ -67,7 +67,7 @@ export function ConversationCardContextMenu({
   );
   const stopLabelKey =
     backend.kind === "cloud"
-      ? I18nKey.COMMON$CLOSE_CONVERSATION_STOP_RUNTIME
+      ? I18nKey.COMMON$STOP_SANDBOX
       : I18nKey.COMMON$STOP_CONVERSATION;
 
   const generateSection = useCallback(
@@ -102,7 +102,7 @@ export function ConversationCardContextMenu({
       spacing={isPortaled ? "none" : "default"}
       className={
         isPortaled
-          ? "mt-0 min-w-50 w-max max-w-[min(280px,100vw-16px)]"
+          ? "mt-0 min-w-50 w-max conversation-card-menu-width"
           : "z-200 mt-0"
       }
     >

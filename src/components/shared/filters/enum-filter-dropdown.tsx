@@ -46,6 +46,17 @@ export function EnumFilterDropdown<T extends string>({
   const containerRef = useClickOutsideElement<HTMLDivElement>(() =>
     setOpen(false),
   );
+  const triggerRef = React.useRef<HTMLButtonElement>(null);
+
+  // Escape closes only this menu: stopping the event keeps a surrounding
+  // dialog or popover open, and focus returns to the trigger.
+  const handleKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (!open || event.key !== "Escape") return;
+    event.preventDefault();
+    event.stopPropagation();
+    setOpen(false);
+    triggerRef.current?.focus();
+  };
 
   const getOptionLabel = (option: T): string =>
     labelByValue?.[option] ??
@@ -65,8 +76,10 @@ export function EnumFilterDropdown<T extends string>({
         className,
       )}
       data-testid={testId}
+      onKeyDown={handleKeyDown}
     >
       <button
+        ref={triggerRef}
         type="button"
         data-testid="dropdown-trigger"
         aria-haspopup="menu"

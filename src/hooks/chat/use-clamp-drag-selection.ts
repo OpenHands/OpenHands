@@ -75,7 +75,15 @@ export function useClampDragSelection(
       // A sideways escape keeps the pointer between the vertical bounds; leave
       // the native selection alone instead of clamping it to the top edge.
       if (!above && !below) return;
-      if (!container.contains(dragAnchor.node)) return;
+      // The drag-start row can be virtualized out of the DOM mid-drag (the feed
+      // auto-scrolls past its overscan), which detaches the captured anchor node
+      // so the range cannot be rebuilt from it. Re-anchor to the live selection
+      // anchor — the browser keeps it inside the feed (the check above) — so the
+      // clamp still holds the selection inside instead of giving up and letting
+      // it reach the pane header or the composer.
+      if (!container.contains(dragAnchor.node)) {
+        dragAnchor = { node: anchorNode, offset: selection.anchorOffset };
+      }
 
       // Rebuild from the original anchor with collapse() + extend() so the
       // browser keeps the drag anchor and native movement can resume from it.

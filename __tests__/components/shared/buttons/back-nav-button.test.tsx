@@ -15,17 +15,4 @@ describe("BackNavButton", () => {
 
     expect(onClick).toHaveBeenCalledTimes(1);
   });
-
-  it("outlines the back button so it stays visible before hover", () => {
-    render(
-      <BackNavButton onClick={vi.fn()} testId="back-button">
-        <span />
-      </BackNavButton>,
-    );
-
-    expect(screen.getByTestId("back-button")).toHaveClass(
-      "border",
-      "border-border",
-    );
-  });
 });

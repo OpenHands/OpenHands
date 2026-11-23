@@ -121,6 +121,28 @@ describe("ActivityLogItem — logs button", () => {
     expect(modal.getAttribute("data-bash-command-id")).toBe("cmd-xyz");
   });
 
+  it("shows a conversation indicator to the left of the logs button when a conversation was started", () => {
+    renderItem(makeRun({ conversation_id: "conv-1" }));
+
+    const indicator = screen.getByTestId("run-conversation-indicator");
+    const logsButton = screen.getByRole("button", { name: LOGS_BUTTON_NAME });
+    expect(indicator).toHaveAttribute(
+      "aria-label",
+      I18nKey.AUTOMATIONS$DETAIL$CONVERSATION_STARTED,
+    );
+    expect(
+      indicator.compareDocumentPosition(logsButton) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  it("shows no conversation indicator when the run has no conversation", () => {
+    renderItem(makeRun({ conversation_id: null }));
+    expect(
+      screen.queryByTestId("run-conversation-indicator"),
+    ).not.toBeInTheDocument();
+  });
+
   it("renders the logs button inside the row link without breaking its href", () => {
     renderItem(makeRun({ conversation_id: "conv-abc" }));
 
@@ -272,8 +294,9 @@ describe("ActivityLogItem — timestamp fallback", () => {
     const { container } = renderItem(run);
 
     // Assert: the row reflects the current clock, not 1970.
-    expect(container.textContent).toContain("2026");
-    expect(container.textContent).not.toContain("1970");
+    const time = container.querySelector("time");
+    expect(time?.getAttribute("datetime")).toMatch(/^2026-05-27/);
+    expect(time?.getAttribute("title")).toContain("2026");
   });
 
   it("renders the backend-provided started_at unchanged when it is a valid timestamp", () => {
@@ -287,8 +310,9 @@ describe("ActivityLogItem — timestamp fallback", () => {
     const { container } = renderItem(run);
 
     // Assert
-    expect(container.textContent).toContain("2027");
-    expect(container.textContent).not.toContain("2030");
+    const time = container.querySelector("time");
+    expect(time?.getAttribute("datetime")).toBe("2027-03-15T09:00:00Z");
+    expect(time?.getAttribute("title")).toContain("2027");
   });
 });
 
@@ -565,7 +589,7 @@ describe("ActivityLogItem — script runs (a command but no conversation)", () =
     __resetActiveStoreForTests();
   });
 
-  it("explains that the run executed a script and points at the logs once it has finished", () => {
+  it("leaves the no-conversation explanation to the runs section for a script run", () => {
     // Arrange: a script automation run — the bash command ran, no agent did.
     const run = makeRun({
       status: AutomationRunStatus.COMPLETED,
@@ -577,13 +601,13 @@ describe("ActivityLogItem — script runs (a command but no conversation)", () =
     // Act
     renderItem(run);
 
-    // Assert
-    expect(
-      screen.getByText(I18nKey.AUTOMATIONS$DETAIL$SCRIPT_RUN_NO_CONVERSATION),
-    ).toBeInTheDocument();
+    // Assert: the section says it once; the row keeps only the logs button.
     expect(
       screen.queryByText(I18nKey.AUTOMATIONS$DETAIL$NO_CONVERSATION),
     ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: LOGS_BUTTON_NAME }),
+    ).toBeInTheDocument();
   });
 
   it("hands the run's sandbox id to the logs modal", () => {
