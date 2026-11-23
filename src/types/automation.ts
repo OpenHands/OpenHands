@@ -368,3 +368,27 @@ export interface AutomationRunExportRow {
    */
   phase: string | null;
 }
+
+/** One page of an automation's key-value store keys. */
+export interface AutomationKvKeysResponse {
+  keys: string[];
+  count: number;
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+/** A key of an automation's key-value store with its decoded JSON value. */
+export interface AutomationKvEntry {
+  key: string;
+  value: unknown;
+  version: number;
+  created_at: string;
+  updated_at: string;
+}
+
+/** The result of an atomic batch write to an automation's key-value store. */
+export interface AutomationKvBatchResponse {
+  version: number;
+  results: Array<Record<string, unknown>>;
+}
