@@ -1,9 +1,13 @@
+import React from "react";
 import { useTranslation } from "react-i18next";
 import { I18nKey } from "#/i18n/declaration";
 import { useNavigation } from "#/context/navigation-context";
 import { useBackendScopedPath } from "#/hooks/use-backend-scoped-path";
+import { useAutomationPermissions } from "#/hooks/use-automation-permissions";
 import { useSharedConversations } from "#/hooks/query/use-shared-conversations";
+import { useUpdateConversationPublicFlag } from "#/hooks/mutation/use-update-conversation-public-flag";
 import { NavigationLink } from "#/components/shared/navigation-link";
+import { uniqueById } from "#/utils/unique-by-id";
 import { ConversationCard } from "./conversation-card/conversation-card";
 import { ConversationCardSkeleton } from "./conversation-card/conversation-card-skeleton";
 
@@ -12,9 +16,10 @@ interface SharedConversationListProps {
 }
 
 /**
- * The conversations that members shared with the active org. Rows carry no
- * actions. Each one opens through the conversation route, which shows an
- * owner their own conversation and sends anyone else to the read-only view.
+ * The conversations that members shared with the active org. Each one opens
+ * through the conversation route, which shows an owner their own
+ * conversation and sends anyone else to the read-only view. Only the
+ * creator's own rows have a menu, which lets them stop sharing.
  */
 export function SharedConversationList({
   onClose,
@@ -22,10 +27,18 @@ export function SharedConversationList({
   const { t } = useTranslation("openhands");
   const { conversationId: currentConversationId } = useNavigation();
   const backendScopedPath = useBackendScopedPath();
+  const { userId } = useAutomationPermissions();
+  const { mutate: updatePublicFlag } = useUpdateConversationPublicFlag();
+  const [openContextMenuId, setOpenContextMenuId] = React.useState<
+    string | null
+  >(null);
   const { data, isLoading, hasNextPage, isFetchingNextPage, fetchNextPage } =
     useSharedConversations();
 
-  const conversations = data?.pages.flatMap((page) => page.items) ?? [];
+  // A row can come back on a later page when the list shifts between loads.
+  const conversations = uniqueById(
+    data?.pages.flatMap((page) => page.items) ?? [],
+  );
 
   return (
     <div
@@ -59,6 +72,20 @@ export function SharedConversationList({
               lastUpdatedAt={conversation.updated_at}
               showRepositoryMetadata={false}
               isActive={conversation.id === currentConversationId}
+              contextMenuOpen={openContextMenuId === conversation.id}
+              onContextMenuToggle={(isOpen) =>
+                setOpenContextMenuId(isOpen ? conversation.id : null)
+              }
+              isShared
+              onToggleShared={
+                !!userId && conversation.created_by_user_id === userId
+                  ? (isShared) =>
+                      updatePublicFlag({
+                        conversationId: conversation.id,
+                        isPublic: isShared,
+                      })
+                  : undefined
+              }
             />
           </NavigationLink>
         ))}

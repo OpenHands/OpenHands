@@ -14,6 +14,12 @@ export interface CloudOrganization {
    * "visible" — only an explicit `false` hides an org.
    */
   is_visible?: boolean;
+  /**
+   * Whether members can discover the conversations shared with the org in
+   * the Shared list. An Org Admin turns it off on Settings > Organization.
+   * An app-server that predates the setting omits it, which means "on".
+   */
+  enable_shared_conversation_discovery?: boolean;
 }
 
 export interface CloudOrganizationsResponse {

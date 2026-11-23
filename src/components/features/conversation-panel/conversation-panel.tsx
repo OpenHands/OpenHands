@@ -10,6 +10,7 @@ import { I18nKey } from "#/i18n/declaration";
 import { useNavigation } from "#/context/navigation-context";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import { useAutomationPermissions } from "#/hooks/use-automation-permissions";
+import { useSharedConversationDiscovery } from "#/hooks/query/use-shared-conversation-discovery";
 import { useBackendScopedPath } from "#/hooks/use-backend-scoped-path";
 import { usePaginatedConversations } from "#/hooks/query/use-paginated-conversations";
 import { useAgentProfiles } from "#/hooks/query/use-agent-profiles";
@@ -103,14 +104,17 @@ export function ConversationPanel({
   const { conversationId: currentConversationId, navigate } = useNavigation();
   const { backend: activeBackend, orgId } = useActiveBackend();
   const { userId } = useAutomationPermissions();
+  const isSharedConversationDiscoveryEnabled = useSharedConversationDiscovery();
   // Members share conversations with a cloud team workspace only: a personal
   // one's org id is the user id, and it has no other members to list for.
+  // An Org Admin can also hide the list from the org's members.
   const canShowSharedList =
     !compact &&
     activeBackend.kind === "cloud" &&
     !!orgId &&
     !!userId &&
-    orgId !== userId;
+    orgId !== userId &&
+    isSharedConversationDiscoveryEnabled;
   const [listScope, setListScope] = React.useState<"private" | "shared">(
     "private",
   );

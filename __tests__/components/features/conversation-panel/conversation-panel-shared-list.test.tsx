@@ -1,10 +1,11 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { describe, expect, it, vi } from "vitest";
 import {
   setupConversationPanelTest,
   cloudBackend,
+  createMockConversation,
   renderConversationPanel,
 } from "./conversation-panel-test-utils";
 import { ConversationPanel } from "#/components/features/conversation-panel/conversation-panel";
@@ -14,12 +15,21 @@ import {
   setActiveSelection,
   setRegisteredBackends,
 } from "#/api/backend-registry/active-store";
-import { getCloudOrganizationMe } from "#/api/cloud/organization-service.api";
+import {
+  getCloudOrganizationMe,
+  getCloudOrganizations,
+} from "#/api/cloud/organization-service.api";
+import { updateCloudConversationPublicFlag } from "#/api/cloud/conversation-service.api";
 import { searchCloudSharedConversations } from "#/api/cloud/shared-conversation-service.api";
 
 vi.mock("#/api/cloud/organization-service.api", async (importOriginal) => ({
   ...(await importOriginal<object>()),
   getCloudOrganizationMe: vi.fn(),
+  getCloudOrganizations: vi.fn(),
+}));
+vi.mock("#/api/cloud/conversation-service.api", async (importOriginal) => ({
+  ...(await importOriginal<object>()),
+  updateCloudConversationPublicFlag: vi.fn(),
 }));
 vi.mock(
   "#/api/cloud/shared-conversation-service.api",
@@ -47,14 +57,21 @@ const sharedConversation = (id: string, title: string) => ({
   updated_at: new Date().toISOString(),
 });
 
+const teamOrg = (overrides = {}) => ({
+  items: [{ id: TEAM_ORG_ID, name: "Team", is_personal: false, ...overrides }],
+  currentOrgId: TEAM_ORG_ID,
+});
+
 // The caller is a member of the team org: their user id is not the org id.
-const signInAsTeamOrgMember = () =>
+const signInAsTeamOrgMember = () => {
   vi.mocked(getCloudOrganizationMe).mockResolvedValue({
     orgId: TEAM_ORG_ID,
     userId: "user-1",
     role: "member",
     permissions: null,
   });
+  vi.mocked(getCloudOrganizations).mockResolvedValue(teamOrg());
+};
 
 const renderCloudPanel = (orgId: string) => {
   setRegisteredBackends([cloudBackend]);
@@ -138,6 +155,96 @@ describe("ConversationPanel shared list", () => {
     expect(screen.getByText("Teammate handoff")).toBeInTheDocument();
   });
 
+  it("shows a conversation once when it comes back on the next page", async () => {
+    // Arrange — the conversation moved down the list between the two loads.
+    const user = userEvent.setup();
+    signInAsTeamOrgMember();
+    vi.mocked(searchCloudSharedConversations).mockImplementation(
+      async ({ pageId }) =>
+        pageId === "20"
+          ? {
+              items: [
+                sharedConversation("shared-1", "Teammate handoff"),
+                sharedConversation("shared-2", "Older handoff"),
+              ],
+              next_page_id: null,
+            }
+          : {
+              items: [sharedConversation("shared-1", "Teammate handoff")],
+              next_page_id: "20",
+            },
+    );
+    renderCloudPanel(TEAM_ORG_ID);
+    await selectSharedList(user);
+
+    // Act
+    await user.click(
+      await screen.findByTestId("load-more-shared-conversations"),
+    );
+
+    // Assert
+    await screen.findByText("Older handoff");
+    expect(
+      screen.getAllByRole("link", { name: /Teammate handoff/ }),
+    ).toHaveLength(1);
+  });
+
+  it("lets the creator stop sharing their conversation from its menu", async () => {
+    // Arrange
+    const user = userEvent.setup();
+    signInAsTeamOrgMember();
+    vi.mocked(searchCloudSharedConversations)
+      .mockResolvedValueOnce({
+        items: [
+          {
+            ...sharedConversation("shared-1", "My handoff"),
+            created_by_user_id: "user-1",
+          },
+        ],
+        next_page_id: null,
+      })
+      .mockResolvedValue({ items: [], next_page_id: null });
+    vi.mocked(updateCloudConversationPublicFlag).mockResolvedValue(
+      createMockConversation({ id: "shared-1", public: false }),
+    );
+    renderCloudPanel(TEAM_ORG_ID);
+    await selectSharedList(user);
+    const row = await screen.findByRole("link", { name: /My handoff/ });
+
+    // Act
+    await user.click(within(row).getByTestId("ellipsis-button"));
+    await user.click(await screen.findByTestId("toggle-shared-button"));
+
+    // Assert
+    expect(updateCloudConversationPublicFlag).toHaveBeenCalledWith(
+      "shared-1",
+      false,
+    );
+    await waitFor(() =>
+      expect(screen.queryByText("My handoff")).not.toBeInTheDocument(),
+    );
+  });
+
+  it("does not offer a menu on a conversation a teammate shared", async () => {
+    // Arrange
+    const user = userEvent.setup();
+    signInAsTeamOrgMember();
+    vi.mocked(searchCloudSharedConversations).mockResolvedValue({
+      items: [sharedConversation("shared-1", "Teammate handoff")],
+      next_page_id: null,
+    });
+    renderCloudPanel(TEAM_ORG_ID);
+
+    // Act
+    await selectSharedList(user);
+
+    // Assert
+    const row = await screen.findByRole("link", { name: /Teammate handoff/ });
+    expect(
+      within(row).queryByTestId("ellipsis-button"),
+    ).not.toBeInTheDocument();
+  });
+
   it("says no conversations were found when nothing is shared with the org", async () => {
     // Arrange
     const user = userEvent.setup();
@@ -214,6 +321,24 @@ describe("ConversationPanel shared list", () => {
     renderCloudPanel("org-personal");
     await screen.findByText("Conversation 1");
     await waitFor(() => expect(getCloudOrganizationMe).toHaveBeenCalled());
+
+    // Assert
+    expect(
+      screen.queryByTestId("conversation-list-scope"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("does not offer the Shared list when an Org Admin turned discovery off", async () => {
+    // Arrange
+    signInAsTeamOrgMember();
+    vi.mocked(getCloudOrganizations).mockResolvedValue(
+      teamOrg({ enable_shared_conversation_discovery: false }),
+    );
+
+    // Act
+    renderCloudPanel(TEAM_ORG_ID);
+    await screen.findByText("Conversation 1");
+    await waitFor(() => expect(getCloudOrganizations).toHaveBeenCalled());
 
     // Assert
     expect(
