@@ -1,4 +1,4 @@
-import type { LucideIcon } from "lucide-react";
+import type { ComponentType } from "react";
 import { NavigationLink } from "#/components/shared/navigation-link";
 import {
   SIDEBAR_ROW_INTERACTIVE_CLASS,
@@ -7,10 +7,17 @@ import {
 import { settingsLikeMainScrollClassName } from "#/utils/settings-like-page-layout-classes";
 import { cn } from "#/utils/utils";
 
+/** A Lucide icon or an SVG component imported with `?react`. */
+type SubPageNavIcon = ComponentType<{
+  width?: number;
+  height?: number;
+  "aria-hidden"?: boolean;
+}>;
+
 export interface SubPageNavItem {
   to: string;
   label: string;
-  Icon: LucideIcon;
+  Icon: SubPageNavIcon;
   testId: string;
 }
 
@@ -40,7 +47,7 @@ function SubPageNavLink({ item }: { item: SubPageNavItem }) {
       }
     >
       <span className="shrink-0 flex items-center justify-center">
-        <item.Icon size={16} aria-hidden />
+        <item.Icon width={16} height={16} aria-hidden />
       </span>
       <span className="truncate">{item.label}</span>
     </NavigationLink>
