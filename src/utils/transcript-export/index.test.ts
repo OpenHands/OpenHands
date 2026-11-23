@@ -1,9 +1,14 @@
 import { describe, expect, it, vi } from "vitest";
 import type {
-  AskUserAction,
   AskUserAnswerEvent,
   AskUserObservation,
 } from "@openhands/typescript-client";
+import type {
+  AskUserAction,
+  ExecuteBashAction,
+  MCPToolAction,
+  TaskAction,
+} from "#/types/agent-server/core/base/action";
 import type {
   ActionEvent,
   AgentErrorEvent,
@@ -12,11 +17,6 @@ import type {
   UserRejectObservation,
 } from "#/types/agent-server/core";
 import type { ACPToolCallEvent } from "#/types/agent-server/core/events/acp-tool-call-event";
-import type {
-  ExecuteBashAction,
-  MCPToolAction,
-  TaskAction,
-} from "#/types/agent-server/core/base/action";
 import type {
   ExecuteBashObservation,
   TaskObservation,
@@ -141,74 +141,90 @@ const defaultOptions = {
 
 describe("conversation transcript export", () => {
   it.each([
-    { option_index: 1, option_label: "PostgreSQL", text: "Use the EU region" },
-    { option_index: null, option_label: null, text: "Neither, use JSON" },
-  ])("exports a complete decision exchange in both formats: %j", (answer) => {
-    const question: ActionEvent<AskUserAction> = {
-      ...terminalAction,
-      id: "question-1",
-      summary: undefined,
-      tool_name: "ask_user",
-      action: {
-        kind: "AskUserAction",
-        question: "Choose storage?",
-        options: [
-          { label: "SQLite", consequence: "Stay on this device." },
-          { label: "PostgreSQL", consequence: "Share across servers." },
-        ],
-        recommended: 1,
-      },
-    };
-    const result: ObservationEvent<AskUserObservation> = {
-      ...terminalObservation(""),
-      action_id: question.id,
-      tool_name: "ask_user",
-      observation: {
-        kind: "AskUserObservation",
-        content: [],
-        is_error: false,
-      },
-    };
-    const event: AskUserAnswerEvent = {
-      id: "answer-1",
-      kind: "AskUserAnswerEvent",
-      source: "user",
-      timestamp,
-      ask_id: "question-1",
-      ...answer,
-    };
-    const machine: MessageEvent = {
-      ...userMessage,
-      llm_message: {
-        role: "user",
-        content: [
-          {
-            type: "text",
-            text: '[Answer to your question: "Choose storage?"]\nMachine copy',
-          },
-        ],
-      },
-    };
-    for (const includeToolDetails of [false, true]) {
-      for (const exportTranscript of [eventsToMarkdown, eventsToHtml]) {
-        const output = exportTranscript([question, result, event, machine], {
-          ...defaultOptions,
-          includeToolDetails,
-        });
-        expect(output).toContain("Choose storage?");
-        expect(output).toContain("SQLite");
-        expect(output).toContain("Stay on this device.");
-        expect(output).toContain("PostgreSQL (ASK_USER$RECOMMENDED)");
-        expect(output).toContain("Share across servers.");
-        expect(output.split(answer.text)).toHaveLength(2);
-        expect(output.indexOf("Choose storage?")).toBeLessThan(
-          output.indexOf(answer.text),
-        );
-        expect(output).not.toContain("Machine copy");
-        expect(output).not.toContain("Answer to your question");
+    {
+      kind: "AskUserForConversationAction",
+      option_index: 1,
+      option_label: "PostgreSQL",
+      text: "Use the EU region",
+    },
+    {
+      kind: "AskUserAction",
+      option_index: null,
+      option_label: null,
+      text: "Neither, use JSON",
+    },
+  ] as const)(
+    "exports a complete decision exchange in both formats: %j",
+    ({ kind, ...answer }) => {
+      const question: ActionEvent<AskUserAction> = {
+        ...terminalAction,
+        id: "question-1",
+        summary: undefined,
+        tool_name: "ask_user",
+        action: {
+          kind,
+          ...(kind === "AskUserForConversationAction"
+            ? { for_conversation: "worker-conversation-id" }
+            : {}),
+          question: "Choose storage?",
+          options: [
+            { label: "SQLite", consequence: "Stay on this device." },
+            { label: "PostgreSQL", consequence: "Share across servers." },
+          ],
+          recommended: 1,
+        },
+      };
+      const result: ObservationEvent<AskUserObservation> = {
+        ...terminalObservation(""),
+        action_id: question.id,
+        tool_name: "ask_user",
+        observation: {
+          kind: "AskUserObservation",
+          content: [],
+          is_error: false,
+        },
+      };
+      const event: AskUserAnswerEvent = {
+        id: "answer-1",
+        kind: "AskUserAnswerEvent",
+        source: "user",
+        timestamp,
+        ask_id: "question-1",
+        ...answer,
+      };
+      const machine: MessageEvent = {
+        ...userMessage,
+        llm_message: {
+          role: "user",
+          content: [
+            {
+              type: "text",
+              text: '[Answer to your question: "Choose storage?"]\nMachine copy',
+            },
+          ],
+        },
+      };
+      for (const includeToolDetails of [false, true]) {
+        for (const exportTranscript of [eventsToMarkdown, eventsToHtml]) {
+          const output = exportTranscript([question, result, event, machine], {
+            ...defaultOptions,
+            includeToolDetails,
+          });
+          expect(output).toContain("Choose storage?");
+          expect(output).toContain("SQLite");
+          expect(output).toContain("Stay on this device.");
+          expect(output).toContain("PostgreSQL (ASK_USER$RECOMMENDED)");
+          expect(output).toContain("Share across servers.");
+          expect(output.split(answer.text)).toHaveLength(2);
+          expect(output.indexOf("Choose storage?")).toBeLessThan(
+            output.indexOf(answer.text),
+          );
+          expect(output).not.toContain("Machine copy");
+          expect(output).not.toContain("Answer to your question");
+        }
       }
-    }
-  });
+    },
+  );
 
   it("exports only the answer that reached the agent after a crash and retry", () => {
     const question: ActionEvent<AskUserAction> = {

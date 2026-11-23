@@ -7,6 +7,7 @@ import {
   Plus,
   Server,
   Settings,
+  FolderKanban,
 } from "lucide-react";
 import { OpenHandsLogoButton } from "#/components/shared/buttons/openhands-logo-button";
 import { NavigationLink } from "#/components/shared/navigation-link";
@@ -48,6 +49,9 @@ import { FACTORIES_PATH } from "#/constants/factories";
 import { useFactoryContext } from "#/hooks/use-factory-context";
 import { CanvasExtensionIcon } from "#/components/features/canvas-extensions/canvas-extension-icon";
 import type { Backend } from "#/api/backend-registry/types";
+import { useProjectsEnabled } from "#/hooks/query/use-projects";
+import { NEW_PROJECT_PATH, PROJECTS_PATH } from "#/utils/project-paths";
+import { useNavigation } from "#/context/navigation-context";
 
 const ICON_SIZE = 18;
 const SIDEBAR_LOGO_WIDTH = 34;
@@ -99,6 +103,8 @@ export function SidebarRailBody({
   onOpenManageBackends,
 }: SidebarRailBodyProps) {
   const { t } = useTranslation("openhands");
+  const projectsEnabled = useProjectsEnabled();
+  const { navigate } = useNavigation();
   const { pages: canvasExtensionPages } = useCanvasExtensionsRuntime();
   const backendCloseTimerRef = collapsedBackendCloseTimer;
   const { isPinnedRoute, togglePinnedRoute } = usePinnedHomeRoute();
@@ -271,6 +277,20 @@ export function SidebarRailBody({
               automationListPath(),
               "sidebar-pin-home-toggle-automations",
             )}
+          />
+        )}
+        {projectsEnabled && (
+          <SidebarNavLink
+            to={PROJECTS_PATH}
+            label={t(I18nKey.PROJECTS$TITLE)}
+            testId="sidebar-projects-link"
+            collapsed={collapsed}
+            icon={<FolderKanban width={ICON_SIZE} height={ICON_SIZE} />}
+            addAction={{
+              label: t(I18nKey.PROJECTS$NEW),
+              testId: "sidebar-new-project",
+              onClick: () => navigate(NEW_PROJECT_PATH),
+            }}
           />
         )}
         {hasAutomationInterface() && isFactoriesSupported && (
