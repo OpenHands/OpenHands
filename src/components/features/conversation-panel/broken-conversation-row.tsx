@@ -2,6 +2,8 @@ import { ChevronRight } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { I18nKey } from "#/i18n/declaration";
 import { parseDateAsUTC } from "#/utils/format-time-delta";
+import { statusToneBadgeClassName } from "#/utils/status-tone-classes";
+import { cn } from "#/utils/utils";
 import type { AppConversation } from "#/api/conversation-service/agent-server-conversation-service.types";
 
 interface BrokenConversationRowProps {
@@ -30,7 +32,12 @@ export function BrokenConversationRow({
         <span className="min-w-0 flex-1 truncate text-sm group-open:break-words group-open:whitespace-normal">
           {title}
         </span>
-        <span className="shrink-0 rounded bg-danger/15 px-1.5 py-0.5 text-xs text-danger">
+        <span
+          className={cn(
+            "shrink-0 rounded px-1.5 py-0.5 text-xs",
+            statusToneBadgeClassName.danger,
+          )}
+        >
           {t(I18nKey.CONVERSATION_PANEL$CORRUPTED)}
         </span>
       </summary>
