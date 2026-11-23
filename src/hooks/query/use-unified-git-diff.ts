@@ -59,6 +59,7 @@ export const useUnifiedGitDiff = (config: UseUnifiedGitDiffConfig) => {
         absoluteFilePath,
       ];
 
+  // eslint-disable-next-line query/exhaustive-deps -- Both key branches include all inputs used by their respective diff requests.
   return useQuery({
     queryKey,
     queryFn: async () => {

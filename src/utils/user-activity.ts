@@ -25,8 +25,7 @@ function onVisibility() {
 }
 
 export function isUserIdle(now = Date.now()): boolean {
-  if (typeof document !== "undefined" && document.visibilityState === "hidden")
-    return true;
+  if (globalThis.document?.visibilityState === "hidden") return true;
   return now - lastActivity > USER_IDLE_AFTER_MS;
 }
 
