@@ -902,8 +902,11 @@ export async function trackEvent(
   posthog.capture(eventName, properties);
 }
 
-/** Submit only the feedback the user explicitly chose to send. */
-export async function submitPrivateFeedback(message: string): Promise<void> {
+/** Submit only the feedback and optional contact email the user explicitly chose to send. */
+export async function submitPrivateFeedback(
+  message: string,
+  email?: string,
+): Promise<void> {
   if (
     isTelemetryHardDisabled() ||
     import.meta.env.VITE_DO_NOT_TRACK === "1" ||
@@ -940,6 +943,7 @@ export async function submitPrivateFeedback(message: string): Promise<void> {
     throw new Error("Feedback survey unavailable");
   }
 
+  const contactEmail = email?.trim();
   const response = await fetch(`${host}/capture/`, {
     method: "POST",
     credentials: "omit",
@@ -956,6 +960,7 @@ export async function submitPrivateFeedback(message: string): Promise<void> {
         $survey_completed: true,
         $process_person_profile: false,
         feedback_source: "agent_canvas",
+        ...(contactEmail && { feedback_email: contactEmail }),
       },
       ip: false,
     }),

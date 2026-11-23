@@ -17,6 +17,7 @@ export function FeedbackButton() {
   const [open, setOpen] = useState(false);
   const [showDisclosure, setShowDisclosure] = useState(false);
   const [message, setMessage] = useState("");
+  const [email, setEmail] = useState("");
   const [status, setStatus] = useState<"idle" | "sending" | "error" | "sent">(
     "idle",
   );
@@ -36,8 +37,9 @@ export function FeedbackButton() {
     if (!text || status === "sending") return;
     setStatus("sending");
     try {
-      await submitPrivateFeedback(text);
+      await submitPrivateFeedback(text, email);
       setMessage("");
+      setEmail("");
       setStatus("sent");
     } catch {
       setStatus("error");
@@ -102,6 +104,21 @@ export function FeedbackButton() {
                   onChange={(event) => setMessage(event.target.value)}
                   rows={5}
                   className="w-full resize-y rounded-md border border-border bg-base-secondary p-2 text-contrast"
+                />
+                <label
+                  htmlFor="feedback-email"
+                  className="text-sm text-contrast"
+                >
+                  {t(I18nKey.FEEDBACK$EMAIL)}
+                </label>
+                <input
+                  id="feedback-email"
+                  type="email"
+                  autoComplete="email"
+                  maxLength={254}
+                  value={email}
+                  onChange={(event) => setEmail(event.target.value)}
+                  className="w-full rounded-md border border-border bg-base-secondary p-2 text-contrast"
                 />
                 <p className="text-xs text-muted">
                   {t(I18nKey.FEEDBACK$PRIVACY)}
