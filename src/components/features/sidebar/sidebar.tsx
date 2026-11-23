@@ -1,6 +1,9 @@
 import React from "react";
 import { useTranslation } from "react-i18next";
-import { SidebarRailBody } from "./sidebar-rail-body";
+import {
+  SidebarRailBody,
+  type SidebarRailBodyProps,
+} from "./sidebar-rail-body";
 import { getErrorStatus, useSettings } from "#/hooks/query/use-settings";
 import { useConfig } from "#/hooks/query/use-config";
 import { displayErrorToast } from "#/utils/custom-toast-handlers";
@@ -12,6 +15,7 @@ import { useSidebarMobileNav } from "./sidebar-mobile-nav-context";
 import { useSidebarStore } from "#/stores/sidebar-store";
 import { useClickOutsideElement } from "#/hooks/use-click-outside-element";
 import { useCloseOnEscape } from "#/hooks/use-close-on-escape";
+import { useModalFocus } from "#/components/shared/modals/use-modal-focus";
 import { useBackendsHealth } from "#/hooks/query/use-backends-health";
 import { useResizableDrawerWidth } from "#/hooks/use-resizable-drawer-width";
 import { ResizeHandle } from "#/components/ui/resize-handle";
@@ -49,6 +53,76 @@ const MOBILE_DRAWER_TRANSITION_STYLE = {
   "--mobile-drawer-transition-duration": `${MOBILE_DRAWER_TRANSITION_MS}ms`,
 } as React.CSSProperties;
 
+type MobileSidebarDrawerRailBodyProps = Omit<
+  SidebarRailBodyProps,
+  "collapsed" | "showCollapseToggle" | "showMobileCloseButton" | "onCloseMobile"
+>;
+
+function MobileSidebarDrawer({
+  visible,
+  onClose,
+  railBodyProps,
+}: {
+  visible: boolean;
+  onClose: () => void;
+  railBodyProps: MobileSidebarDrawerRailBodyProps;
+}) {
+  const { t } = useTranslation("openhands");
+  const focus = useModalFocus<HTMLElement>({ elevated: false });
+  const handleKeyDownCapture = React.useCallback(
+    (event: React.KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      const target = event.target instanceof Element ? event.target : null;
+      const expandedCombobox =
+        target?.getAttribute("role") === "combobox" &&
+        target.getAttribute("aria-expanded") === "true";
+      if (expandedCombobox) return;
+      event.preventDefault();
+      event.stopPropagation();
+      onClose();
+    },
+    [onClose],
+  );
+
+  const handleKeyDown = React.useCallback(
+    (event: React.KeyboardEvent) => {
+      focus.onKeyDown(event);
+    },
+    [focus],
+  );
+
+  return (
+    // eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions -- role=dialog owns its keyboard focus trap while the mobile drawer is modal.
+    <aside
+      ref={focus.rootRef}
+      role="dialog"
+      aria-modal={visible}
+      aria-label={t(I18nKey.SIDEBAR$NAVIGATION_LABEL)}
+      data-testid="sidebar-mobile-drawer"
+      tabIndex={-1}
+      onFocus={focus.onFocus}
+      onKeyDownCapture={handleKeyDownCapture}
+      onKeyDown={handleKeyDown}
+      aria-hidden={!visible}
+      className={cn(
+        "fixed inset-y-0 left-0 z-50 flex min-h-0 w-[min(300px,85vw)] flex-col bg-canvas-base sidebar-text-scale",
+        "border-r border-border md:hidden mobile-sidebar-drawer-safe-area",
+        "transition-transform duration-(--mobile-drawer-transition-duration) ease-in-out motion-reduce:transition-none",
+        visible ? "translate-x-0" : "-translate-x-full",
+      )}
+      style={MOBILE_DRAWER_TRANSITION_STYLE}
+    >
+      <SidebarRailBody
+        collapsed={false}
+        showCollapseToggle={false}
+        showMobileCloseButton
+        onCloseMobile={onClose}
+        {...railBodyProps}
+      />
+    </aside>
+  );
+}
+
 export function Sidebar() {
   const { t } = useTranslation("openhands");
   const { currentPath } = useNavigation();
@@ -79,10 +153,18 @@ export function Sidebar() {
   const [collapsedRailHovered, setCollapsedRailHovered] = React.useState(false);
   const suppressCollapsedExpandRef = React.useRef(false);
   const [, refreshCollapsedExpandGate] = React.useReducer((n) => n + 1, 0);
-  const { isOpen: isMobileNavOpen, close: closeMobileNav } =
-    useSidebarMobileNav();
+  const {
+    isOpen: isMobileNavOpen,
+    close: closeMobileNav,
+    toggleButtonRef: mobileNavToggleRef,
+  } = useSidebarMobileNav();
   const [mobileDrawerMounted, setMobileDrawerMounted] = React.useState(false);
   const [mobileDrawerVisible, setMobileDrawerVisible] = React.useState(false);
+  const shouldReturnMobileNavFocusRef = React.useRef(false);
+  const closeMobileNavAndReturnFocus = React.useCallback(() => {
+    shouldReturnMobileNavFocusRef.current = true;
+    closeMobileNav();
+  }, [closeMobileNav]);
   const collapsedBackendPopoverRef = useClickOutsideElement<HTMLDivElement>(
     () => setCollapsedBackendPopoverOpen(false),
   );
@@ -122,8 +204,30 @@ export function Sidebar() {
     return () => window.clearTimeout(timer);
   }, [isMobileNavOpen]);
 
+  React.useEffect(() => {
+    if (
+      isMobileNavOpen ||
+      mobileDrawerMounted ||
+      !shouldReturnMobileNavFocusRef.current
+    ) {
+      return undefined;
+    }
+
+    const frame = requestAnimationFrame(() => {
+      const opener =
+        mobileNavToggleRef.current ??
+        document.querySelector<HTMLElement>(
+          '[data-testid="sidebar-mobile-menu-toggle"]',
+        );
+      shouldReturnMobileNavFocusRef.current = false;
+      opener?.focus();
+    });
+
+    return () => cancelAnimationFrame(frame);
+  }, [isMobileNavOpen, mobileDrawerMounted, mobileNavToggleRef]);
+
   // A menu or the command menu opened over the drawer takes Escape first.
-  useCloseOnEscape(isMobileNavOpen, closeMobileNav);
+  useCloseOnEscape(isMobileNavOpen, closeMobileNavAndReturnFocus);
 
   React.useEffect(() => {
     if (currentPath === "/settings") {
@@ -274,29 +378,14 @@ export function Sidebar() {
                 : "pointer-events-none opacity-0",
             )}
             style={MOBILE_DRAWER_TRANSITION_STYLE}
-            onClick={closeMobileNav}
+            onClick={closeMobileNavAndReturnFocus}
             aria-hidden={!mobileDrawerVisible}
           />
-          <aside
-            aria-label={t(I18nKey.SIDEBAR$NAVIGATION_LABEL)}
-            data-testid="sidebar-mobile-drawer"
-            aria-hidden={!mobileDrawerVisible}
-            className={cn(
-              "fixed inset-y-0 left-0 z-50 flex min-h-0 w-[min(300px,85vw)] flex-col bg-canvas-base sidebar-text-scale",
-              "border-r border-border md:hidden mobile-sidebar-drawer-safe-area",
-              "transition-transform duration-(--mobile-drawer-transition-duration) ease-in-out motion-reduce:transition-none",
-              mobileDrawerVisible ? "translate-x-0" : "-translate-x-full",
-            )}
-            style={MOBILE_DRAWER_TRANSITION_STYLE}
-          >
-            <SidebarRailBody
-              collapsed={false}
-              showCollapseToggle={false}
-              showMobileCloseButton
-              onCloseMobile={closeMobileNav}
-              {...railBodyProps}
-            />
-          </aside>
+          <MobileSidebarDrawer
+            visible={mobileDrawerVisible}
+            onClose={closeMobileNavAndReturnFocus}
+            railBodyProps={railBodyProps}
+          />
         </>
       ) : null}
 

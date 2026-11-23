@@ -10,7 +10,10 @@ import { I18nKey } from "#/i18n/declaration";
 import i18n from "#/i18n";
 import { useConfig } from "#/hooks/query/use-config";
 import { Sidebar } from "#/components/features/sidebar/sidebar";
-import { SidebarMobileNavProvider } from "#/components/features/sidebar/sidebar-mobile-nav-context";
+import {
+  SidebarMobileNavProvider,
+  useSidebarMobileNav,
+} from "#/components/features/sidebar/sidebar-mobile-nav-context";
 import { SidebarMobileMenuBar } from "#/components/features/sidebar/sidebar-mobile-menu-bar";
 import { LicenseBanner } from "#/components/features/alerts/license-banner";
 import { useSettings } from "#/hooks/query/use-settings";
@@ -69,6 +72,24 @@ function TitleBarDragRegion() {
       aria-hidden="true"
       className="app-region-drag fixed inset-x-0 top-0 z-50 h-7"
     />
+  );
+}
+
+function MobileNavBackgroundContent({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  const { isOpen } = useSidebarMobileNav();
+
+  return (
+    <div
+      className="flex min-h-0 flex-col w-full min-w-0 h-full gap-3"
+      inert={isOpen ? true : undefined}
+      aria-hidden={isOpen ? true : undefined}
+    >
+      {children}
+    </div>
   );
 }
 
@@ -180,7 +201,7 @@ function MainAppContent() {
             <TitleBarDragRegion />
             <Sidebar />
 
-            <div className="flex min-h-0 flex-col w-full min-w-0 h-full gap-3">
+            <MobileNavBackgroundContent>
               {!hideMobileSidebarMenuBar ? <SidebarMobileMenuBar /> : null}
               <LicenseBanner />
               {config.data &&
@@ -206,7 +227,7 @@ function MainAppContent() {
               >
                 <Outlet />
               </div>
-            </div>
+            </MobileNavBackgroundContent>
           </div>
           <React.Suspense fallback={null}>
             <EnvironmentSwitchOverlay />
