@@ -249,7 +249,7 @@ How to write and prove new entries: [../mapping.md](../mapping.md).
 | F17 | [Customize hub and MCP servers](F17-mcp-servers.md) | catalog, install, test, edit, delete, custom servers, agent use | **Customize**, `/mcp` | `uvx`/`npx`; LLM | 34 |
 | F18 | [Skills catalog](F18-skills.md) | facets, search, enable/disable, add skill, Use skill, personal and project skills | `/skills` | `fixture skill`; LLM | 23 |
 | F19 | [Plugins and plugin launch](F19-plugins.md) | catalog, install, update, uninstall, enable, launch deep links, automation install links | `/plugins`, `/launch` | LLM | 31 |
-| F20 | [Canvas apps](F20-canvas-apps.md) | install from path or git, enable, update, uninstall, extension pages | `/apps` | none | 27 |
+| F20 | [Canvas apps](F20-canvas-apps.md) | install from path or git, enable, update, uninstall, extension pages, smoke of the extensions app catalog | `/apps` | none | 28 |
 | F21 | [Automations dashboard and actions](F21-automations-dashboard.md) | cards and list, filters, sort, Run now, enable, export, import, delete, pin | `/automations` | LLM; automation service | 45 |
 | F22 | [Creating automations](F22-automation-creation.md) | templates, setup dialog, custom automations, import | `/automations/templates`, `/automations/new/<id>` | LLM | 33 |
 | F23 | [Automation detail, runs and editing](F23-automation-detail.md) | detail page, runs, logs, edit dialog, triggers, debug | `/automations/<id>` | LLM; runs | 45 |
@@ -263,7 +263,7 @@ How to write and prove new entries: [../mapping.md](../mapping.md).
 | F31 | [Factories](F31-factories.md) | Factories list and factory pages, create and rename, the dashboard limited to one factory, moving an automation out of a factory, the experimental switch | sidebar **Factories**, `/factories`, `/factories/<id>`, an automation's actions menu | local backend with Agent Server 1.63.1 or newer and an automation service with factories; Cloud and Enterprise flag and member view: blocked | 11 |
 | F32 | [Projects (default view)](F32-projects.md) | flag gate, New project with a server-started coordinator, board grouped by what needs you, Resolve/Reopen, membership, files (preview, download, delete), attach to a message, badge and compact headers | rail Projects and its +, `/projects`, `/projects/<id>`, project badge | `projects` experimental flag; Agent Server with #6602 (73513fdee+); real LLM for coordinator branches | 12 |
 
-32 families, 904 sub-features. `control-openhands map ids` lists every ID with its file.
+32 families, 905 sub-features. `control-openhands map ids` lists every ID with its file.
 
 ### Neighbouring families
 
