@@ -1276,6 +1276,7 @@ export function AgentSettingsScreen({
             testId="agent-settings-router-select"
             name="agent-router"
             label=""
+            ariaLabel={t(I18nKey.SETTINGS$NAV_META_LLM)}
             items={[
               {
                 key: ROUTER_OFF_KEY,
@@ -1333,6 +1334,7 @@ export function AgentSettingsScreen({
             testId="agent-settings-tools-mode"
             name="agent-tools-mode"
             label=""
+            ariaLabel={t(I18nKey.SETTINGS$AGENT_PROFILE_TOOLS)}
             items={[
               {
                 key: "standard",
@@ -1412,6 +1414,7 @@ export function AgentSettingsScreen({
           testId="agent-settings-mcp-mode"
           name="agent-mcp-mode"
           label=""
+          ariaLabel={t(I18nKey.SETTINGS$AGENT_PROFILE_MCP)}
           items={[
             {
               key: "standard",
@@ -1538,6 +1541,7 @@ export function AgentSettingsScreen({
             testId="agent-settings-secrets-mode"
             name="agent-secrets-mode"
             label=""
+            ariaLabel={t(I18nKey.SETTINGS$AGENT_PROFILE_SECRETS)}
             items={[
               {
                 key: "standard",
