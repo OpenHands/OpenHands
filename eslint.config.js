@@ -106,7 +106,6 @@ const legacyColorClasses = [
   "bg-status-fail-bg",
   "text-status-fail-text",
   "text-content-muted",
-  "text-modal-muted",
 ];
 
 export default [
@@ -277,7 +276,22 @@ export default [
               message:
                 "Use typed @openhands/typescript-client clients instead of constructing HttpClient directly.",
             },
+            {
+              name: "uuid",
+              importNames: ["v4"],
+              message: "Use randomUUID from #/utils/random-uuid.",
+            },
           ],
+        },
+      ],
+      // crypto.randomUUID is SecureContext-only: it is undefined when Canvas
+      // is served over plain HTTP on a non-loopback host (#19514).
+      "no-restricted-properties": [
+        "error",
+        {
+          object: "crypto",
+          property: "randomUUID",
+          message: "Use randomUUID from #/utils/random-uuid.",
         },
       ],
       // All agent-server API access must go through the typed
@@ -502,6 +516,9 @@ export default [
       "src/components/features/backends/backend-version.tsx",
       "src/components/features/settings/settings-nav-header.tsx",
       "src/components/features/settings/backend-synced-settings-badge.tsx",
+      "src/components/features/settings/agent-canvas-update-card.tsx",
+      "src/components/features/settings/agent-canvas-version-modal.tsx",
+      "src/components/features/settings/agent-canvas-version-tile.tsx",
       "src/utils/custom-toast-handlers.tsx",
       "src/utils/form-control-classes.ts",
       "src/components/features/chat/chat-status-indicator.tsx",
@@ -535,6 +552,8 @@ export default [
       "src/components/features/mcp-page/mcp-logo-stack-badge.tsx",
       "src/components/features/settings/llm-settings/openai-subscription-auth-card.tsx",
       "src/components/features/skills/skill-icon-badge.tsx",
+      "src/components/features/skills/build-skill-pills.tsx",
+      "src/components/shared/buttons/circle-plus-check-toggle.tsx",
       "src/routes/device-verify.tsx",
       "src/utils/modal-classes.ts",
     ],

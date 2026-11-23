@@ -30,6 +30,9 @@ describe("Canvas arbitrary-value guard adoption", () => {
     "src/components/features/backends/backend-version.tsx",
     "src/components/features/settings/settings-nav-header.tsx",
     "src/components/features/settings/backend-synced-settings-badge.tsx",
+    "src/components/features/settings/agent-canvas-update-card.tsx",
+    "src/components/features/settings/agent-canvas-version-modal.tsx",
+    "src/components/features/settings/agent-canvas-version-tile.tsx",
     "src/utils/custom-toast-handlers.tsx",
     "src/utils/form-control-classes.ts",
     "src/components/features/chat/chat-status-indicator.tsx",
@@ -63,6 +66,8 @@ describe("Canvas arbitrary-value guard adoption", () => {
     "src/components/features/mcp-page/mcp-logo-stack-badge.tsx",
     "src/components/features/settings/llm-settings/openai-subscription-auth-card.tsx",
     "src/components/features/skills/skill-icon-badge.tsx",
+    "src/components/features/skills/build-skill-pills.tsx",
+    "src/components/shared/buttons/circle-plus-check-toggle.tsx",
     "src/routes/device-verify.tsx",
     "src/utils/modal-classes.ts",
   ])("rejects an arbitrary value in migrated owner %s", async (filePath) => {

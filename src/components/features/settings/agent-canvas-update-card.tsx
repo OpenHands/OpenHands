@@ -32,6 +32,8 @@ import {
   statusToneBadgeClassName,
   statusToneBannerClassName,
 } from "#/utils/status-tone-classes";
+import { copyToClipboard } from "#/utils/copy-to-clipboard";
+import { displayErrorToast } from "#/utils/custom-toast-handlers";
 
 const COPY_FEEDBACK_MS = 2000;
 
@@ -79,8 +81,11 @@ function UpdateCommandTabs() {
     }
   }, [selectedTab]);
 
-  const copyCommand = useCallback(() => {
-    void navigator.clipboard?.writeText(command);
+  const copyCommand = useCallback(async () => {
+    if (!(await copyToClipboard(command))) {
+      displayErrorToast(t(I18nKey.CHAT_INTERFACE$CHAT_MESSAGE_COPY_FAILED));
+      return;
+    }
     setCopied(true);
     if (copiedTimeoutRef.current !== null) {
       window.clearTimeout(copiedTimeoutRef.current);
@@ -89,7 +94,7 @@ function UpdateCommandTabs() {
       setCopied(false);
       copiedTimeoutRef.current = null;
     }, COPY_FEEDBACK_MS);
-  }, [command]);
+  }, [command, t]);
 
   return (
     <div className="w-full">
@@ -171,7 +176,7 @@ function AgentCanvasUpdateModal({
       <ModalBody
         width="md"
         className={cn(
-          "relative flex max-h-[80vh] flex-col items-start overflow-auto border border-border",
+          "relative flex dialog-content-height flex-col items-start overflow-auto border border-border",
           MODAL_MAX_WIDTH_VIEWPORT,
         )}
         testID="agent-canvas-update-modal"
@@ -217,7 +222,7 @@ function AgentCanvasUpdateModal({
             ) : updateAvailable ? (
               <div
                 className={cn(
-                  "flex items-start gap-2 rounded-lg px-3 py-2 text-xs dark:border-[#3B82F6]/30 dark:bg-[#1E3A5F] dark:text-[#3B82F6]",
+                  "flex items-start gap-2 rounded-lg px-3 py-2 text-xs dark:border-canvas-update/30 dark:bg-canvas-update-surface dark:text-canvas-update",
                   statusToneBannerClassName.info,
                 )}
               >
@@ -231,7 +236,7 @@ function AgentCanvasUpdateModal({
                     href={AGENT_CANVAS_RELEASE_NOTES_URL}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1.5 whitespace-nowrap font-medium text-contrast hover:text-[var(--oh-text)]"
+                    className="inline-flex items-center gap-1.5 whitespace-nowrap font-medium text-contrast hover:text-canvas-version-copy"
                   >
                     {t(I18nKey.SETTINGS$VERSION_RELEASE_NOTES)}
                     <ExternalLink className="size-3.5 shrink-0" aria-hidden />
@@ -253,7 +258,7 @@ function AgentCanvasUpdateModal({
                     href={AGENT_CANVAS_RELEASE_NOTES_URL}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1.5 whitespace-nowrap font-medium text-contrast hover:text-[var(--oh-text)]"
+                    className="inline-flex items-center gap-1.5 whitespace-nowrap font-medium text-contrast hover:text-canvas-version-copy"
                   >
                     {t(I18nKey.SETTINGS$VERSION_RELEASE_NOTES)}
                     <ExternalLink className="size-3.5 shrink-0" aria-hidden />
@@ -339,7 +344,7 @@ export function AgentCanvasUpdateCard({
                   "inline-flex shrink-0 items-center gap-1 text-3xs font-medium leading-none",
                   updateAvailable
                     ? cn(
-                        "rounded-full border border-info/30 px-1.5 py-0.5 dark:border-transparent dark:bg-[#1E3A5F] dark:text-[#3B82F6]",
+                        "rounded-full border border-info/30 px-1.5 py-0.5 dark:border-transparent dark:bg-canvas-update-surface dark:text-canvas-update",
                         statusToneBadgeClassName.info,
                       )
                     : "text-success",

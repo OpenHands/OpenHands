@@ -6,7 +6,12 @@ import type {
   AutomationScriptBundle,
   AutomationSpec,
   AutomationTagCount,
+  AutomationKvBatchResponse,
+  AutomationKvEntry,
+  AutomationKvKeysResponse,
   AutomationTrigger,
+  Factory,
+  FactoryListResponse,
   AutomationsResponse,
   AutomationRunsResponse,
   ChangeRunAsRequest,
@@ -60,9 +65,14 @@ import {
   AGENT_CANVAS_CLIENT_HEADERS,
   OPENHANDS_TELEMETRY_DISTINCT_ID_HEADER,
 } from "../client-source";
-import { AUTOMATION_DRAFTS_FEATURE } from "#/constants/automation-form";
+import {
+  AUTOMATION_DRAFTS_FEATURE,
+  FACTORIES_FEATURE,
+} from "#/constants/automation-form";
+import { randomUUID } from "#/utils/random-uuid";
 
 const AUTOMATION_BASE_PATH = "/api/automation";
+const AUTOMATION_KV_PATH = `${AUTOMATION_BASE_PATH}/v1/kv`;
 
 type AutomationDraftCreateTarget = SetupEntry | "prompt" | "plugin" | "custom";
 
@@ -140,6 +150,8 @@ export interface CreatePluginSpecAutomationRequest {
   trigger?: unknown;
   timeout?: number;
   enabled?: boolean;
+  /** Factory to create the automation in (OpenHands/automation#751). */
+  factory_id?: string;
   template?: {
     id: string;
     version?: number | string;
@@ -378,16 +390,13 @@ function buildImportedTrigger(spec: AutomationSpec): AutomationTrigger {
 }
 
 function generatePendingImportEvent(): string {
-  if (
-    typeof crypto !== "undefined" &&
-    typeof crypto.randomUUID === "function"
-  ) {
-    return `pending.${crypto.randomUUID()}`;
-  }
-  return `pending.${Date.now()}.${Math.random().toString(36).slice(2, 10)}`;
+  return `pending.${randomUUID()}`;
 }
 
-function buildCreateAutomationRequest(spec: AutomationSpec) {
+function buildCreateAutomationRequest(
+  spec: AutomationSpec,
+  factoryId?: string,
+) {
   if (!spec.prompt) {
     throw new Error("An automation prompt is required for import.");
   }
@@ -427,6 +436,7 @@ function buildCreateAutomationRequest(spec: AutomationSpec) {
         plugins: spec.plugins.map((source) => ({ source })),
       }),
       ...(spec.timeout != null && { timeout: spec.timeout }),
+      ...(factoryId && { factory_id: factoryId }),
     },
   };
 }
@@ -440,6 +450,7 @@ function buildCreateScriptAutomationBody(
   spec: AutomationSpec,
   script: AutomationScriptBundle,
   tarballPath: string,
+  factoryId?: string,
 ) {
   return {
     name: spec.name,
@@ -452,6 +463,7 @@ function buildCreateScriptAutomationBody(
     }),
     ...(spec.model && { model: spec.model }),
     ...(spec.timeout != null && { timeout: spec.timeout }),
+    ...(factoryId && { factory_id: factoryId }),
   };
 }
 
@@ -528,9 +540,11 @@ class AutomationService {
       runAs?: AutomationRunAsFilter;
       /** Only automations carrying this tag. */
       tag?: string;
+      /** Only automations in this factory. */
+      factoryId?: string;
     } = {},
   ): Promise<AutomationsResponse> {
-    const { limit = 50, offset = 0, runAs, tag } = params;
+    const { limit = 50, offset = 0, runAs, tag, factoryId } = params;
     const active = getActiveBackend().backend;
 
     let response: AutomationsResponse;
@@ -538,13 +552,15 @@ class AutomationService {
       response = await callCloudProxy<AutomationsResponse>({
         backend: active,
         method: "GET",
-        path: `${AUTOMATION_BASE_PATH}${getAutomationEndpoint("list")}?${buildListQuery(limit, offset, { run_as: runAs, tag })}`,
+        path: `${AUTOMATION_BASE_PATH}${getAutomationEndpoint("list")}?${buildListQuery(limit, offset, { run_as: runAs, tag, factory_id: factoryId })}`,
         headers: await buildAutomationRequestHeaders(),
       });
     } else {
       const { data } = await localAutomationAxios.get<AutomationsResponse>(
         `${AUTOMATION_BASE_PATH}${getAutomationEndpoint("list")}`,
-        { params: { limit, offset, run_as: runAs, tag } },
+        {
+          params: { limit, offset, run_as: runAs, tag, factory_id: factoryId },
+        },
       );
       response = data;
     }
@@ -564,8 +580,42 @@ class AutomationService {
     offset = 0,
     runAs?: AutomationRunAsFilter,
     tag?: string,
+    factoryId?: string,
   ): Promise<AutomationsResponse> {
-    return AutomationService.listAutomations({ limit, offset, runAs, tag });
+    return AutomationService.listAutomations({
+      limit,
+      offset,
+      runAs,
+      tag,
+      factoryId,
+    });
+  }
+
+  /**
+   * The org's factories, newest first. Factories live under the automation
+   * list path (`/v1/factories`), so they follow it rather than adding a
+   * manifest endpoint of their own.
+   */
+  static async listFactories(
+    params: { limit?: number; offset?: number } = {},
+  ): Promise<FactoryListResponse> {
+    const { limit = 100, offset = 0 } = params;
+    const active = getActiveBackend().backend;
+    const path = `${AUTOMATION_BASE_PATH}${getAutomationEndpoint("list")}/factories`;
+
+    if (active.kind === "cloud") {
+      return callCloudProxy<FactoryListResponse>({
+        backend: active,
+        method: "GET",
+        path: `${path}?${buildListQuery(limit, offset)}`,
+        headers: await buildAutomationRequestHeaders(),
+      });
+    }
+
+    const { data } = await localAutomationAxios.get<FactoryListResponse>(path, {
+      params: { limit, offset },
+    });
+    return data;
   }
 
   /** The org's tags, each with how many live automations carry it. */
@@ -609,16 +659,21 @@ class AutomationService {
     return withPresetSources(automation);
   }
 
-  static async createAutomation(spec: AutomationSpec): Promise<Automation> {
+  static async createAutomation(
+    spec: AutomationSpec,
+    /** Create the automation in this factory (OpenHands/automation#751). */
+    factoryId?: string,
+  ): Promise<Automation> {
     const active = getActiveBackend();
     if (spec.script) {
       return AutomationService.createScriptAutomation(
         active,
         spec,
         spec.script,
+        factoryId,
       );
     }
-    const { path, body } = buildCreateAutomationRequest(spec);
+    const { path, body } = buildCreateAutomationRequest(spec, factoryId);
 
     let created: Automation;
     if (active.backend.kind === "cloud") {
@@ -695,6 +750,7 @@ class AutomationService {
     active: ResolvedActiveBackend,
     spec: AutomationSpec,
     script: AutomationScriptBundle,
+    factoryId?: string,
   ): Promise<Automation> {
     // Resolve the endpoint before uploading, so a deployment without bundle
     // support fails without leaving an upload behind.
@@ -703,7 +759,12 @@ class AutomationService {
       spec.name.slice(0, 255),
       base64ToBytes(script.tarball_base64),
     );
-    const body = buildCreateScriptAutomationBody(spec, script, tarballPath);
+    const body = buildCreateScriptAutomationBody(
+      spec,
+      script,
+      tarballPath,
+      factoryId,
+    );
 
     if (active.backend.kind === "cloud") {
       return callCloudProxy<Automation>({
@@ -957,6 +1018,88 @@ class AutomationService {
     return new Uint8Array(data);
   }
 
+  private static async getKv<T>(
+    path: string,
+    params: Record<string, string | number | boolean>,
+  ): Promise<T> {
+    const active = getActiveBackend().backend;
+
+    if (active.kind === "cloud") {
+      const query = new URLSearchParams(
+        Object.entries(params).map(([name, value]) => [name, String(value)]),
+      );
+      return callCloudProxy<T>({
+        backend: active,
+        method: "GET",
+        path: `${path}?${query}`,
+        headers: await buildAutomationRequestHeaders(),
+      });
+    }
+
+    const { data } = await localAutomationAxios.get<T>(path, { params });
+    return data;
+  }
+
+  static async listKvKeys(
+    automationId: string,
+    { limit, offset = 0 }: { limit: number; offset?: number },
+  ): Promise<AutomationKvKeysResponse> {
+    return AutomationService.getKv<AutomationKvKeysResponse>(
+      AUTOMATION_KV_PATH,
+      { automation_id: automationId, limit, offset },
+    );
+  }
+
+  static async getKvEntry(
+    automationId: string,
+    key: string,
+  ): Promise<AutomationKvEntry> {
+    return AutomationService.getKv<AutomationKvEntry>(
+      `${AUTOMATION_KV_PATH}/${encodeURIComponent(key)}`,
+      { automation_id: automationId, meta: true },
+    );
+  }
+
+  /**
+   * Overwrite existing keys in one transaction: every key is written or none
+   * is. The write is rejected with 409 when the store's version is no longer
+   * `ifVersion`, so a value a run stored meanwhile is not overwritten blindly.
+   */
+  static async setKvEntries(
+    automationId: string,
+    entries: Array<{ key: string; value: unknown }>,
+    ifVersion: number,
+  ): Promise<AutomationKvBatchResponse> {
+    const active = getActiveBackend().backend;
+    const path = `${AUTOMATION_KV_PATH}/batch`;
+    const body = {
+      if_version: ifVersion,
+      operations: entries.map(({ key, value }) => ({
+        op: "set",
+        key,
+        value,
+        xx: true,
+      })),
+    };
+
+    if (active.kind === "cloud") {
+      return callCloudProxy<AutomationKvBatchResponse>({
+        backend: active,
+        method: "POST",
+        path: `${path}?${new URLSearchParams({ automation_id: automationId })}`,
+        body,
+        headers: await buildAutomationRequestHeaders(),
+      });
+    }
+
+    const { data } = await localAutomationAxios.post<AutomationKvBatchResponse>(
+      path,
+      body,
+      { params: { automation_id: automationId } },
+    );
+    return data;
+  }
+
   static async downloadTarball(id: string, name: string): Promise<void> {
     const bytes = await AutomationService.fetchTarballBytes(id);
     downloadBlob(
@@ -1041,6 +1184,89 @@ class AutomationService {
     capabilities: DeploymentCapabilities | null | undefined,
   ): boolean {
     return Boolean(capabilities?.features?.includes(AUTOMATION_DRAFTS_FEATURE));
+  }
+
+  static async getFactory(id: string): Promise<Factory> {
+    const active = getActiveBackend().backend;
+    const path = `${AUTOMATION_BASE_PATH}${getAutomationEndpoint("list")}/factories/${encodeURIComponent(id)}`;
+
+    if (active.kind === "cloud") {
+      return callCloudProxy<Factory>({
+        backend: active,
+        method: "GET",
+        path,
+        headers: await buildAutomationRequestHeaders(),
+      });
+    }
+
+    const { data } = await localAutomationAxios.get<Factory>(path);
+    return data;
+  }
+
+  /** Create a factory. Needs `manage_automations`. */
+  static async createFactory(name: string): Promise<Factory> {
+    const active = getActiveBackend().backend;
+    const path = `${AUTOMATION_BASE_PATH}${getAutomationEndpoint("list")}/factories`;
+
+    if (active.kind === "cloud") {
+      return callCloudProxy<Factory>({
+        backend: active,
+        method: "POST",
+        path,
+        body: { name },
+        headers: await buildAutomationRequestHeaders(),
+      });
+    }
+
+    const { data } = await localAutomationAxios.post<Factory>(path, { name });
+    return data;
+  }
+
+  /** Rename a factory. Needs `manage_automations`. */
+  static async renameFactory(id: string, name: string): Promise<Factory> {
+    const active = getActiveBackend().backend;
+    const path = `${AUTOMATION_BASE_PATH}${getAutomationEndpoint("list")}/factories/${encodeURIComponent(id)}`;
+
+    if (active.kind === "cloud") {
+      return callCloudProxy<Factory>({
+        backend: active,
+        method: "PATCH",
+        path,
+        body: { name },
+        headers: await buildAutomationRequestHeaders(),
+      });
+    }
+
+    const { data } = await localAutomationAxios.patch<Factory>(path, { name });
+    return data;
+  }
+
+  /**
+   * Delete a factory. Needs `manage_automations`. The service answers 409
+   * while a live automation still belongs to the factory.
+   */
+  static async deleteFactory(id: string): Promise<void> {
+    const active = getActiveBackend().backend;
+    const path = `${AUTOMATION_BASE_PATH}${getAutomationEndpoint("list")}/factories/${encodeURIComponent(id)}`;
+
+    if (active.kind === "cloud") {
+      await callCloudProxy<unknown>({
+        backend: active,
+        method: "DELETE",
+        path,
+        headers: await buildAutomationRequestHeaders(),
+      });
+      return;
+    }
+
+    await localAutomationAxios.delete(path);
+  }
+
+  /** Whether the active deployment advertises factories. */
+  static supportsFactories(
+    capabilities: DeploymentCapabilities | null | undefined,
+  ): boolean {
+    return Boolean(capabilities?.features?.includes(FACTORIES_FEATURE));
   }
 
   /**

@@ -114,6 +114,31 @@ describe("setupDraftFromAutomation", () => {
     expect(draft.form?.repository).toBe("acme/legacy");
   });
 
+  it("keeps the visibility of an automation that runs as a person", () => {
+    // Arrange
+    const personal = automation({ run_as_kind: "user", visibility: "private" });
+
+    // Act
+    const draft = setupDraftFromAutomation(personal);
+
+    // Assert
+    expect(draft.existingVisibility).toBe("private");
+  });
+
+  it("offers no visibility for an automation that runs as a service account", () => {
+    // Arrange
+    const serviceRun = automation({
+      run_as_kind: "service",
+      visibility: "organization",
+    });
+
+    // Act
+    const draft = setupDraftFromAutomation(serviceRun);
+
+    // Assert
+    expect(draft.existingVisibility).toBeUndefined();
+  });
+
   it.each([
     { name: "a plugin spec", preset_metadata: { preset_type: "plugin_spec" } },
     { name: "a custom bundle", preset_metadata: null },

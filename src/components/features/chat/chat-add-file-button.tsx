@@ -1,5 +1,5 @@
 import React from "react";
-import { Paperclip, Plus } from "lucide-react";
+import { FolderOpen, Paperclip, Plus } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { I18nKey } from "#/i18n/declaration";
 import { cn } from "#/utils/utils";
@@ -13,6 +13,8 @@ import { SystemMessageModal } from "#/components/features/conversation-panel/sys
 import { SkillsModal } from "#/components/features/conversation-panel/skills-modal";
 import { PluginsModal } from "#/components/features/conversation-panel/plugins-modal";
 import { HooksModal } from "#/components/features/conversation-panel/hooks-modal";
+import { ProjectFilePicker } from "#/components/features/projects/project-file-picker";
+import { useProjectsEnabled } from "#/hooks/query/use-projects";
 
 export interface ChatAddFileButtonProps {
   handleFileIconClick: () => void;
@@ -35,6 +37,10 @@ export function ChatAddFileButton({
   const { conversationId } = useOptionalConversationId();
   const { data: conversation } = useActiveConversation();
   const [menuOpen, setMenuOpen] = React.useState(false);
+  const [pickingProjectFile, setPickingProjectFile] = React.useState(false);
+  const projectsEnabled = useProjectsEnabled();
+  // Only a conversation in a project offers that project's files.
+  const projectId = projectsEnabled ? conversation?.tags?.project : undefined;
   const triggerRef = React.useRef<HTMLButtonElement>(null);
   useCloseOnEscape(menuOpen, () => setMenuOpen(false), triggerRef);
 
@@ -103,18 +109,36 @@ export function ChatAddFileButton({
           shouldShowAgentTools={shouldShowAgentTools}
           shouldShowHooks={shouldShowHooks}
           shouldShowPlugins={shouldShowPlugins}
-          footerAction={{
-            testId: "add-files-and-images-button",
-            icon: (
-              <Paperclip
-                className="h-4 w-4 shrink-0"
-                strokeWidth={2}
-                aria-hidden
-              />
-            ),
-            label: t(I18nKey.CHAT_INTERFACE$ADD_FILES_AND_IMAGES),
-            onClick: handleFileIconClick,
-          }}
+          footerActions={[
+            {
+              testId: "add-files-and-images-button",
+              icon: (
+                <Paperclip
+                  className="h-4 w-4 shrink-0"
+                  strokeWidth={2}
+                  aria-hidden
+                />
+              ),
+              label: t(I18nKey.CHAT_INTERFACE$ADD_FILES_AND_IMAGES),
+              onClick: handleFileIconClick,
+            },
+            ...(projectId
+              ? [
+                  {
+                    testId: "add-project-file-button",
+                    icon: (
+                      <FolderOpen
+                        className="h-4 w-4 shrink-0"
+                        strokeWidth={2}
+                        aria-hidden
+                      />
+                    ),
+                    label: t(I18nKey.PROJECTS$ATTACH_FILE),
+                    onClick: () => setPickingProjectFile(true),
+                  },
+                ]
+              : []),
+          ]}
         />
       )}
 
@@ -129,6 +153,12 @@ export function ChatAddFileButton({
       {pluginsModalVisible && (
         <PluginsModal onClose={() => setPluginsModalVisible(false)} />
       )}
+      {pickingProjectFile && projectId ? (
+        <ProjectFilePicker
+          projectId={projectId}
+          onClose={() => setPickingProjectFile(false)}
+        />
+      ) : null}
       {hooksModalVisible && (
         <HooksModal onClose={() => setHooksModalVisible(false)} />
       )}

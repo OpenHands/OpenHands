@@ -5,6 +5,15 @@ import { callCloudProxy } from "./proxy";
 export type LicenseState =
   "disabled" | "missing_key" | "pending" | "valid" | "invalid" | "unverified";
 
+/**
+ * What the license grants beyond the base install. A key is absent when the
+ * instance predates the feature, which reads the same as "not granted".
+ */
+export interface LicenseFeatures {
+  sso?: boolean;
+  worklogs?: boolean;
+}
+
 export interface LicenseStatus {
   state: LicenseState;
   /** Why the license is not valid, when `state` is `invalid`. */
@@ -18,6 +27,7 @@ export interface LicenseStatus {
   expires_at: string | null;
   last_checked_at: string | null;
   customer_center_url: string;
+  features?: LicenseFeatures;
 }
 
 function getActiveCloudBackend(): Backend {

@@ -3,6 +3,7 @@ import type {
   AutomationUpdate,
   Automation,
   AutomationRun,
+  AutomationVisibility,
 } from "#/types/automation";
 import {
   statusToneBadgeClassName,
@@ -48,6 +49,7 @@ import {
   initializeAutomationFormSession,
   isPendingAutomationSetupId,
   patchAutomationFormSession,
+  setAutomationFormSessionSavedDraftRequestKey,
   setAutomationFormSessionRepositories,
   subscribeAutomationFormSession,
 } from "#/api/automation-form-session";
@@ -104,8 +106,13 @@ import {
   useServiceAccountRunAsEnabled,
   useServiceAccounts,
 } from "#/hooks/query/use-service-accounts";
+import { useAutomationPermissions } from "#/hooks/use-automation-permissions";
+import { useActiveBackend } from "#/contexts/active-backend-context";
 import { AUTOMATION_DETAIL_QUERY_KEY } from "#/hooks/query/use-automation-detail";
-import { AUTOMATIONS_QUERY_KEY } from "#/hooks/query/use-automations";
+import {
+  AUTOMATIONS_QUERY_KEY,
+  invalidateAutomationLists,
+} from "#/hooks/query/use-automations";
 import {
   invalidateConversationQueries,
   patchConversationInCache,
@@ -113,6 +120,8 @@ import {
 import { displayErrorToast } from "#/utils/custom-toast-handlers";
 import { getApiErrorMessage } from "#/utils/api-error-message";
 import { useNavigation } from "#/context/navigation-context";
+import { factoryPath, withFactoryContext } from "#/constants/factories";
+import { useFactoryContext } from "#/hooks/use-factory-context";
 import type {
   AutomationDraftApiResponse,
   DeploymentCapabilities,
@@ -158,6 +167,8 @@ const REPO_UPDATE_FEATURE = "repoUpdate";
 const PLUGIN_CONFIG_UPDATE_FEATURE = "pluginConfigUpdate";
 const AGENT_PROFILES_FEATURE = "agentProfiles";
 const PRESET_AGENT_PROFILES_FEATURE = "presetAgentProfiles";
+// Capability feature: an automation that runs as a person can be private.
+const AUTOMATION_VISIBILITY_FEATURE = "automationVisibility";
 /**
  * Used when the deployment has not advertised its event sources yet. These are
  * the automation service's built-in providers, which it reserves as source
@@ -492,6 +503,7 @@ function buildInitialForm(
     kind,
     name: form.name ?? deriveName(prompt),
     runAsUserId: form.runAsUserId ?? "",
+    visibility: form.visibility ?? draft.existingVisibility ?? "organization",
     prompt,
     repository: form.repository ?? "",
     pluginSource: pluginEntries[0]?.source ?? "",
@@ -788,6 +800,7 @@ export function AutomationSetupPanel({
 }: AutomationSetupPanelProps) {
   const { t } = useTranslation("openhands");
   const { navigate } = useNavigation();
+  const factoryContext = useFactoryContext();
   const deploymentCapabilities = useDeploymentCapabilities();
   // Connected self-hosted providers name their hosts here; a repository on
   // one of them is sent with its provider so the run can authenticate, as
@@ -803,6 +816,19 @@ export function AutomationSetupPanel({
   const [form, setForm] = useState(() => buildInitialForm(initialDraft));
   const serviceAccountRunAsEnabled = useServiceAccountRunAsEnabled();
   const serviceAccounts = useServiceAccounts().data;
+  const { backend, orgId } = useActiveBackend();
+  const { userId } = useAutomationPermissions();
+  // There is someone to hide an automation from only in a cloud team
+  // workspace (a personal one's org id is the user id), and only a service
+  // that advertises the feature stores a visibility.
+  const visibilitySupported =
+    backend.kind === "cloud" &&
+    !!orgId &&
+    !!userId &&
+    orgId !== userId &&
+    (deploymentCapabilities.data?.features ?? []).includes(
+      AUTOMATION_VISIBILITY_FEATURE,
+    );
   const [eventTestPayload, setEventTestPayload] = useState(() =>
     buildDefaultEventTestPayload(DEFAULT_EVENT_SOURCE, DEFAULT_EVENT_KEY),
   );
@@ -821,6 +847,14 @@ export function AutomationSetupPanel({
   const [fieldMetadata, setFieldMetadata] = useState(
     () => initialDraft.fieldMetadata ?? {},
   );
+  // A conversation reopened in this page keeps its form session, which can
+  // hold edits made after its draft was last saved.
+  const restoredSessionRef = useRef(
+    conversationId && !isPendingAutomationSetupId(conversationId)
+      ? getAutomationFormSession(conversationId)
+      : null,
+  );
+  const keptRestoredFormRef = useRef(false);
   const [statusMessage, setStatusMessage] = useState<StatusMessage>(null);
   const toastedStatusRef = useRef<StatusMessage>(null);
   useEffect(() => {
@@ -1063,6 +1097,15 @@ export function AutomationSetupPanel({
     AutomationService.getServerDraft(taggedServerDraftId)
       .then((saved) => {
         if (cancelled) return;
+        const restoredSession = restoredSessionRef.current;
+        restoredSessionRef.current = null;
+        if (restoredSession?.serverDraftId === saved.id) {
+          keptRestoredFormRef.current = true;
+          setServerDraft(saved);
+          setDraftRuns([]);
+          setSavedDraftRequestKey(restoredSession.savedDraftRequestKey ?? null);
+          return;
+        }
         const nextForm = formFromServerDraft(saved, buildInitialForm(draft));
         setServerDraft(saved);
         setDraftRuns([]);
@@ -1097,6 +1140,7 @@ export function AutomationSetupPanel({
     kind,
     name,
     runAsUserId,
+    visibility = "organization",
     prompt,
     repository,
     pluginSource,
@@ -1253,12 +1297,31 @@ export function AutomationSetupPanel({
 
   useEffect(() => {
     if (!conversationId) return undefined;
-    initializeAutomationFormSession(conversationId, {
-      ...draft,
-      form,
-      fieldMetadata,
-    });
-    return () => clearAutomationFormSession(conversationId);
+    const restoredSession = restoredSessionRef.current;
+    const currentSession = getAutomationFormSession(conversationId);
+    if (
+      restoredSession &&
+      currentSession &&
+      currentSession !== restoredSession
+    ) {
+      // An agent update landed after the first render, before the panel
+      // subscribed; take it rather than overwrite it.
+      setForm(buildInitialForm(currentSession));
+      setFieldMetadata(currentSession.fieldMetadata ?? {});
+    } else {
+      initializeAutomationFormSession(conversationId, {
+        ...draft,
+        form,
+        fieldMetadata,
+      });
+    }
+    // Keep a conversation's form for when the user comes back to it; only the
+    // page for a new automation starts clean each time.
+    return () => {
+      if (isPendingAutomationSetupId(conversationId)) {
+        clearAutomationFormSession(conversationId);
+      }
+    };
   }, [conversationId]);
 
   useEffect(() => {
@@ -1426,13 +1489,27 @@ export function AutomationSetupPanel({
   // Only a new automation picks who it runs as; an existing one uses Change Runs As.
   const showRunAsPicker = serviceAccountRunAsEnabled && !isEditingExisting;
   const newAutomationRunAsId = showRunAsPicker ? runAsUserId : "";
-  const buildPresetBody = (): SetupRequestBody => {
+  // Only an automation that runs as a person can be private: a new one that
+  // runs as the caller, or an existing one that reported its visibility.
+  const showVisibility =
+    visibilitySupported &&
+    (isEditingExisting
+      ? initialDraft.existingVisibility !== undefined
+      : !newAutomationRunAsId);
+  const newAutomationIsPrivate = showVisibility && visibility === "private";
+  // Only the final create runs enabled: drafts and preflight validation must
+  // stay inert, so the flag travels with the caller's intent.
+  // Only a new automation is placed in a factory; an edit leaves it where it is.
+  const newAutomationFactoryId = isEditingExisting
+    ? ""
+    : (draft.factoryId?.trim() ?? "");
+  const buildPresetBody = (enabled: boolean): SetupRequestBody => {
     const trimmedPrompt = prompt.trim();
     const body: SetupRequestBody = {
       name: normalizedName(),
       ...(trimmedPrompt ? { prompt: trimmedPrompt } : {}),
       trigger: buildTrigger(),
-      enabled: false,
+      enabled,
     } as SetupRequestBody;
     const repositories = parseAutomationSetupRepositories(repository);
     if (repositories.length > 0) {
@@ -1452,12 +1529,18 @@ export function AutomationSetupPanel({
     if (selectedAgentProfileId) body.agent_profile_id = selectedAgentProfileId;
     else if (model.trim()) body.model = model.trim();
     if (newAutomationRunAsId) body.run_as_user_id = newAutomationRunAsId;
+    if (newAutomationFactoryId) body.factory_id = newAutomationFactoryId;
+    if (newAutomationIsPrivate) body.visibility = "private";
     return body;
   };
-  const buildCustomBody = (tarballPath: string): SetupRequestBody =>
+  const buildCustomBody = (
+    tarballPath: string,
+    enabled: boolean,
+  ): SetupRequestBody =>
     ({
       name: normalizedName(),
       trigger: buildTrigger(),
+      enabled,
       tarball_path: tarballPath,
       entrypoint: entrypoint.trim(),
       setup_script_path: setupScriptPath.trim(),
@@ -1471,6 +1554,8 @@ export function AutomationSetupPanel({
         ? { timeout: Number(timeoutSeconds) }
         : {}),
       ...(newAutomationRunAsId ? { run_as_user_id: newAutomationRunAsId } : {}),
+      ...(newAutomationFactoryId ? { factory_id: newAutomationFactoryId } : {}),
+      ...(newAutomationIsPrivate ? { visibility: "private" } : {}),
     }) as SetupRequestBody;
   /**
    * The request body sent to a server-backed draft. Custom drafts reference a
@@ -1481,7 +1566,9 @@ export function AutomationSetupPanel({
   const draftRequestBody = (
     tarballPath: string = PREFLIGHT_TARBALL_PATH,
   ): SetupRequestBody =>
-    kind === "custom" ? buildCustomBody(tarballPath) : buildPresetBody();
+    kind === "custom"
+      ? buildCustomBody(tarballPath, false)
+      : buildPresetBody(false);
   const draftValidationByField = useMemo(() => {
     const byField = new Map<string, string>();
     for (const error of serverDraft?.validationErrors ?? []) {
@@ -1550,6 +1637,7 @@ export function AutomationSetupPanel({
       showTimeout,
       timeoutSeconds,
       newAutomationRunAsId,
+      newAutomationIsPrivate,
     ],
   );
   const isDraftDirty = savedDraftRequestKey
@@ -1568,8 +1656,24 @@ export function AutomationSetupPanel({
     }
     if (!wasHydratingServerDraftRef.current || !serverDraft) return;
     wasHydratingServerDraftRef.current = false;
+    // A restored form is compared with the server draft instead.
+    if (keptRestoredFormRef.current) {
+      keptRestoredFormRef.current = false;
+      return;
+    }
     setSavedDraftRequestKey(currentDraftRequestKey);
-  }, [currentDraftRequestKey, isHydratingServerDraft, serverDraft]);
+    if (conversationId) {
+      setAutomationFormSessionSavedDraftRequestKey(
+        conversationId,
+        currentDraftRequestKey,
+      );
+    }
+  }, [
+    conversationId,
+    currentDraftRequestKey,
+    isHydratingServerDraft,
+    serverDraft,
+  ]);
 
   const ensureCustomWebhookSource = async (): Promise<boolean> => {
     if (triggerKind !== "event" || !customWebhook.enabled) return true;
@@ -1644,14 +1748,27 @@ export function AutomationSetupPanel({
       : await AutomationService.createServerDraft(request);
     setServerDraft(saved);
     saveDraftInFormSession(saved, form);
-    setSavedDraftRequestKey(
-      draftRequestKey(request.endpoint, request.name ?? "", request.draft),
+    const savedRequestKey = draftRequestKey(
+      request.endpoint,
+      request.name ?? "",
+      request.draft,
     );
+    setSavedDraftRequestKey(savedRequestKey);
+    if (conversationId) {
+      setAutomationFormSessionSavedDraftRequestKey(
+        conversationId,
+        savedRequestKey,
+      );
+    }
     setIsTaggedDraftMissing(false);
     if (isPendingAutomationSetupId(conversationId) && !serverDraftId) {
-      navigate(`/automations/setup?draftId=${encodeURIComponent(saved.id)}`, {
-        replace: true,
-      });
+      navigate(
+        withFactoryContext(
+          `/automations/setup?draftId=${encodeURIComponent(saved.id)}`,
+          factoryContext,
+        ),
+        { replace: true },
+      );
     }
     await updateConversationDraftTags(saved.id);
     return saved;
@@ -1661,8 +1778,8 @@ export function AutomationSetupPanel({
       endpoint: draftValidationEndpoint(kind, pluginEndpointSource),
       draft:
         kind === "custom"
-          ? buildCustomBody(PREFLIGHT_TARBALL_PATH)
-          : buildPresetBody(),
+          ? buildCustomBody(PREFLIGHT_TARBALL_PATH, false)
+          : buildPresetBody(false),
     });
     setStatusMessage({
       kind: result.valid ? "success" : "error",
@@ -1858,17 +1975,18 @@ export function AutomationSetupPanel({
       if (kind === "custom") {
         const tarballPath = await uploadCustomArchive();
         created = await AutomationService.createAutomationDraft(
-          buildCustomBody(tarballPath),
+          buildCustomBody(tarballPath, true),
           kind,
         );
       } else {
         created = await AutomationService.createAutomationDraft(
-          buildPresetBody(),
+          buildPresetBody(true),
           presetKindForEndpoint(kind, pluginEndpointSource),
         );
       }
       setSaveState("saved");
       toast.success(t(I18nKey.AUTOMATION_SETUP$CREATED));
+      invalidateAutomationLists(queryClient);
       // The draft has been finalized into a real automation; drop the
       // persisted draft row so it does not linger as an incomplete setup.
       if (serverDraftId) {
@@ -1884,7 +2002,9 @@ export function AutomationSetupPanel({
         }
       }
       if (typeof created.id === "string")
-        navigate(automationDetailPath(created.id));
+        navigate(
+          withFactoryContext(automationDetailPath(created.id), factoryContext),
+        );
     } catch (error) {
       displayErrorToast(
         getApiErrorMessage(error, t(I18nKey.SETUP$SUBMIT_FAILED)),
@@ -1943,6 +2063,7 @@ export function AutomationSetupPanel({
       model: model.trim() || null,
       timeout:
         showTimeout && timeoutSeconds.trim() ? Number(timeoutSeconds) : null,
+      ...(showVisibility ? { visibility } : {}),
     };
     if (existingPluginSpec) {
       delete body.model;
@@ -2035,8 +2156,13 @@ export function AutomationSetupPanel({
   const closeEditor = () => {
     navigate(
       isEditingExisting
-        ? automationDetailPath(editingAutomationId)
-        : automationListPath(),
+        ? withFactoryContext(
+            automationDetailPath(editingAutomationId),
+            factoryContext,
+          )
+        : factoryContext
+          ? factoryPath(factoryContext)
+          : automationListPath(),
     );
   };
 
@@ -2805,6 +2931,39 @@ export function AutomationSetupPanel({
                                 {account.name}
                               </option>
                             ))}
+                        </select>
+                        <ChevronDown
+                          className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-muted"
+                          aria-hidden
+                        />
+                      </div>
+                    </Field>
+                  ) : null}
+                  {showVisibility ? (
+                    <Field label={t(I18nKey.AUTOMATION_SETUP$VISIBILITY)}>
+                      <div className="relative">
+                        <select
+                          data-testid="automation-setup-visibility"
+                          value={visibility}
+                          onChange={(event) =>
+                            updateField(
+                              "visibility",
+                              event.target.value as AutomationVisibility,
+                            )
+                          }
+                          className={cn(
+                            formControlFieldClassName,
+                            "appearance-none pr-8",
+                          )}
+                        >
+                          <option value="organization">
+                            {t(
+                              I18nKey.AUTOMATION_SETUP$VISIBILITY_ORGANIZATION,
+                            )}
+                          </option>
+                          <option value="private">
+                            {t(I18nKey.AUTOMATION_SETUP$VISIBILITY_PRIVATE)}
+                          </option>
                         </select>
                         <ChevronDown
                           className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-muted"
