@@ -12,6 +12,7 @@ import {
   existsSync,
   mkdirSync,
   mkdtempSync,
+  readFileSync,
   readdirSync,
   rmSync,
   writeFileSync,
@@ -538,7 +539,7 @@ describe("buildConfig", () => {
     expect(existsSync(path.join(config.stateDir, "tmux"))).toBe(false);
   });
 
-  it("lets --automation-git-ref win over an exported OH_AUTOMATION_LOCAL_PATH", async () => {
+  it("lets --automation-ref win over an exported OH_AUTOMATION_LOCAL_PATH", async () => {
     // Otherwise someone with the checkout exported in their shell profile
     // reproduces a bug against their own working tree while believing they
     // are testing the ref they just passed.
@@ -546,8 +547,17 @@ describe("buildConfig", () => {
       OH_AUTOMATION_LOCAL_PATH: "/checkouts/automation",
     });
 
-    await buildConfig({ automationGitRef: "abc123" }, env);
+    const logs: string[] = [];
+    const logSpy = vi
+      .spyOn(console, "log")
+      .mockImplementation((line) => logs.push(String(line)));
+    try {
+      await buildConfig({ automationGitRef: "abc123" }, env);
+    } finally {
+      logSpy.mockRestore();
+    }
 
+    expect(logs.join("\n")).toContain("--automation-ref abc123 overrides");
     expect(env.OH_AUTOMATION_GIT_REF).toBe("abc123");
     expect(env.OH_AUTOMATION_LOCAL_PATH).toBeUndefined();
     expect(buildAutomationCommand(env).source).toBe("git (abc123)");
@@ -1625,6 +1635,30 @@ describe("dev-with-automation CLI", () => {
     expect(output).toContain("OH_AGENT_SERVER_LOCAL_PATH");
     expect(output).toContain("OPENHANDS_AUTOMATION_API_KEY");
     expect(output).toContain("SECRETS:");
+  });
+
+  it("mentions only flags that parseArgs accepts", () => {
+    // parseArgs ignores unknown flags silently, so a help entry naming a flag
+    // the parser never matches sends people to the wrong behavior with no
+    // warning.
+    const { stdout } = spawnSync(
+      process.execPath,
+      ["scripts/dev-with-automation.mjs", "--help"],
+      { cwd: repoRoot, encoding: "utf8" },
+    );
+    const source = readFileSync(
+      path.join(repoRoot, "scripts", "dev-with-automation.mjs"),
+      "utf8",
+    );
+    const accepted = new Set(
+      [...source.matchAll(/case "(--[a-z-]+)":/g)].map((match) => match[1]),
+    );
+    const documented = [...stdout.matchAll(/--[a-z-]+/g)].map(
+      (match) => match[0],
+    );
+
+    expect(documented.length).toBeGreaterThan(0);
+    expect(documented.filter((flag) => !accepted.has(flag))).toEqual([]);
   });
 
   it("fails fast with a clear error when OH_AGENT_SERVER_LOCAL_PATH is invalid", async () => {
