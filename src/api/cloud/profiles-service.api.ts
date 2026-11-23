@@ -12,16 +12,11 @@ import { callCloudProxy } from "./proxy";
 /**
  * Cloud LLM-profile service.
  *
- * Profile CRUD is routed to the org-scoped endpoints
- * `/api/organizations/{orgId}/profiles`, which enforce `EDIT_ORG_SETTINGS`
- * server-side — so a member's mutation is rejected with 403 even on a direct
- * API call, not just hidden in the UI. When the active cloud backend has no org
- * bound (legacy API keys), we fall back to the ungated per-user settings route
- * `/api/v1/settings/profiles`, where there is no org role to enforce against.
- *
- * The two routes share shapes except `get` (org returns `llm`, settings returns
- * `config`) and `activate` (org returns `llm`, settings returns `model`); both
- * are normalized to the SDK profile types below. Neither route exposes secrets.
+ * The combined options endpoint lists personal and inherited organization
+ * profiles. CRUD targets only the personal `/api/v1/settings/profiles` routes;
+ * organization profiles remain selectable but are not editable here. Older
+ * cloud backends fall back to the personal list endpoint. Neither route exposes
+ * secrets.
  */
 
 const SETTINGS_PROFILES_PATH = "/api/v1/settings/profiles";
@@ -41,10 +36,13 @@ function personalProfilesTarget(): { backend: Backend; base: string } {
 interface CloudAgentProfileOptions {
   llm_profiles?: Array<{
     name: string;
+    scope?: "personal" | "organization";
     model?: string | null;
     base_url?: string | null;
     api_key_set?: boolean;
     provider_connection_id?: string | null;
+    writable?: boolean;
+    deletable?: boolean;
   }>;
 }
 
@@ -64,6 +62,11 @@ export async function fetchCloudProfiles(): Promise<ProfileListResponse> {
           base_url: profile.base_url ?? null,
           api_key_set: profile.api_key_set ?? false,
           provider_connection_id: profile.provider_connection_id ?? null,
+          ...(profile.scope && { scope: profile.scope }),
+          ...(profile.writable !== undefined && { writable: profile.writable }),
+          ...(profile.deletable !== undefined && {
+            deletable: profile.deletable,
+          }),
         })),
         active_profile: null,
       };

@@ -1,5 +1,4 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { HttpError } from "@openhands/typescript-client";
 import {
   __resetActiveStoreForTests,
   setRegisteredBackends,
@@ -107,9 +106,10 @@ describe("cloud organization-service", () => {
       mockJsonResponse({ detail: "unauthorized" }, 401),
     );
 
-    await expect(getCurrentCloudApiKey(cloudBackend)).rejects.toBeInstanceOf(
-      HttpError,
-    );
+    await expect(getCurrentCloudApiKey(cloudBackend)).rejects.toMatchObject({
+      name: "HttpError",
+      status: 401,
+    });
   });
 
   it("getCloudOrganizationMember hits /api/organizations/{orgId}/members/{userId} and returns the member", async () => {

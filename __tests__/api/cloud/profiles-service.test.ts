@@ -82,6 +82,41 @@ describe("ProfilesService against a cloud org", () => {
     });
   });
 
+  it("keeps Enterprise ownership metadata on selectable LLM profiles", async () => {
+    fetchMock.mockResolvedValueOnce(
+      mockJsonResponse({
+        llm_profiles: [
+          {
+            name: "mine",
+            scope: "personal",
+            model: "gpt-5",
+            writable: true,
+            deletable: true,
+          },
+          {
+            name: "shared",
+            scope: "organization",
+            model: "gpt-5-mini",
+            writable: true,
+            deletable: true,
+          },
+        ],
+      }),
+    );
+
+    const { profiles } = await ProfilesService.listProfiles();
+
+    expect(profiles).toMatchObject([
+      { name: "mine", scope: "personal", writable: true, deletable: true },
+      {
+        name: "shared",
+        scope: "organization",
+        writable: true,
+        deletable: true,
+      },
+    ]);
+  });
+
   it("fetches a personal profile through settings routes", async () => {
     fetchMock.mockResolvedValueOnce(
       mockJsonResponse({

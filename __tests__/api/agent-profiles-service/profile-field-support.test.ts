@@ -1,4 +1,9 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
+import {
+  __resetActiveStoreForTests,
+  setActiveSelection,
+  setRegisteredBackends,
+} from "#/api/backend-registry/active-store";
 import {
   agentProfileSupportsInstructions,
   agentProfileSupportsRouter,
@@ -7,11 +12,9 @@ import {
   agentProfileSupportsTools,
 } from "#/api/agent-profiles-service/profile-field-support";
 
-const mockBackendKind = vi.fn<() => string>(() => "local");
-
-vi.mock("#/api/backend-registry/active-store", () => ({
-  getActiveBackend: () => ({ backend: { kind: mockBackendKind() } }),
-}));
+afterEach(() => {
+  __resetActiveStoreForTests();
+});
 
 describe.each([
   ["agentProfileSupportsSecretRefs", agentProfileSupportsSecretRefs],
@@ -21,12 +24,20 @@ describe.each([
   ["agentProfileSupportsRouter", agentProfileSupportsRouter],
 ])("%s", (_name, supports) => {
   it("is offered on a local backend", () => {
-    mockBackendKind.mockReturnValue("local");
     expect(supports()).toBe(true);
   });
 
-  it("stays off on Cloud, whose launches do not apply it yet", () => {
-    mockBackendKind.mockReturnValue("cloud");
-    expect(supports()).toBe(false);
+  it("is offered on Cloud, whose profile launches now apply it", () => {
+    setRegisteredBackends([
+      {
+        id: "cloud",
+        name: "Cloud",
+        host: "https://app.example.test",
+        apiKey: "test-key",
+        kind: "cloud",
+      },
+    ]);
+    setActiveSelection({ backendId: "cloud" });
+    expect(supports()).toBe(true);
   });
 });

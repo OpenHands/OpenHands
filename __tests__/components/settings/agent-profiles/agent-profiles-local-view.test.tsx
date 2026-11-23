@@ -121,7 +121,13 @@ vi.mock("#/hooks/query/use-agent-profiles", () => ({
 }));
 
 let llmProfilesData: {
-  profiles: { name: string; model: string | null }[];
+  profiles: {
+    name: string;
+    model: string | null;
+    scope?: "personal" | "organization";
+    writable?: boolean;
+    deletable?: boolean;
+  }[];
   active_profile: string | null;
 };
 vi.mock("#/hooks/query/use-llm-profiles", () => ({
@@ -1155,6 +1161,46 @@ describe("AgentProfilesLocalView save mapping", () => {
     expect(saveMutate.mock.calls[0][0].profile).toMatchObject({
       llm_profile_ref: "fast",
     });
+  });
+
+  it("allows personal LLM edits while inherited organization LLMs stay selectable and read-only", async () => {
+    backendKind.current = "cloud";
+    llmProfilesData = {
+      profiles: [
+        {
+          name: "shared",
+          model: "gpt-5",
+          scope: "organization",
+          writable: true,
+          deletable: true,
+        },
+        { name: "mine", model: "gpt-5-mini", scope: "personal" },
+      ],
+      active_profile: null,
+    };
+    renderView();
+    const user = await openCreateAndName("my-agent");
+
+    expect(screen.getByTestId("agent-profile-add-llm")).toBeInTheDocument();
+    expect(
+      screen.getByTestId("agent-profile-llm-choices-edit-mine"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByTestId("agent-profile-llm-choices-delete-mine"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("agent-profile-llm-choices-edit-shared"),
+    ).toBeNull();
+    expect(
+      screen.queryByTestId("agent-profile-llm-choices-delete-shared"),
+    ).toBeNull();
+
+    await user.click(
+      screen.getByTestId("agent-profile-llm-choices-option-shared"),
+    );
+    expect(
+      screen.getByTestId("agent-profile-llm-choices-option-shared"),
+    ).toBeChecked();
   });
 
   it("blocks an OpenHands save when no LLM profile is available", async () => {

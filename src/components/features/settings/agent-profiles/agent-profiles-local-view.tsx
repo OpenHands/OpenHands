@@ -12,7 +12,6 @@ import { LlmSettingsLocalView } from "#/components/features/settings/llm-profile
 import { DeleteProfileModal } from "#/components/features/settings/llm-profiles/delete-profile-modal";
 import { ApiKeyModalBase } from "#/components/features/settings/api-key-modal-base";
 import { BrandButton } from "#/components/features/settings/brand-button";
-import { useCanManageOrgProfiles } from "#/hooks/use-can-manage-org-profiles";
 import type { ProfileInfo } from "#/api/profiles-service/profiles-service.api";
 import {
   AgentSettingsScreen,
@@ -127,7 +126,6 @@ export function AgentProfilesLocalView() {
   const { data: settings } = useSettings();
   const queryClient = useQueryClient();
   const { backend } = useActiveBackend();
-  const canManageLlmProfiles = useCanManageOrgProfiles();
   // Edits must build on, and land after, the one-time `default` migration.
   const waitForMigration = useCallback(
     () =>
@@ -450,26 +448,24 @@ export function AgentProfilesLocalView() {
           choices={llmProfiles.map((profile) => ({
             name: profile.name,
             description: profile.model,
+            editable:
+              (backend.kind !== "cloud" || profile.scope !== "organization") &&
+              profile.writable !== false,
+            deletable:
+              (backend.kind !== "cloud" || profile.scope !== "organization") &&
+              profile.deletable !== false,
           }))}
           selected={llmProfileRef}
           onSelect={setLlmProfileRef}
-          onEdit={
-            canManageLlmProfiles
-              ? (name) =>
-                  setLlmEditorTarget(
-                    llmProfiles.find((profile) => profile.name === name) ??
-                      null,
-                  )
-              : undefined
+          onEdit={(name) =>
+            setLlmEditorTarget(
+              llmProfiles.find((profile) => profile.name === name) ?? null,
+            )
           }
-          onDelete={
-            canManageLlmProfiles
-              ? (name) =>
-                  setLlmProfileToDelete(
-                    llmProfiles.find((profile) => profile.name === name) ??
-                      null,
-                  )
-              : undefined
+          onDelete={(name) =>
+            setLlmProfileToDelete(
+              llmProfiles.find((profile) => profile.name === name) ?? null,
+            )
           }
         />
       ) : (
@@ -493,17 +489,15 @@ export function AgentProfilesLocalView() {
           {t(I18nKey.SETTINGS$AGENT_PROFILE_DEFAULT_LLM_NOTE)}
         </p>
       ) : null}
-      {canManageLlmProfiles ? (
-        <BrandButton
-          testId="agent-profile-add-llm"
-          type="button"
-          variant="secondary"
-          className="self-start"
-          onClick={() => setLlmEditorTarget("create")}
-        >
-          {t(I18nKey.SETTINGS$ADD_LLM_PROFILE)}
-        </BrandButton>
-      ) : null}
+      <BrandButton
+        testId="agent-profile-add-llm"
+        type="button"
+        variant="secondary"
+        className="self-start"
+        onClick={() => setLlmEditorTarget("create")}
+      >
+        {t(I18nKey.SETTINGS$ADD_LLM_PROFILE)}
+      </BrandButton>
     </div>
   );
 
