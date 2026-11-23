@@ -3,6 +3,7 @@ import type {
   AutomationUpdate,
   Automation,
   AutomationRun,
+  AutomationVisibility,
 } from "#/types/automation";
 import {
   statusToneBadgeClassName,
@@ -105,6 +106,8 @@ import {
   useServiceAccountRunAsEnabled,
   useServiceAccounts,
 } from "#/hooks/query/use-service-accounts";
+import { useAutomationPermissions } from "#/hooks/use-automation-permissions";
+import { useActiveBackend } from "#/contexts/active-backend-context";
 import { AUTOMATION_DETAIL_QUERY_KEY } from "#/hooks/query/use-automation-detail";
 import {
   AUTOMATIONS_QUERY_KEY,
@@ -164,6 +167,8 @@ const REPO_UPDATE_FEATURE = "repoUpdate";
 const PLUGIN_CONFIG_UPDATE_FEATURE = "pluginConfigUpdate";
 const AGENT_PROFILES_FEATURE = "agentProfiles";
 const PRESET_AGENT_PROFILES_FEATURE = "presetAgentProfiles";
+// Capability feature: an automation that runs as a person can be private.
+const AUTOMATION_VISIBILITY_FEATURE = "automationVisibility";
 /**
  * Used when the deployment has not advertised its event sources yet. These are
  * the automation service's built-in providers, which it reserves as source
@@ -498,6 +503,7 @@ function buildInitialForm(
     kind,
     name: form.name ?? deriveName(prompt),
     runAsUserId: form.runAsUserId ?? "",
+    visibility: form.visibility ?? draft.existingVisibility ?? "organization",
     prompt,
     repository: form.repository ?? "",
     pluginSource: pluginEntries[0]?.source ?? "",
@@ -810,6 +816,19 @@ export function AutomationSetupPanel({
   const [form, setForm] = useState(() => buildInitialForm(initialDraft));
   const serviceAccountRunAsEnabled = useServiceAccountRunAsEnabled();
   const serviceAccounts = useServiceAccounts().data;
+  const { backend, orgId } = useActiveBackend();
+  const { userId } = useAutomationPermissions();
+  // There is someone to hide an automation from only in a cloud team
+  // workspace (a personal one's org id is the user id), and only a service
+  // that advertises the feature stores a visibility.
+  const visibilitySupported =
+    backend.kind === "cloud" &&
+    !!orgId &&
+    !!userId &&
+    orgId !== userId &&
+    (deploymentCapabilities.data?.features ?? []).includes(
+      AUTOMATION_VISIBILITY_FEATURE,
+    );
   const [eventTestPayload, setEventTestPayload] = useState(() =>
     buildDefaultEventTestPayload(DEFAULT_EVENT_SOURCE, DEFAULT_EVENT_KEY),
   );
@@ -1121,6 +1140,7 @@ export function AutomationSetupPanel({
     kind,
     name,
     runAsUserId,
+    visibility = "organization",
     prompt,
     repository,
     pluginSource,
@@ -1469,6 +1489,14 @@ export function AutomationSetupPanel({
   // Only a new automation picks who it runs as; an existing one uses Change Runs As.
   const showRunAsPicker = serviceAccountRunAsEnabled && !isEditingExisting;
   const newAutomationRunAsId = showRunAsPicker ? runAsUserId : "";
+  // Only an automation that runs as a person can be private: a new one that
+  // runs as the caller, or an existing one that reported its visibility.
+  const showVisibility =
+    visibilitySupported &&
+    (isEditingExisting
+      ? initialDraft.existingVisibility !== undefined
+      : !newAutomationRunAsId);
+  const newAutomationIsPrivate = showVisibility && visibility === "private";
   // Only the final create runs enabled: drafts and preflight validation must
   // stay inert, so the flag travels with the caller's intent.
   // Only a new automation is placed in a factory; an edit leaves it where it is.
@@ -1502,6 +1530,7 @@ export function AutomationSetupPanel({
     else if (model.trim()) body.model = model.trim();
     if (newAutomationRunAsId) body.run_as_user_id = newAutomationRunAsId;
     if (newAutomationFactoryId) body.factory_id = newAutomationFactoryId;
+    if (newAutomationIsPrivate) body.visibility = "private";
     return body;
   };
   const buildCustomBody = (
@@ -1526,6 +1555,7 @@ export function AutomationSetupPanel({
         : {}),
       ...(newAutomationRunAsId ? { run_as_user_id: newAutomationRunAsId } : {}),
       ...(newAutomationFactoryId ? { factory_id: newAutomationFactoryId } : {}),
+      ...(newAutomationIsPrivate ? { visibility: "private" } : {}),
     }) as SetupRequestBody;
   /**
    * The request body sent to a server-backed draft. Custom drafts reference a
@@ -1607,6 +1637,7 @@ export function AutomationSetupPanel({
       showTimeout,
       timeoutSeconds,
       newAutomationRunAsId,
+      newAutomationIsPrivate,
     ],
   );
   const isDraftDirty = savedDraftRequestKey
@@ -2032,6 +2063,7 @@ export function AutomationSetupPanel({
       model: model.trim() || null,
       timeout:
         showTimeout && timeoutSeconds.trim() ? Number(timeoutSeconds) : null,
+      ...(showVisibility ? { visibility } : {}),
     };
     if (existingPluginSpec) {
       delete body.model;
@@ -2899,6 +2931,39 @@ export function AutomationSetupPanel({
                                 {account.name}
                               </option>
                             ))}
+                        </select>
+                        <ChevronDown
+                          className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-muted"
+                          aria-hidden
+                        />
+                      </div>
+                    </Field>
+                  ) : null}
+                  {showVisibility ? (
+                    <Field label={t(I18nKey.AUTOMATION_SETUP$VISIBILITY)}>
+                      <div className="relative">
+                        <select
+                          data-testid="automation-setup-visibility"
+                          value={visibility}
+                          onChange={(event) =>
+                            updateField(
+                              "visibility",
+                              event.target.value as AutomationVisibility,
+                            )
+                          }
+                          className={cn(
+                            formControlFieldClassName,
+                            "appearance-none pr-8",
+                          )}
+                        >
+                          <option value="organization">
+                            {t(
+                              I18nKey.AUTOMATION_SETUP$VISIBILITY_ORGANIZATION,
+                            )}
+                          </option>
+                          <option value="private">
+                            {t(I18nKey.AUTOMATION_SETUP$VISIBILITY_PRIVATE)}
+                          </option>
                         </select>
                         <ChevronDown
                           className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-muted"

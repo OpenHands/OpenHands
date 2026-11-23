@@ -1,4 +1,4 @@
-import { ArrowRightLeft, Factory, Server } from "lucide-react";
+import { ArrowRightLeft, Database, Factory, Server } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { I18nKey } from "#/i18n/declaration";
 import type { Automation } from "#/types/automation";
@@ -32,6 +32,8 @@ interface DetailHeaderProps {
   onChangeFactory?: () => void;
   /** When provided, the kebab menu shows a Change Runs As entry. */
   onChangeRunAs?: () => void;
+  /** When provided, the kebab menu shows a View key-value store entry. */
+  onViewKvStore?: () => void;
   onExport: () => void;
   onDownloadTarball: () => void;
   onRunNow?: () => void;
@@ -60,6 +62,7 @@ export function DetailHeader({
   onDelete,
   onChangeFactory,
   onChangeRunAs,
+  onViewKvStore,
   onExport,
   onDownloadTarball,
   onRunNow,
@@ -122,6 +125,15 @@ export function DetailHeader({
             label: t(I18nKey.AUTOMATIONS$CHANGE_RUN_AS),
             icon: <ArrowRightLeft className="size-4" aria-hidden />,
             onClick: onChangeRunAs,
+          },
+        ]
+      : []),
+    ...(onViewKvStore
+      ? [
+          {
+            label: t(I18nKey.AUTOMATIONS$DETAIL$KV_VIEW_STORE),
+            icon: <Database className="size-4" aria-hidden />,
+            onClick: onViewKvStore,
           },
         ]
       : []),
