@@ -1,0 +1,31 @@
+{
+  "ok": true,
+  "value": {
+    "step": "after Tab",
+    "active": {
+      "tag": "BUTTON",
+      "text": "+ Add Workspace",
+      "aria": null,
+      "testid": "add-workspaces-button",
+      "role": null,
+      "expanded": null
+    },
+    "menuVisible": true,
+    "addVisible": 1,
+    "addDialogOpen": false
+  }
+}
+{
+  "ok": true,
+  "value": {
+    "step": "after Enter",
+    "active": {
+      "tag": "BUTTON",
+      "text": "Home",
+      "aria": null,
+      "testid": "folder-browser-sidebar-home",
+      "role": null
+    },
+    "folderBrowserVisible": true
+  }
+}
