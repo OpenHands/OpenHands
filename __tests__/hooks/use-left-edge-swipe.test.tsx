@@ -54,6 +54,15 @@ function makeScrollable(element: HTMLElement, overflowsHorizontally: boolean) {
   });
 }
 
+/** A phone-width surface: the swipe zone runs from 24px to 130px. */
+function renderSurface(ui: ReactNode) {
+  render(ui);
+  vi.spyOn(
+    screen.getByTestId("surface"),
+    "getBoundingClientRect",
+  ).mockReturnValue({ left: 0, top: 0, width: 390, height: 844 } as DOMRect);
+}
+
 function PortaledTarget() {
   return createPortal(<div data-testid="target" />, document.body);
 }
@@ -63,8 +72,8 @@ describe("useLeftEdgeSwipe", () => {
     onSwipe.mockClear();
   });
 
-  it("fires once for a rightward swipe from the left edge inside a vertical scroller", () => {
-    render(
+  it("fires once for a rightward swipe from the left third inside a vertical scroller", () => {
+    renderSurface(
       <SwipeSurface>
         <div data-testid="message-list">
           <p data-testid="target">message</p>
@@ -75,40 +84,56 @@ describe("useLeftEdgeSwipe", () => {
 
     swipe(
       screen.getByTestId("target"),
-      [8, 300],
-      [40, 304],
-      [90, 310],
-      [160, 312],
+      [40, 300],
+      [70, 304],
+      [120, 310],
+      [200, 312],
     );
 
     expect(onSwipe).toHaveBeenCalledOnce();
   });
 
+  it.each<[string, Point, Point]>([
+    ["at the inner edge of the OS gutter", [24, 300], [160, 304]],
+    ["at the end of the left third", [130, 300], [260, 304]],
+  ])("fires for a swipe that starts %s", (_name, from, to) => {
+    renderSurface(
+      <SwipeSurface>
+        <p data-testid="target">message</p>
+      </SwipeSurface>,
+    );
+
+    swipe(screen.getByTestId("target"), from, to);
+
+    expect(onSwipe).toHaveBeenCalledOnce();
+  });
+
   it("fires on release when the browser coalesces the whole swipe", () => {
-    render(
+    renderSurface(
       <SwipeSurface>
         <p data-testid="target">message</p>
       </SwipeSurface>,
     );
     const target = screen.getByTestId("target");
 
-    fireEvent.touchStart(target, { touches: [touchAt([4, 200])] });
+    fireEvent.touchStart(target, { touches: [touchAt([30, 200])] });
     fireEvent.touchEnd(target, {
       touches: [],
-      changedTouches: [touchAt([120, 210])],
+      changedTouches: [touchAt([150, 210])],
     });
 
     expect(onSwipe).toHaveBeenCalledOnce();
   });
 
   it.each<[string, Point, ...Point[]]>([
-    ["starts away from the edge", [80, 300], [200, 300]],
-    ["is too short", [8, 300], [50, 300]],
-    ["scrolls vertically first", [8, 300], [10, 250], [120, 240]],
-    ["is mostly diagonal", [8, 300], [90, 240]],
-    ["moves leftward", [24, 300], [0, 300]],
+    ["starts in the OS edge gutter", [23, 300], [200, 300]],
+    ["starts beyond the left third", [131, 300], [300, 300]],
+    ["is too short", [40, 300], [90, 300]],
+    ["scrolls vertically first", [40, 300], [42, 250], [160, 240]],
+    ["is mostly diagonal", [40, 300], [120, 240]],
+    ["moves leftward", [100, 300], [40, 300]],
   ])("does not fire for a touch that %s", (_name, from, ...moves) => {
-    render(
+    renderSurface(
       <SwipeSurface>
         <p data-testid="target">message</p>
       </SwipeSurface>,
@@ -120,32 +145,32 @@ describe("useLeftEdgeSwipe", () => {
   });
 
   it("does not fire while disabled", () => {
-    render(
+    renderSurface(
       <SwipeSurface enabled={false}>
         <p data-testid="target">message</p>
       </SwipeSurface>,
     );
 
-    swipe(screen.getByTestId("target"), [8, 300], [160, 300]);
+    swipe(screen.getByTestId("target"), [40, 300], [200, 300]);
 
     expect(onSwipe).not.toHaveBeenCalled();
   });
 
   it("cancels when a second finger joins", () => {
-    render(
+    renderSurface(
       <SwipeSurface>
         <p data-testid="target">message</p>
       </SwipeSurface>,
     );
     const target = screen.getByTestId("target");
 
-    fireEvent.touchStart(target, { touches: [touchAt([8, 300])] });
+    fireEvent.touchStart(target, { touches: [touchAt([40, 300])] });
     fireEvent.touchMove(target, {
-      touches: [touchAt([40, 300]), touchAt([200, 100], 1)],
+      touches: [touchAt([70, 300]), touchAt([200, 100], 1)],
     });
     fireEvent.touchEnd(target, {
       touches: [],
-      changedTouches: [touchAt([160, 300])],
+      changedTouches: [touchAt([200, 300])],
     });
 
     expect(onSwipe).not.toHaveBeenCalled();
@@ -172,11 +197,11 @@ describe("useLeftEdgeSwipe", () => {
     ],
     ["portaled content", () => <PortaledTarget />],
   ])("leaves touches on %s to their native behaviour", (_name, content) => {
-    render(<SwipeSurface>{content()}</SwipeSurface>);
+    renderSurface(<SwipeSurface>{content()}</SwipeSurface>);
     const scroller = screen.queryByTestId("scroller");
     if (scroller) makeScrollable(scroller, true);
 
-    swipe(screen.getByTestId("target"), [8, 300], [160, 300]);
+    swipe(screen.getByTestId("target"), [40, 300], [200, 300]);
 
     expect(onSwipe).not.toHaveBeenCalled();
   });

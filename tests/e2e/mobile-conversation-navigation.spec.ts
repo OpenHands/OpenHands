@@ -21,6 +21,15 @@ async function swipe(cdp: CDPSession, from: TouchPoint, to: TouchPoint) {
       touchPoints: [point(step)],
     });
   }
+  // Rest before lifting, as a finger does, so Chrome starts no momentum
+  // scroll that would swallow the next tap's click.
+  await new Promise((resolve) => {
+    setTimeout(resolve, 150);
+  });
+  await cdp.send("Input.dispatchTouchEvent", {
+    type: "touchMove",
+    touchPoints: [point(steps)],
+  });
   await cdp.send("Input.dispatchTouchEvent", {
     type: "touchEnd",
     touchPoints: [],
@@ -99,7 +108,7 @@ test("mobile conversation menu has a comfortable touch target", async ({
   expect(topBarBounds!.height).toBeGreaterThanOrEqual(48);
 });
 
-test("swiping right from the chat's left edge opens the navigation drawer", async ({
+test("swiping right from the chat's left third opens the navigation drawer", async ({
   page,
   browserName,
 }) => {
@@ -111,18 +120,23 @@ test("swiping right from the chat's left edge opens the navigation drawer", asyn
     .getByTestId("conversation-chat-panel")
     .boundingBox())!;
   const y = chat.y + chat.height / 2;
+  const third = chat.width / 3;
 
-  await swipe(cdp, [chat.x + 6, y], [chat.x + 12, y - 240]);
-  await swipe(cdp, [chat.x + 120, y], [chat.x + 320, y]);
-  await swipe(cdp, [chat.x + 6, y], [chat.x + 40, y]);
+  // OS edge gutter, past the left third, vertical scroll, and a short swipe.
+  await swipe(cdp, [chat.x + 10, y], [chat.x + 240, y]);
+  await swipe(cdp, [chat.x + third + 20, y], [chat.x + third + 220, y]);
+  await swipe(cdp, [chat.x + 48, y], [chat.x + 54, y - 240]);
+  await swipe(cdp, [chat.x + 48, y], [chat.x + 88, y]);
   await nextFrames(page);
   await expect(menu).toHaveAttribute("aria-expanded", "false");
   await expect(drawer).toHaveCount(0);
 
-  await swipe(cdp, [chat.x + 6, y], [chat.x + 220, y + 8]);
+  await swipe(cdp, [chat.x + 48, y], [chat.x + 260, y + 8]);
   await expect(drawer).toBeVisible();
   // The swipe opens the drawer rather than navigating the browser back.
   await expect(page).toHaveURL(/\/conversations\/1$/);
+  // Tap only once the drawer has finished sliding in.
+  await expect.poll(async () => (await drawer.boundingBox())?.x).toBe(0);
   await drawer.getByTestId("sidebar-mobile-drawer-close").tap();
   await expect(drawer).toBeHidden();
 

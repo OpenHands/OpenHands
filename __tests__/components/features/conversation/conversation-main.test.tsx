@@ -293,17 +293,21 @@ describe("ConversationMain - Layout Transition Stability", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("opens the navigation drawer on a rightward swipe from the chat's left edge", () => {
+  it("opens the navigation drawer on a rightward swipe from the chat's left third", () => {
     mockIsMobile = true;
     renderConversationMain();
+    vi.spyOn(
+      screen.getByTestId("conversation-chat-panel"),
+      "getBoundingClientRect",
+    ).mockReturnValue({ left: 0, top: 0, width: 390, height: 844 } as DOMRect);
     const chat = screen.getByTestId("chat-interface");
 
     fireEvent.touchStart(chat, {
-      touches: [{ identifier: 0, clientX: 6, clientY: 400 }],
+      touches: [{ identifier: 0, clientX: 40, clientY: 400 }],
     });
     fireEvent.touchEnd(chat, {
       touches: [],
-      changedTouches: [{ identifier: 0, clientX: 160, clientY: 404 }],
+      changedTouches: [{ identifier: 0, clientX: 200, clientY: 404 }],
     });
 
     expect(screen.getByTestId("sidebar-mobile-menu-toggle")).toHaveAttribute(

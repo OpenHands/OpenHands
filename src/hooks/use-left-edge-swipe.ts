@@ -4,8 +4,10 @@ import {
   type TouchList as ReactTouchList,
 } from "react";
 
-/** A swipe must begin within this distance of the element's left edge. */
-const EDGE_SWIPE_START_ZONE_PX = 32;
+/** The outer strip belongs to OS back gestures (iOS Safari, Android). */
+const EDGE_SWIPE_SYSTEM_GUTTER_PX = 24;
+/** A swipe must begin within this fraction of the element's width. */
+const EDGE_SWIPE_START_ZONE_FRACTION = 1 / 3;
 /** Rightward travel required before the gesture counts as a swipe. */
 const EDGE_SWIPE_MIN_DISTANCE_PX = 56;
 /** Vertical travel tolerated before the touch is treated as a scroll. */
@@ -69,9 +71,10 @@ function isRightwardSwipe(deltaX: number, deltaY: number) {
 
 /**
  * Touch handlers that call `onSwipe` for a deliberate rightward swipe that
- * starts at the element's left edge. Vertical scrolls, short or diagonal
- * swipes, multi-touch, text-entry controls and horizontal scrollers keep their
- * native behaviour. Spread the result onto the element that owns the edge.
+ * starts in the element's left third, clear of the outer strip the OS uses for
+ * its back gesture. Vertical scrolls, short or diagonal swipes, multi-touch,
+ * text-entry controls and horizontal scrollers keep their native behaviour.
+ * Spread the result onto the element that owns the edge.
  */
 export function useLeftEdgeSwipe({
   enabled,
@@ -89,8 +92,14 @@ export function useLeftEdgeSwipe({
     if (!(target instanceof Element) || !container.contains(target)) return;
 
     const touch = event.touches[0];
-    const edgeOffset = touch.clientX - container.getBoundingClientRect().left;
-    if (edgeOffset > EDGE_SWIPE_START_ZONE_PX) return;
+    const bounds = container.getBoundingClientRect();
+    const startOffset = touch.clientX - bounds.left;
+    if (
+      startOffset < EDGE_SWIPE_SYSTEM_GUTTER_PX ||
+      startOffset > bounds.width * EDGE_SWIPE_START_ZONE_FRACTION
+    ) {
+      return;
+    }
     if (
       target.closest(TEXT_ENTRY_SELECTOR) ||
       isInHorizontalScroller(target, container)

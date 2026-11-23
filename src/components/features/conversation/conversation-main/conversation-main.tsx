@@ -99,8 +99,8 @@ export function ConversationMain({ children }: { children?: ReactNode } = {}) {
   const isMobile = useBreakpoint();
   const isSidebarRailHidden = useBreakpoint(SIDEBAR_RAIL_COLLAPSE_MAX_WIDTH);
   const mobileNav = useSidebarMobileNavOptional();
-  // Where the rail is hidden, a swipe from the chat's left edge opens the
-  // drawer as a one-handed alternative to the header menu button.
+  // Where the rail is hidden, a rightward swipe from the chat's left third
+  // opens the drawer as a one-handed alternative to the header menu button.
   const chatEdgeSwipeHandlers = useLeftEdgeSwipe({
     enabled: isSidebarRailHidden && mobileNav !== null,
     onSwipe: () => mobileNav?.open(),
