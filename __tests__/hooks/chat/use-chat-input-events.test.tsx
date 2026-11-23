@@ -2,6 +2,8 @@ import { act, renderHook } from "@testing-library/react";
 import type { RefObject } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { useChatInputEvents } from "#/hooks/chat/use-chat-input-events";
+import { useGripResize } from "#/hooks/chat/use-grip-resize";
+import { useConversationStore } from "#/stores/conversation-store";
 
 const createElementRef = (text = "message") => {
   const element = document.createElement("div");
@@ -80,6 +82,62 @@ afterEach(() => {
 });
 
 describe("chat input DOM events", () => {
+  it("does not notify conversation subscribers while typing at the same suggestion visibility", () => {
+    vi.useFakeTimers();
+    const input = createElementRef("Draft");
+    let contentHeight = 20;
+    Object.defineProperty(input.element, "scrollHeight", {
+      configurable: true,
+      get: () => contentHeight,
+    });
+    useConversationStore.setState({ shouldHideSuggestions: false });
+    const { result } = renderHook(() => {
+      const { smartResize, increaseHeightForEmptyContent } = useGripResize(
+        input.ref,
+        null,
+      );
+      return useChatInputEvents(
+        input.ref,
+        smartResize,
+        increaseHeightForEmptyContent,
+        () => false,
+      );
+    });
+    act(() => vi.runOnlyPendingTimers());
+    const notifyConversation = vi.fn();
+    const unsubscribe = useConversationStore.subscribe(notifyConversation);
+
+    try {
+      for (const text of ["Draft a", "Draft a response", "Draft a response."]) {
+        input.element.textContent = text;
+        act(() => result.current.handleInput());
+        act(() => vi.runOnlyPendingTimers());
+      }
+
+      expect(notifyConversation).not.toHaveBeenCalled();
+
+      // Expanding the composer must still hide the empty-state suggestions.
+      contentHeight = 180;
+      act(() => result.current.handleInput());
+      act(() => vi.runOnlyPendingTimers());
+      expect(useConversationStore.getState().shouldHideSuggestions).toBe(true);
+
+      // Further typing at that height must leave unrelated consumers alone.
+      notifyConversation.mockClear();
+      input.element.textContent += " More detail.";
+      act(() => result.current.handleInput());
+      act(() => vi.runOnlyPendingTimers());
+      expect(notifyConversation).not.toHaveBeenCalled();
+
+      contentHeight = 20;
+      act(() => result.current.handleInput());
+      act(() => vi.runOnlyPendingTimers());
+      expect(useConversationStore.getState().shouldHideSuggestions).toBe(false);
+    } finally {
+      unsubscribe();
+    }
+  });
+
   it("resizes and clears whitespace while remaining safe before mount", () => {
     const mounted = createElementRef("   ");
     const mountedResize = vi.fn();

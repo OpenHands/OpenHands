@@ -4,7 +4,7 @@ import { RefreshCw } from "lucide-react";
 import type { GitSyncStatus } from "#/types/git-sync";
 import { formatTimeDelta } from "#/utils/format-time-delta";
 import { parseGitRemoteUrl } from "#/utils/parse-git-remote-url";
-import { cn, encodePathSegment } from "#/utils/utils";
+import { cn, constructRepositoryUrl, encodePathSegment } from "#/utils/utils";
 import GitBranchIcon from "#/icons/git-branch.svg?react";
 import GlobeIcon from "#/icons/globe.svg?react";
 import FolderIcon from "#/icons/folder.svg?react";
@@ -27,7 +27,9 @@ import {
  * `.git` suffix and any embedded credentials, which keeps forge-specific paths
  * (Azure's `org/project/_git/repo`) and non-default ports intact. Other schemes
  * -- `ssh://`, `git://`, `git@host:owner/repo` -- carry no browsable form, so
- * they are rebuilt over https from the parsed host and repository.
+ * they are rebuilt over https from the parsed host and repository. Azure's SSH
+ * form (`v3/org/project/repo`) drops the `_git` segment its web path needs, so
+ * an Azure remote is rebuilt the way the conversation's repository link is.
  */
 function browseUrlFor(repoUrl: string): string | null {
   const parsed = parseGitRemoteUrl(repoUrl);
@@ -39,6 +41,10 @@ function browseUrlFor(repoUrl: string): string | null {
     url.password = "";
     url.pathname = url.pathname.replace(/\.git$/, "");
     return url.toString();
+  }
+
+  if (parsed.provider === "azure_devops") {
+    return constructRepositoryUrl("azure_devops", parsed.repository);
   }
 
   // `parsed.repository` is decoded for display, so re-encode each segment

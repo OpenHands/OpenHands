@@ -19,7 +19,7 @@ import type { Automation } from "#/types/automation";
 
 // `automation-list-row.test.tsx` mocks the permission hooks wholesale. These
 // tests run the real hooks against a mocked `/me` service so the
-// creator-vs-manager rule for the enabled toggle is exercised end to end.
+// manager-vs-creator rule for write actions is exercised end to end.
 vi.mock("#/api/cloud/organization-service.api", async (importOriginal) => ({
   ...(await importOriginal<
     typeof import("#/api/cloud/organization-service.api")
@@ -73,6 +73,7 @@ function renderRow(automation: Automation) {
           onRunNow={vi.fn()}
           onExport={vi.fn()}
           onDelete={vi.fn()}
+          onEdit={vi.fn()}
         />
       </ActiveBackendProvider>
     </QueryClientProvider>,
@@ -126,7 +127,7 @@ describe("AutomationListRow — non-creator manager", () => {
     ).toBeInTheDocument();
   });
 
-  it("hides Turn on but keeps Delete on a disabled automation", async () => {
+  it("offers Turn on and Delete on a disabled automation", async () => {
     // Arrange
     const user = userEvent.setup();
     renderRow(makeAutomation({ enabled: false }));
@@ -136,10 +137,43 @@ describe("AutomationListRow — non-creator manager", () => {
 
     // Assert
     expect(
-      screen.queryByRole("button", { name: I18nKey.AUTOMATIONS$TURN_ON }),
-    ).not.toBeInTheDocument();
+      screen.getByRole("button", { name: I18nKey.AUTOMATIONS$TURN_ON }),
+    ).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: I18nKey.AUTOMATIONS$DELETE }),
+    ).toBeInTheDocument();
+  });
+});
+
+describe("AutomationListRow — edit rule", () => {
+  it("offers Edit to a manager on a automation that runs as a person", async () => {
+    // Arrange
+    const user = userEvent.setup();
+    renderRow(makeAutomation({ run_as_kind: "user" }));
+
+    // Act
+    await openActionsMenu(user);
+
+    // Assert
+    expect(
+      screen.getByRole("button", { name: I18nKey.AUTOMATIONS$EDIT }),
+    ).toBeInTheDocument();
+  });
+
+  it("offers Edit and Turn on to a manager on a disabled automation that runs as a service account", async () => {
+    // Arrange
+    const user = userEvent.setup();
+    renderRow(makeAutomation({ run_as_kind: "service", enabled: false }));
+
+    // Act
+    await openActionsMenu(user);
+
+    // Assert
+    expect(
+      screen.getByRole("button", { name: I18nKey.AUTOMATIONS$EDIT }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: I18nKey.AUTOMATIONS$TURN_ON }),
     ).toBeInTheDocument();
   });
 });

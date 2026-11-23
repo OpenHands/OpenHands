@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { createPortal } from "react-dom";
+import { AppearancePortal } from "#/components/shared/appearance-portal";
 import { useTranslation } from "react-i18next";
 import { useSearchParams } from "react-router";
 import AutomationService from "#/api/automation-service/automation-service.api";
@@ -16,6 +16,13 @@ import { InteractiveChatBox } from "#/components/features/chat/interactive-chat-
 import { ComposerDockedProvider } from "#/context/composer-docked-context";
 import { useStartAutomationSetup } from "#/hooks/use-start-automation-setup";
 import { I18nKey } from "#/i18n/declaration";
+import {
+  automationDetailPath,
+  automationListPath,
+} from "#/manifests/automation-interface";
+import { AutomationPageHeader } from "#/components/features/automations/automation-page-header";
+import { factoryPath, withFactoryContext } from "#/constants/factories";
+import { useFactoryContext } from "#/hooks/use-factory-context";
 import { buildAutomationDraftTags } from "#/utils/automation-draft-tags";
 import { setupDraftFromAutomation } from "#/utils/automation-edit-draft";
 import { displayErrorToast } from "#/utils/custom-toast-handlers";
@@ -31,6 +38,7 @@ const BLANK_DRAFT: AutomationSetupDraft = { prompt: "", kind: "prompt" };
 export default function AutomationSetupNew() {
   const { t } = useTranslation("openhands");
   const [searchParams] = useSearchParams();
+  const factoryContext = useFactoryContext();
   const automationId = searchParams.get("automationId")?.trim() ?? "";
   const draftId = searchParams.get("draftId")?.trim() ?? "";
   const { startConversationFromPrompt, isPending } = useStartAutomationSetup();
@@ -48,9 +56,12 @@ export default function AutomationSetupNew() {
   useEffect(
     () =>
       subscribeAutomationFormSession(PENDING_AUTOMATION_SETUP_ID, (next) => {
-        setDraft(next ?? (automationId || draftId ? null : BLANK_DRAFT));
+        // The panel clears the session when it unmounts, so a cleared session
+        // must not drop the draft: that would unmount the panel and leave the
+        // page on the loading state, since nothing loads the draft again.
+        if (next) setDraft(next);
       }),
-    [automationId, draftId],
+    [],
   );
 
   useEffect(() => {
@@ -93,6 +104,10 @@ export default function AutomationSetupNew() {
     };
   }, [automationId, draftId]);
 
+  const closeFactoryId = draft?.factoryId ?? factoryContext;
+  const closePath = closeFactoryId
+    ? factoryPath(closeFactoryId)
+    : automationListPath();
   const title = draft?.form?.name?.trim() || t(I18nKey.AUTOMATION_SETUP$TITLE);
   const conversationTags = draft?.serverDraftId
     ? buildAutomationDraftTags(
@@ -104,19 +119,19 @@ export default function AutomationSetupNew() {
 
   return (
     <div className="flex h-full min-h-0 flex-col overflow-hidden bg-canvas-base">
-      <header
-        data-testid="automation-setup-topbar"
-        className="flex h-10 min-h-10 shrink-0 items-center justify-between gap-2 border-b border-border bg-canvas-base px-3"
-      >
-        <h2 className="min-w-0 truncate text-sm font-medium text-content">
-          {title}
-        </h2>
-        <div
-          ref={setToolbarElement}
-          data-testid="automation-setup-toolbar"
-          className="flex min-w-0 shrink-0 items-center gap-1.5"
-        />
-      </header>
+      <AutomationPageHeader
+        testId="automation-setup-topbar"
+        title={title}
+        backTo={
+          automationId
+            ? withFactoryContext(
+                automationDetailPath(automationId),
+                factoryContext,
+              )
+            : closePath
+        }
+        actionsRef={setToolbarElement}
+      />
       <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
         {draft ? (
           <AutomationSetupPanel
@@ -126,6 +141,7 @@ export default function AutomationSetupNew() {
             toolbarPortal={toolbarElement}
             showInlineHeader={false}
             reserveComposerSpace
+            onAskAgent={startConversationFromPrompt}
           />
         ) : (
           <div
@@ -144,25 +160,21 @@ export default function AutomationSetupNew() {
             />
           </div>
         </div>
-        {composerTarget
-          ? createPortal(
-              <ComposerDockedProvider enabled minimal>
-                {/* No conversation route is mounted here, so a persisting
-                    composer would read and write the Home draft. The prompt
-                    belongs to this setup only and is not kept as a draft. */}
-                <InteractiveChatBox
-                  onSubmit={(content) => startConversationFromPrompt(content)}
-                  disabled={isPending || !draft}
-                  persistDraft={false}
-                  showGitControlBar={false}
-                  placeholder={t(
-                    I18nKey.AUTOMATION_SETUP$DOCKED_COMPOSER_PLACEHOLDER,
-                  )}
-                />
-              </ComposerDockedProvider>,
-              composerTarget,
-            )
-          : null}
+        {composerTarget ? (
+          <AppearancePortal container={composerTarget}>
+            <ComposerDockedProvider enabled minimal>
+              <InteractiveChatBox
+                onSubmit={(content) => startConversationFromPrompt(content)}
+                disabled={isPending || !draft}
+                persistDraft={false}
+                showGitControlBar={false}
+                placeholder={t(
+                  I18nKey.AUTOMATION_SETUP$DOCKED_COMPOSER_PLACEHOLDER,
+                )}
+              />
+            </ComposerDockedProvider>
+          </AppearancePortal>
+        ) : null}
       </div>
     </div>
   );

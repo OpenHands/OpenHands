@@ -1,3 +1,7 @@
+import {
+  sessionActivityKey,
+  useSessionActivityStore,
+} from "#/stores/session-activity-store";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { PluginSpec } from "#/api/conversation-service/agent-server-conversation-service.types";
 import { SuggestedTask } from "#/utils/types";
@@ -14,7 +18,6 @@ import PluginsManagementService, {
 import { PLUGINS_QUERY_KEYS } from "#/hooks/query/query-keys";
 import { launchConversation } from "#/hooks/mutation/resolve-conversation-launch";
 import { pluginReferenceKey } from "#/utils/plugin-display";
-import { useModelStore } from "#/stores/model-store";
 import {
   mergeStoredConversationMetadata,
   toPluginCoordinates,
@@ -25,9 +28,12 @@ export interface CreateConversationVariables {
   query?: string;
   automationSetup?: boolean;
   automationSetupTags?: Record<string, string>;
+  automationSetupContext?: string;
   repository?: {
     name: string;
     gitProvider: Provider;
+    /** The connected git provider to clone with; omit to use the type's default. */
+    gitProviderId?: number;
     branch?: string;
   };
   suggestedTask?: SuggestedTask;
@@ -47,6 +53,10 @@ export interface CreateConversationVariables {
   agentProfileId?: string;
   // Cloud: run on this LLM profile (a member's home pick) without activating it.
   llmProfile?: string;
+  // Home launcher only: a home-page LLM profile pick was made before the first
+  // message, so suppress "Run on first message" routing for this single launch.
+  // Non-home callers omit it so they route as usual.
+  suppressRouterAtStart?: boolean;
   entryPoint?: string; // analytics only; not forwarded to the service
 }
 
@@ -100,6 +110,7 @@ export const useCreateConversation = ({
         query,
         automationSetup,
         automationSetupTags,
+        automationSetupContext,
         conversationInstructions,
         plugins,
         repository,
@@ -110,18 +121,8 @@ export const useCreateConversation = ({
         agentProfileId,
         llmProfile,
         sandboxId,
+        suppressRouterAtStart,
       } = variables;
-
-      // A home-page model pick (LLM profile or ACP model) made before the
-      // first message is an explicit choice the router shouldn't override on
-      // turn 1 — suppress the suffix for this single launch without touching
-      // the global setting. The flag is set at the UI pick handlers (the
-      // single chokepoint) and read here. It is cleared in `onSuccess` (not
-      // here) so a rejected launch doesn't consume it — a retry after a
-      // failed launch still suppresses, and the flag can't leak to an
-      // unrelated launch because a successful launch always clears it.
-      const suppressRouterAtStart =
-        useModelStore.getState().homeManualModelPick;
 
       // The active AgentProfile is the default launch profile for new
       // conversations (#3727), on both local and cloud.
@@ -137,6 +138,7 @@ export const useCreateConversation = ({
           initialUserMsg: query,
           automationSetup,
           ...(automationSetupTags ? { automationSetupTags } : {}),
+          automationSetupContext,
           conversationInstructions,
           plugins,
           metadata: repository
@@ -144,6 +146,9 @@ export const useCreateConversation = ({
                 selected_repository: repository.name,
                 selected_branch: repository.branch ?? null,
                 git_provider: repository.gitProvider,
+                ...(repository.gitProviderId != null
+                  ? { git_provider_id: repository.gitProviderId }
+                  : {}),
               }
             : null,
           workingDirOverride: workingDir,
@@ -228,6 +233,12 @@ export const useCreateConversation = ({
         ? conversation.app_conversation_id
         : `task-${conversation.id}`;
 
+      const activity = useSessionActivityStore.getState();
+      const activityKey = sessionActivityKey(backend.id, orgId, conversationId);
+      activity.begin(activityKey, "initialize");
+      if (conversation.app_conversation_id)
+        activity.observe(activityKey, "READY");
+
       return {
         conversation_id: conversationId,
         session_api_key: null,
@@ -236,10 +247,6 @@ export const useCreateConversation = ({
       };
     },
     onSuccess: async (data, variables) => {
-      // The home-manual-pick flag was read (not cleared) in the mutation fn
-      // so a rejected launch wouldn't consume it. Now that the launch
-      // succeeded, clear it so it can't leak to a later, unrelated launch.
-      useModelStore.getState().setHomeManualModelPick(false);
       trackConversationCreated({
         conversationId: data.conversation_id,
         taskId: data.task_id,

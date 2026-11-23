@@ -219,6 +219,13 @@ describe("workspace-upload-path", () => {
     expect(dir).toBe("/workspace/project/550e8400e29b41d4a716446655440000");
   });
 
+  it("resolves the workspace for compact UUIDs returned by cloud", async () => {
+    const id = "550e8400e29b41d4a716446655440000";
+    expect(await resolveConversationUploadWorkingDir(id)).toBe(
+      `/workspace/project/${id}`,
+    );
+  });
+
   it("uses the configured working directory for non-UUID conversations", async () => {
     const dir = await resolveConversationUploadWorkingDir("named-conversation");
 

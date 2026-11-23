@@ -2,6 +2,7 @@ import { createRequire } from "node:module";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { compile } from "tailwindcss";
+import { parse } from "postcss";
 import { describe, expect, it } from "vitest";
 import {
   hoverRevealActionClassName,
@@ -65,6 +66,27 @@ describe("hover-reveal-classes", () => {
     expect(css).toContain("pointer-events: none");
     expect(css).toContain("pointer-events: auto");
     expect(css).toContain("opacity: 0");
-    expect(css).toContain("min-width: 3.75rem");
+    const stylesheet = parse(css);
+    let spacing = "";
+    stylesheet.walkDecls("--spacing", (declaration) => {
+      spacing = declaration.value;
+    });
+    const reserveWidths: number[] = [];
+    stylesheet.walkDecls("min-width", (declaration) => {
+      const scaled = /^calc\(var\(--spacing\)\s*\*\s*([\d.]+)\)$/.exec(
+        declaration.value,
+      );
+      if (scaled) {
+        expect(spacing.endsWith("rem")).toBe(true);
+        reserveWidths.push(parseFloat(spacing) * Number(scaled[1]));
+      } else if (/^0(?:px|rem)?$/.test(declaration.value)) {
+        reserveWidths.push(0);
+      } else {
+        expect(declaration.value.endsWith("rem"), declaration.value).toBe(true);
+        reserveWidths.push(parseFloat(declaration.value));
+      }
+    });
+    expect(reserveWidths.length).toBeGreaterThan(0);
+    expect(new Set(reserveWidths)).toEqual(new Set([0, 3.75]));
   });
 });

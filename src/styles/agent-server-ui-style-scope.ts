@@ -48,6 +48,8 @@ export const AGENT_SERVER_UI_DEFAULT_CSS_VARIABLES = {
   "--oh-overlay": "var(--cool-grey-925)",
   "--oh-overlay-foreground": "var(--cool-grey-100)",
   "--oh-modal-title-foreground": "#ffffff",
+  "--oh-modal-description-foreground": "#a3a3a3",
+  "--oh-font-heading": "inherit",
   "--oh-muted": "var(--cool-grey-400)",
   "--oh-text-secondary": "var(--cool-grey-300)",
   "--oh-text-tertiary": "var(--cool-grey-200)",
@@ -80,10 +82,26 @@ export const AGENT_SERVER_UI_DEFAULT_CSS_VARIABLES = {
   "--oh-border-input": "var(--cool-grey-600)",
   "--oh-border-subtle": "var(--cool-grey-800)",
   "--oh-separator": "rgba(113, 120, 136, 0.5)",
+  "--oh-divider": "var(--oh-border-subtle)",
   "--oh-focus": "#ffffff",
   "--oh-status-success": "#1FBD53",
   "--oh-status-error": "#FF684E",
   "--oh-link": "var(--cool-grey-100)",
+  "--oh-info": "oklch(62.3% 0.214 259.815)",
+  "--oh-success-soft":
+    "color-mix(in srgb, var(--oh-color-success) 10%, transparent)",
+  "--oh-success-soft-foreground":
+    "color-mix(in srgb, var(--oh-color-success) 55%, #ffffff)",
+  "--oh-warning-soft": "color-mix(in srgb, var(--oh-warning) 10%, transparent)",
+  "--oh-warning-soft-foreground":
+    "color-mix(in srgb, var(--oh-warning) 55%, #ffffff)",
+  "--oh-danger-soft":
+    "color-mix(in srgb, var(--oh-color-danger) 10%, transparent)",
+  "--oh-danger-soft-foreground":
+    "color-mix(in srgb, var(--oh-color-danger) 55%, #ffffff)",
+  "--oh-info-soft": "color-mix(in srgb, var(--oh-info) 10%, transparent)",
+  "--oh-info-soft-foreground":
+    "color-mix(in srgb, var(--oh-info) 55%, #ffffff)",
   "--oh-radius": "8px",
   "--oh-field-radius": "8px",
   "--oh-surface-shadow": "none",

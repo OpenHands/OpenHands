@@ -2,6 +2,7 @@ import React from "react";
 import { Trans, useTranslation } from "react-i18next";
 import { Check, CircleAlert, CircleX, Copy, X } from "lucide-react";
 import { I18nKey } from "#/i18n/declaration";
+import { copyToClipboard } from "#/utils/copy-to-clipboard";
 import { displayErrorToast } from "#/utils/custom-toast-handlers";
 import { getAcpErrorHeaderKey } from "#/utils/acp-error-codes";
 import { cn } from "#/utils/utils";
@@ -15,6 +16,8 @@ interface ErrorMessageBannerProps {
   onRetry?: () => void;
   /** Recovery action (e.g. re-authenticate) shown for credential failures. */
   onReauth?: () => void;
+  /** Where the user can act on the error (e.g. their budget page). */
+  link?: { href: string; label: string; openInNewTab: boolean };
   classification?: ErrorClassification | null;
 }
 
@@ -26,6 +29,7 @@ export function ErrorMessageBanner({
   onDismiss,
   onRetry,
   onReauth,
+  link,
   classification,
 }: ErrorMessageBannerProps) {
   const { t, i18n } = useTranslation("openhands");
@@ -43,10 +47,10 @@ export function ErrorMessageBanner({
   const isCollapsed = shouldShowToggle && !isExpanded;
 
   const handleCopy = async () => {
-    try {
-      await navigator.clipboard.writeText(displayTextForLength);
+    const success = await copyToClipboard(displayTextForLength);
+    if (success) {
       setIsCopied(true);
-    } catch {
+    } else {
       displayErrorToast(t(I18nKey.CHAT_INTERFACE$CHAT_MESSAGE_COPY_FAILED));
     }
   };
@@ -158,6 +162,18 @@ export function ErrorMessageBanner({
               ? t(I18nKey.COMMON$VIEW_LESS)
               : t(I18nKey.COMMON$VIEW_MORE)}
           </button>
+        )}
+
+        {link && (
+          <a
+            href={link.href}
+            target={link.openInNewTab ? "_blank" : undefined}
+            rel={link.openInNewTab ? "noopener noreferrer" : undefined}
+            className="mt-2 block w-fit rounded-md border border-border px-2 py-1 text-xs font-normal text-foreground hover:bg-interactive-hover"
+            data-testid="error-message-banner-link"
+          >
+            {link.label}
+          </a>
         )}
       </div>
 

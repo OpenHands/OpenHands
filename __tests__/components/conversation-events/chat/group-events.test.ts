@@ -1,7 +1,9 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import {
   groupEvents,
   isGroupableEvent,
+  isToolRowItem,
+  renderedItemKey,
 } from "#/components/conversation-events/chat/group-events";
 import {
   ActionEvent,
@@ -9,10 +11,12 @@ import {
   HookExecutionEvent,
   MessageEvent,
   ObservationEvent,
+  OpenHandsEvent,
   SecurityRisk,
   UserRejectObservation,
 } from "#/types/agent-server/core";
 import { TextContent } from "#/types/agent-server/core/base/common";
+import { ACPToolCallEvent } from "#/types/agent-server/core/events/acp-tool-call-event";
 import {
   ExecuteBashAction,
   FileEditorAction,
@@ -219,8 +223,8 @@ describe("isGroupableEvent", () => {
     expect(isGroupableEvent(makeFinishAction("a1"))).toBe(false);
   });
 
-  it("does not group ThinkAction", () => {
-    expect(isGroupableEvent(makeThinkAction("a1"))).toBe(false);
+  it("groups reasoning with the surrounding activity", () => {
+    expect(isGroupableEvent(makeThinkAction("a1"))).toBe(true);
   });
 
   it("does not group PlanningFileEditorObservation", () => {
@@ -267,8 +271,21 @@ describe("isGroupableEvent", () => {
     expect(isGroupableEvent(makeAgentErrorEvent("e1"))).toBe(false);
   });
 
-  it("does not group HookExecutionEvent", () => {
-    expect(isGroupableEvent(makeHookExecutionEvent("h1"))).toBe(false);
+  it("groups a successful hook run", () => {
+    expect(isGroupableEvent(makeHookExecutionEvent("h1"))).toBe(true);
+  });
+
+  it("groups blocked hooks but keeps failed hook runs outside", () => {
+    expect(
+      isGroupableEvent({
+        ...makeHookExecutionEvent("h1"),
+        blocked: true,
+        success: false,
+      }),
+    ).toBe(true);
+    expect(
+      isGroupableEvent({ ...makeHookExecutionEvent("h2"), success: false }),
+    ).toBe(false);
   });
 });
 
@@ -279,6 +296,25 @@ describe("groupEvents", () => {
 
   it("requires minSize to be at least 1", () => {
     expect(() => groupEvents([], 0)).toThrow("minSize must be at least 1");
+  });
+
+  it("groups a lone trailing step when the trailing size allows it", () => {
+    const events = [
+      makeUserMessage("m1"),
+      makeBashObservation("o1", "a1"),
+      makeUserMessage("m2"),
+      makeBashAction("a2"),
+    ];
+
+    // The earlier lone step keeps the normal minimum; only the last run
+    // (the stage the agent is on) uses the trailing size.
+    const result = groupEvents(events, undefined, events, 1);
+    expect(result.map((item) => item.kind)).toEqual([
+      "single",
+      "single",
+      "single",
+      "group",
+    ]);
   });
 
   it("emits singles when there are not enough actions in a row", () => {
@@ -505,6 +541,31 @@ describe("groupEvents", () => {
     }
   });
 
+  it("keeps a hoisted thought's reasoning with its own step", () => {
+    const a0 = makeBashAction("a0");
+    const a1 = {
+      ...makeBashAction("a1", [{ type: "text", text: "Next I'll run it" }]),
+      reasoning_content: "Weighing whether to run it",
+    };
+    const o0 = makeBashObservation("o0", "a0");
+    const o1 = makeBashObservation("o1", "a1");
+
+    const result = groupEvents([o0, o1], 1, [a0, o0, a1, o1], 1);
+
+    // Stranding the reasoning in its own group (or the previous one) gives it
+    // the same key and open state as the step it belongs to.
+    expect(result).toEqual([
+      { kind: "group", events: [o0], startIndex: 0 },
+      { kind: "thought", action: a1, index: 1 },
+      {
+        kind: "group",
+        events: [o1],
+        startIndex: 1,
+        reasoning: [{ id: "a1", text: "Weighing whether to run it", index: 1 }],
+      },
+    ]);
+  });
+
   it("ignores empty thoughts", () => {
     const events = [
       makeBashAction("a1", [{ type: "text", text: "   " }]),
@@ -532,13 +593,459 @@ describe("groupEvents", () => {
 
     const result = groupEvents(events);
 
-    // ThinkAction breaks the run as a single (it isn't groupable), but no
-    // additional "thought" item should be emitted for it because the
-    // ThinkAction's body already renders the thought.
-    expect(result.map((item) => item.kind)).toEqual([
-      "group",
-      "single",
-      "group",
+    expect(result.map((item) => item.kind)).toEqual(["group"]);
+    expect(result[0]).toMatchObject({ events });
+  });
+});
+
+it("keeps initialization and commands together until an agent message", () => {
+  const user = makeUserMessage("user");
+  const command = makeBashAction("command");
+  const reply = { ...makeUserMessage("reply"), source: "agent" as const };
+  const later = makeBashAction("later");
+  const session = {
+    id: "startup",
+    kind: "initialize" as const,
+    startedAt: 0,
+    phase: "complete" as const,
+    steps: [],
+    open: true,
+  };
+  const items = groupEvents([user, command, reply, later], 1, undefined, 1, [
+    session,
+  ]);
+  expect(items.map((item) => item.kind)).toEqual([
+    "single",
+    "group",
+    "single",
+    "group",
+  ]);
+  expect(items[1]).toMatchObject({ session, events: [command] });
+  expect(items[3]).toMatchObject({ events: [later] });
+  expect(items[3]).not.toHaveProperty("session");
+});
+
+it("keeps streamed and finalized reasoning in the same startup group before the reply", () => {
+  const user = makeUserMessage("user");
+  const session = {
+    id: "startup",
+    kind: "initialize" as const,
+    startedAt: 0,
+    phase: "complete" as const,
+    steps: [],
+    open: true,
+  };
+  const slot = {
+    id: "reply",
+    kind: "StreamingDeltaEvent" as const,
+    source: "agent" as const,
+    timestamp: user.timestamp,
+    content: "",
+    reasoning_content: "Considering the answer",
+  };
+  const live = groupEvents([user, slot], 1, undefined, 1, [session]);
+  expect(live).toHaveLength(2);
+  expect(live[1]).toMatchObject({
+    kind: "group",
+    session,
+    reasoning: [{ id: "reply", text: "Considering the answer" }],
+  });
+  const reply = {
+    ...makeUserMessage("reply"),
+    source: "agent" as const,
+    llm_message: {
+      role: "assistant" as const,
+      content: [{ type: "text" as const, text: "Hello" }],
+      reasoning_content: "Considering the answer",
+    },
+  };
+  const settled = groupEvents([user, reply], 1, undefined, 1, [session]);
+  expect(settled).toHaveLength(3);
+  expect(settled[1]).toMatchObject({
+    kind: "group",
+    session,
+    reasoning: [{ id: "reply", text: "Considering the answer" }],
+  });
+});
+
+it("anchors an actual resume after old history and before the next tools", () => {
+  const oldReply = { ...makeUserMessage("old"), source: "agent" as const };
+  const user = makeUserMessage("new-user");
+  const command = makeBashAction("command");
+  const session = {
+    id: "resume",
+    kind: "resume" as const,
+    startedAt: Date.now() + 60_000,
+    phase: "complete" as const,
+    steps: [],
+    open: false,
+    afterEventId: oldReply.id,
+  };
+  const items = groupEvents([oldReply, user, command], 1, undefined, 1, [
+    session,
+  ]);
+  expect(items.map((item) => item.kind)).toEqual(["single", "single", "group"]);
+  expect(items[2]).toMatchObject({ session, events: [command] });
+});
+
+it("keeps image-only replies visible after their grouped reasoning", () => {
+  const reply: MessageEvent = {
+    ...makeUserMessage("image-reply"),
+    source: "agent",
+    llm_message: {
+      role: "assistant",
+      content: [
+        { type: "image", image_urls: ["https://example.com/result.png"] },
+      ],
+      reasoning_content: "Inspecting the result",
+    },
+  };
+  const items = groupEvents([reply], 1);
+  expect(items).toHaveLength(2);
+  expect(items[0]).toMatchObject({
+    kind: "group",
+    reasoning: [{ text: "Inspecting the result" }],
+  });
+  expect(items[1]).toEqual({ kind: "single", event: reply, index: 0 });
+});
+
+describe("renderedItemKey stability", () => {
+  it("keeps a group's key when its first action is replaced by its observation", () => {
+    const action = makeBashAction("a1");
+    const observation = makeBashObservation("o1", "a1");
+    // The UI list swaps the finished action for its observation in place; the
+    // full history keeps both. Keying on `events[0].id` would rename the row
+    // the moment the observation lands, remounting it and dropping its state.
+    const [before] = groupEvents([action], 1, [action]);
+    const [after] = groupEvents([observation], 1, [action, observation]);
+    expect(renderedItemKey(before)).toBe(renderedItemKey(after));
+    expect(renderedItemKey(after)).toBe("group-a1");
+  });
+
+  it("keys a reasoning-only group by its reasoning id, not its position", () => {
+    const reply: MessageEvent = {
+      ...makeUserMessage("reply"),
+      source: "agent",
+      llm_message: {
+        role: "assistant",
+        content: [{ type: "text", text: "" }],
+        reasoning_content: "only reasoning",
+      },
+    };
+    const page = [makeUserMessage("u1"), reply, makeUserMessage("u2")];
+    const withOlder = [makeUserMessage("u0a"), makeUserMessage("u0b"), ...page];
+    // Prepending older events shifts every index, so a positional key would
+    // rename the group and lose its open state on "load older".
+    const [pageGroup] = groupEvents(page, 1, page, 1).filter(
+      (item) => item.kind === "group",
+    );
+    const [olderGroup] = groupEvents(withOlder, 1, withOlder, 1).filter(
+      (item) => item.kind === "group",
+    );
+    expect(renderedItemKey(pageGroup)).toBe("group-reply");
+    expect(renderedItemKey(olderGroup)).toBe(renderedItemKey(pageGroup));
+  });
+
+  it("keys a session group by its session id", () => {
+    const session = {
+      id: "startup",
+      kind: "initialize" as const,
+      startedAt: 0,
+      phase: "complete" as const,
+      steps: [],
+      open: true,
+    };
+    const [group] = groupEvents([makeBashAction("a1")], 1, undefined, 1, [
+      session,
     ]);
+    expect(renderedItemKey(group)).toBe("group-startup");
+  });
+
+  it("keeps a group's key when a step is appended", () => {
+    // A live run grows at its tail as the agent keeps working. Keying it by the
+    // last event instead of the first would rename the group on every step, so
+    // the group the user opened would collapse mid-run. The key must not move
+    // under append.
+    const run = [makeBashAction("a1"), makeBashAction("a2")];
+    const grown = [...run, makeBashAction("a3")];
+    const [before] = groupEvents(run, 1, run, 1);
+    const [after] = groupEvents(grown, 1, grown, 1);
+    expect(renderedItemKey(before)).toBe("group-a1");
+    expect(renderedItemKey(after)).toBe(renderedItemKey(before));
+  });
+
+  it("renames a thought-less group when older events prepend into its run", () => {
+    // Known limitation, pinned so a change is deliberate. A run of thought-less
+    // actions is keyed by its first event; when "load older" prepends events
+    // that continue the same run, the head moves and the group's key with it.
+    // `messages.tsx` prunes expansion entries by row key, so an open group at
+    // the page boundary loses its state. Keying by the tail instead would fix
+    // this but rename the group on every append (see the append test above), so
+    // the head anchor is the safer trade; a stable run identity would need to be
+    // assigned when the run is created.
+    const page = [makeBashAction("a1"), makeBashAction("a2")];
+    const withOlder = [makeBashAction("a0"), ...page];
+    const [pageGroup] = groupEvents(page, 1, page, 1);
+    const [olderGroup] = groupEvents(withOlder, 1, withOlder, 1);
+    expect(renderedItemKey(pageGroup)).toBe("group-a1");
+    expect(renderedItemKey(olderGroup)).toBe("group-a0");
+  });
+
+  it("keeps a group's key when its first ACP call is replaced by its terminal event", () => {
+    // An ACP call is persisted as two events sharing a `tool_call_id` but with
+    // distinct `id`s: a started one and a terminal one. `handleEventForUI`
+    // swaps the started event for the terminal one in place, so keying the
+    // group on `events[0].id` would rename (and remount) it the moment the call
+    // finishes, collapsing the group the user had opened. The key must follow
+    // the stable `tool_call_id`, matching `getStepKey`.
+    const started: ACPToolCallEvent = {
+      kind: "ACPToolCallEvent",
+      id: "acp-started",
+      timestamp: "2026-04-16T19:32:29.828069",
+      source: "agent",
+      tool_call_id: "toolu_ABC",
+      title: "gh pr diff 490",
+      tool_kind: "execute",
+      status: "in_progress",
+      raw_input: { command: "gh pr diff 490" },
+      raw_output: null,
+      content: null,
+      is_error: false,
+    };
+    const terminal: ACPToolCallEvent = {
+      ...started,
+      id: "acp-completed",
+      status: "completed",
+    };
+    const [before] = groupEvents([started], 1, [started]);
+    const [after] = groupEvents([terminal], 1, [started, terminal]);
+    expect(renderedItemKey(before)).toBe("group-call:toolu_ABC");
+    expect(renderedItemKey(after)).toBe(renderedItemKey(before));
+  });
+});
+
+it("keeps reasoning in order and deduplicates an action only within its group", () => {
+  const reasoningOnly: MessageEvent = {
+    ...makeUserMessage("reasoning-only"),
+    source: "agent",
+    llm_message: {
+      role: "assistant",
+      content: [],
+      reasoning_content: "First consider the approach",
+    },
+  };
+  const action = {
+    ...makeBashAction("command"),
+    reasoning_content: "Then inspect the workspace",
+  };
+  const observation = makeBashObservation("result", action.id);
+  const separator = makeUserMessage("next-turn");
+  const events = [reasoningOnly, action, observation, separator, observation];
+
+  const items = groupEvents(events, 1);
+
+  expect(items).toMatchObject([
+    {
+      kind: "group",
+      reasoning: [
+        { id: reasoningOnly.id, text: "First consider the approach", index: 0 },
+        { id: action.id, text: "Then inspect the workspace", index: 1 },
+      ],
+    },
+    { kind: "single", event: separator },
+    {
+      kind: "group",
+      reasoning: [
+        { id: action.id, text: "Then inspect the workspace", index: 4 },
+      ],
+    },
+  ]);
+});
+
+it("places an unanchored resume after UTC history without timezone suffixes", () => {
+  vi.stubEnv("TZ", "America/New_York");
+  try {
+    const events = [
+      {
+        ...makeUserMessage("first-user"),
+        timestamp: "2026-11-05T18:32:35.376752",
+      },
+      {
+        ...makeUserMessage("first-reply"),
+        source: "agent" as const,
+        timestamp: "2026-11-05T18:32:44.416381",
+      },
+      {
+        ...makeUserMessage("last-user"),
+        timestamp: "2026-11-05T18:38:51.913504",
+      },
+      {
+        ...makeUserMessage("last-reply"),
+        source: "agent" as const,
+        timestamp: "2026-11-05T18:39:10.417648",
+      },
+    ];
+    const initialize = {
+      id: "initialize",
+      kind: "initialize" as const,
+      startedAt: Date.parse("2026-11-05T18:32:35Z"),
+      phase: "complete" as const,
+      steps: [],
+      open: false,
+    };
+    const resume = {
+      ...initialize,
+      id: "resume",
+      kind: "resume" as const,
+      startedAt: Date.parse("2026-11-05T23:20:00Z"),
+    };
+    const items = groupEvents(events, 1, events, 1, [initialize, resume]);
+    const order = items.map((item) =>
+      item.kind === "group"
+        ? item.session?.id
+        : item.kind === "single"
+          ? item.event.id
+          : item.action.id,
+    );
+    expect(order).toEqual([
+      "first-user",
+      "initialize",
+      "first-reply",
+      "last-user",
+      "last-reply",
+      "resume",
+    ]);
+  } finally {
+    vi.unstubAllEnvs();
+  }
+});
+
+describe("groupEvents - reactions", () => {
+  const reactAction = (thought: TextContent[]): ActionEvent =>
+    ({
+      ...makeBashAction("react-1", thought),
+      action: { kind: "ReactAction", emoji: "eyes", message_id: null },
+      tool_name: "react",
+    }) as unknown as ActionEvent;
+  const reactResult = (actionId: string): ObservationEvent =>
+    ({
+      ...makeBashObservation("react-obs-1", actionId),
+      tool_name: "react",
+      observation: {
+        kind: "ReactionObservation",
+        content: [{ type: "text", text: "Reacted :eyes:" }],
+        is_error: false,
+        target_event_id: "msg-1",
+        emoji: "eyes",
+        removed: false,
+      },
+    }) as unknown as ObservationEvent;
+
+  it("keeps the agent's narration on a reaction and drops its card", () => {
+    const action = reactAction([{ type: "text", text: "On it, looking now." }]);
+    const result_ = reactResult(action.id);
+
+    const result = groupEvents([result_], undefined, [action, result_]);
+
+    expect(result).toEqual([{ kind: "thought", action, index: 0 }]);
+  });
+
+  it("renders nothing for a reaction without narration", () => {
+    const action = reactAction([]);
+    const result_ = reactResult(action.id);
+
+    expect(groupEvents([result_], undefined, [action, result_])).toEqual([]);
+  });
+});
+
+describe("groupEvents - message edits", () => {
+  const editAction = (thought: TextContent[]): ActionEvent =>
+    ({
+      ...makeBashAction("edit-1", thought),
+      action: {
+        kind: "EditMessageAction",
+        old_str: "Port?",
+        new_str: "~~Port?~~ [Edit: 8080.]",
+      },
+      tool_name: "edit_message",
+    }) as unknown as ActionEvent;
+  const editResult = (actionId: string): ObservationEvent =>
+    ({
+      ...makeBashObservation("edit-obs-1", actionId),
+      tool_name: "edit_message",
+      observation: {
+        kind: "EditMessageObservation",
+        content: [{ type: "text", text: "Edited." }],
+        is_error: false,
+        target_event_id: "msg-1",
+        edited_text: "~~Port?~~ [Edit: 8080.]",
+      },
+    }) as unknown as ObservationEvent;
+
+  it("keeps the agent's narration on an edit and drops its card", () => {
+    const action = editAction([
+      { type: "text", text: "Striking my question." },
+    ]);
+    const result_ = editResult(action.id);
+
+    const result = groupEvents([result_], undefined, [action, result_]);
+
+    expect(result).toEqual([{ kind: "thought", action, index: 0 }]);
+  });
+
+  it("renders nothing for an edit without narration", () => {
+    const action = editAction([]);
+    const result_ = editResult(action.id);
+
+    expect(groupEvents([result_], undefined, [action, result_])).toEqual([]);
+  });
+});
+
+describe("isToolRowItem", () => {
+  const single = (event: OpenHandsEvent) =>
+    ({ kind: "single", event, index: 0 }) as const;
+
+  it("treats a group and standalone tool cards as tool rows", () => {
+    // A group and every standalone row that paints `GenericEventMessage` /
+    // `HookExecutionEventMessage` carry the trim, so a reply after one must
+    // trim. A plain user message and an agent error paint their own box.
+    expect(isToolRowItem({ kind: "group", events: [], startIndex: 0 })).toBe(
+      true,
+    );
+    expect(isToolRowItem(single(makeBashAction("a1")))).toBe(true);
+    expect(isToolRowItem(single(makeHookExecutionEvent("h1")))).toBe(true);
+    expect(isToolRowItem(single(makeAgentErrorEvent("e1")))).toBe(false);
+    expect(isToolRowItem(single(makeUserMessage("m1")))).toBe(false);
+  });
+
+  it("does not treat reply-only actions, thoughts, or plan previews as tool rows", () => {
+    expect(isToolRowItem(single(makeFinishAction("f1")))).toBe(false);
+    expect(isToolRowItem(single(makeThinkAction("t1")))).toBe(false);
+    expect(isToolRowItem(single(makePlanObs("o1", "a1")))).toBe(false);
+    expect(
+      isToolRowItem({
+        kind: "thought",
+        action: makeThinkAction("t1"),
+        index: 0,
+      }),
+    ).toBe(false);
+  });
+
+  it("treats a markdown artifact and a rejection as tool rows", () => {
+    expect(isToolRowItem(single(makeMarkdownFileEditorAction("a1")))).toBe(
+      true,
+    );
+    expect(isToolRowItem(single(makeUserRejectObservation("r1", "a1")))).toBe(
+      true,
+    );
+  });
+
+  it("treats a Skill Ready user message as a tool row", () => {
+    const withSkill: MessageEvent = {
+      ...makeUserMessage("m1"),
+      activated_skills: ["canvas"],
+      extended_content: [{ type: "text", text: "ready" }],
+    };
+    expect(isToolRowItem(single(withSkill))).toBe(true);
   });
 });

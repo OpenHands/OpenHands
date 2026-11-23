@@ -2,7 +2,7 @@ import { cn } from "#/utils/utils";
 
 /** Primary modal heading on dark overlay surfaces. */
 export const modalTitleClassName = cn(
-  "text-xl leading-6 -tracking-[0.01em] font-medium text-modal-title",
+  "text-xl leading-6 tracking-title font-medium text-modal-title",
 );
 
 /** Compact modal header bar title (folder browser, manage workspaces). */

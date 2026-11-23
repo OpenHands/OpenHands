@@ -12,8 +12,7 @@ function hasLlmProfileWithApiKey(
 
 function hasConfiguredLlmInSettings(settings: Settings | undefined): boolean {
   const llm = settings?.agent_settings?.llm as
-    | { model?: unknown; auth_type?: unknown }
-    | undefined;
+    { model?: unknown; auth_type?: unknown } | undefined;
   const hasModel = typeof llm?.model === "string" && llm.model.length > 0;
   const hasAuth =
     settings?.llm_api_key_set === true ||

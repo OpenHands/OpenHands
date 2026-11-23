@@ -6,7 +6,11 @@ import { once } from "node:events";
 import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
-import { describe, expect, it, beforeAll, afterAll, afterEach } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
+import { server as mswServer } from "#/mocks/node";
+
+beforeAll(() => mswServer.close());
+afterAll(() => mswServer.listen({ onUnhandledFrame: "bypass" }));
 
 const repoRoot = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
