@@ -10,10 +10,11 @@ import { useSidebarMobileNav } from "./sidebar-mobile-nav-context";
 
 export function SidebarMobileMenuToggle() {
   const { t } = useTranslation("openhands");
-  const { isOpen, toggle } = useSidebarMobileNav();
+  const { isOpen, toggle, toggleButtonRef } = useSidebarMobileNav();
 
   return (
     <button
+      ref={toggleButtonRef}
       type="button"
       data-testid="sidebar-mobile-menu-toggle"
       onClick={toggle}

@@ -1,3 +1,4 @@
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -86,7 +87,11 @@ vi.mock("#/hooks/use-is-archived-conversation", () => ({
 }));
 
 async function openRenameInput(user: ReturnType<typeof userEvent.setup>) {
-  render(<ConversationName />);
+  render(
+    <QueryClientProvider client={new QueryClient()}>
+      <ConversationName />
+    </QueryClientProvider>,
+  );
 
   await user.click(screen.getByLabelText("COMMON$MORE_OPTIONS"));
   await user.click(screen.getByTestId("rename-button"));
