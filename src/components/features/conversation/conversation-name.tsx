@@ -34,6 +34,8 @@ export function ConversationName() {
     React.useState(false);
   const inputRef = React.useRef<HTMLInputElement>(null);
   const ellipsisAnchorRef = React.useRef<HTMLButtonElement>(null);
+  const cancelTitleBlurRef = React.useRef(false);
+  const focusEllipsisAfterCancelRef = React.useRef(false);
 
   // Use the custom hook for context menu handlers
   const {
@@ -78,6 +80,11 @@ export function ConversationName() {
   };
 
   const handleBlur = () => {
+    if (cancelTitleBlurRef.current) {
+      cancelTitleBlurRef.current = false;
+      return;
+    }
+
     if (inputRef.current?.value && conversationId) {
       const trimmed = inputRef.current.value.trim();
       if (trimmed !== displayTitle) {
@@ -95,6 +102,21 @@ export function ConversationName() {
       inputRef.current.value = displayTitle;
     }
 
+    setTitleMode("view");
+  };
+
+  const handleKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
+    if (event.nativeEvent.isComposing || event.key !== "Escape") {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+    cancelTitleBlurRef.current = true;
+    focusEllipsisAfterCancelRef.current = true;
+    const input = event.currentTarget;
+    input.value = displayTitle;
+    setContextMenuOpen(false);
     setTitleMode("view");
   };
 
@@ -140,6 +162,12 @@ export function ConversationName() {
   React.useEffect(() => {
     if (titleMode === "edit") {
       inputRef.current?.focus();
+      return;
+    }
+
+    if (focusEllipsisAfterCancelRef.current) {
+      focusEllipsisAfterCancelRef.current = false;
+      ellipsisAnchorRef.current?.focus();
     }
   }, [titleMode]);
 
@@ -166,6 +194,7 @@ export function ConversationName() {
             data-testid="conversation-name-input"
             onClick={handleInputClick}
             onBlur={handleBlur}
+            onKeyDown={handleKeyDown}
             onKeyUp={handleKeyUp}
             type="text"
             defaultValue={displayTitle}
