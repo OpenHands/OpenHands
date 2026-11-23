@@ -175,7 +175,7 @@
     "globals": "17.14.0",
     "husky": "9.1.7",
     "jsdom": "31.0.1",
-    "lint-staged": "17.6.0",
+    "lint-staged": "17.6.1",
     "msw": "3.0.5",
     "png2icons": "2.0.1",
     "postcss-prefix-selector": "2.2.1",
