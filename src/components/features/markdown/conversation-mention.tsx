@@ -2,6 +2,7 @@ import React from "react";
 import { ExtraProps } from "react-markdown";
 import { NavigationLink } from "#/components/shared/navigation-link";
 import { useIsExperimentalFeatureEnabled } from "#/hooks/query/use-experimental-features";
+import { useProjectsEnabled } from "#/hooks/query/use-projects";
 
 /** The Agent Server experimental feature that turns mentions on. */
 export const CONVERSATION_MENTIONS_FEATURE_KEY = "conversation_mentions";
@@ -57,10 +58,13 @@ export function ConversationMention({
   children: React.ReactNode;
 }) {
   // While the feature is off a mention reads as its title, plain text.
-  const enabled = useIsExperimentalFeatureEnabled(
+  // Projects' header lines name conversations by mention, so Projects
+  // turns them on too.
+  const mentionsEnabled = useIsExperimentalFeatureEnabled(
     CONVERSATION_MENTIONS_FEATURE_KEY,
   );
-  if (!enabled) {
+  const projectsEnabled = useProjectsEnabled();
+  if (!mentionsEnabled && !projectsEnabled) {
     return <span data-testid="conversation-mention-text">{children}</span>;
   }
   return (

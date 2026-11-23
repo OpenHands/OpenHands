@@ -53,3 +53,9 @@ export class ConcurrencyLimiter {
  * surfaces responsive without saturating the pool.
  */
 export const automationRunRequestsLimiter = new ConcurrencyLimiter(3);
+
+/**
+ * Bounds the per-key GETs the KV viewer issues after listing an automation's
+ * keys, so a store with many keys does not exhaust the service's DB pool.
+ */
+export const automationKvRequestsLimiter = new ConcurrencyLimiter(5);

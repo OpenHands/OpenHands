@@ -1,5 +1,5 @@
 import React from "react";
-import { Pin } from "lucide-react";
+import { Pin, Plus } from "lucide-react";
 import { NavigationLink } from "#/components/shared/navigation-link";
 import { StyledTooltip } from "#/components/shared/buttons/styled-tooltip";
 import { useNavigation } from "#/context/navigation-context";
@@ -33,6 +33,13 @@ export interface SidebarNavLinkPinAction {
   testId: string;
 }
 
+/** A "+" beside the row that creates one of what the row lists. */
+export interface SidebarNavLinkAddAction {
+  onClick: () => void;
+  label: string;
+  testId: string;
+}
+
 interface SidebarNavLinkProps {
   to: string;
   label: string;
@@ -50,8 +57,12 @@ interface SidebarNavLinkProps {
    * (e.g. the Extensions link being active on /mcp and /plugins too).
    */
   forceActive?: boolean;
+  /** When true, never shows the active style, even on a matching path. */
+  forceInactive?: boolean;
   /** Pin-as-home toggle; rendered only when the sidebar is expanded. */
   pinAction?: SidebarNavLinkPinAction;
+  /** Always-visible "+" action; rendered only when the sidebar is expanded. */
+  addAction?: SidebarNavLinkAddAction;
 }
 
 export function SidebarNavLink({
@@ -65,11 +76,18 @@ export function SidebarNavLink({
   collapsed = false,
   hoverContent,
   forceActive = false,
+  forceInactive = false,
   pinAction,
+  addAction,
 }: SidebarNavLinkProps) {
   const { currentPath } = useNavigation();
-  const active = forceActive || isPathActive(currentPath, to, end);
-  const showPinAction = !collapsed && pinAction != null;
+  const active =
+    !forceInactive && (forceActive || isPathActive(currentPath, to, end));
+  // NavigationLink derives its own aria-current from the path unless told otherwise.
+  let ariaCurrent: "page" | "false" | undefined;
+  if (active) ariaCurrent = "page";
+  else if (forceInactive) ariaCurrent = "false";
+  const showPinAction = !collapsed && (pinAction != null || addAction != null);
 
   const link = (
     <NavigationLink
@@ -78,7 +96,7 @@ export function SidebarNavLink({
       data-testid={testId}
       tabIndex={disabled ? -1 : 0}
       aria-label={collapsed ? label : undefined}
-      aria-current={active ? "page" : undefined}
+      aria-current={ariaCurrent}
       // Announce the disabled state to assistive tech. The visual disabled
       // styling plus tabIndex=-1 + preventDefault gives sighted/keyboard users
       // the right behaviour already; this closes the screen-reader gap so the
@@ -115,6 +133,31 @@ export function SidebarNavLink({
   );
 
   if (!collapsed) {
+    if (addAction) {
+      return (
+        <div className="relative">
+          {link}
+          <button
+            type="button"
+            data-testid={addAction.testId}
+            aria-label={addAction.label}
+            title={addAction.label}
+            onClick={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              addAction.onClick();
+            }}
+            className={cn(
+              "absolute right-1.5 top-1/2 -translate-y-1/2",
+              "flex shrink-0 cursor-pointer items-center justify-center rounded-md p-1",
+              "text-muted hover:bg-contrast/10 hover:text-contrast",
+            )}
+          >
+            <Plus className="h-3.5 w-3.5" aria-hidden />
+          </button>
+        </div>
+      );
+    }
     if (!pinAction) return link;
 
     // NavigationLink renders an <a>, so the pin toggle is an absolutely

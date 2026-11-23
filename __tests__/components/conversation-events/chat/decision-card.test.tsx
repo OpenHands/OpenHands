@@ -224,49 +224,69 @@ it("does not offer to resend an answer already saved when run capacity is full",
   );
 });
 
-it("keeps the decision outside collapsed activity and submits a non-default option with words once", async () => {
-  let finish!: (
-    value: Awaited<ReturnType<ConversationClient["answerAskUser"]>>,
-  ) => void;
-  const answer = vi
-    .spyOn(ConversationClient.prototype, "answerAskUser")
-    .mockImplementation(
-      () =>
-        new Promise((resolve) => {
-          finish = resolve;
-        }),
-    );
-  renderWithProviders(<Transcript />);
-  const card = await screen.findByRole("region", {
-    name: question.action.question,
-  });
-  const user = userEvent.setup();
-  const option = await within(card).findByRole("button", {
-    name: /PostgreSQL/,
-  });
-  await user.type(within(card).getByRole("textbox"), "Use the EU region");
-  await user.dblClick(option);
-  expect(answer).toHaveBeenCalledOnce();
-  expect(answer).toHaveBeenCalledWith("test-conversation-id", question.id, {
-    optionIndex: 1,
-    text: "Use the EU region",
-  });
-  expect(option).toBeDisabled();
-  await act(async () =>
-    finish({
-      id: "answer-1",
-      timestamp: "2026-11-15T12:00:02Z",
-      kind: "AskUserAnswerEvent",
-      source: "user",
-      ask_id: question.id,
-      option_index: 1,
-      option_label: "PostgreSQL",
+it.each<AskUserAction["kind"]>([
+  "AskUserAction",
+  "AskUserForConversationAction",
+])(
+  "renders %s outside collapsed activity and submits an answer once",
+  async (kind) => {
+    useEventStore.getState().clearEventsForConversation("test-conversation-id");
+    useEventStore.getState().addEvents([
+      {
+        ...question,
+        action: {
+          ...question.action,
+          kind,
+          ...(kind === "AskUserForConversationAction"
+            ? { for_conversation: "worker-conversation-id" }
+            : {}),
+        },
+      },
+      result,
+    ]);
+    let finish!: (
+      value: Awaited<ReturnType<ConversationClient["answerAskUser"]>>,
+    ) => void;
+    const answer = vi
+      .spyOn(ConversationClient.prototype, "answerAskUser")
+      .mockImplementation(
+        () =>
+          new Promise((resolve) => {
+            finish = resolve;
+          }),
+      );
+    renderWithProviders(<Transcript />);
+    const card = await screen.findByRole("region", {
+      name: question.action.question,
+    });
+    const user = userEvent.setup();
+    const option = await within(card).findByRole("button", {
+      name: /PostgreSQL/,
+    });
+    await user.type(within(card).getByRole("textbox"), "Use the EU region");
+    await user.dblClick(option);
+    expect(answer).toHaveBeenCalledOnce();
+    expect(answer).toHaveBeenCalledWith("test-conversation-id", question.id, {
+      optionIndex: 1,
       text: "Use the EU region",
-    }),
-  );
-  expect(await within(card).findByText("ASK_USER$ANSWERED")).toBeVisible();
-  expect(within(card).queryByRole("button")).not.toBeInTheDocument();
-});
+    });
+    expect(option).toBeDisabled();
+    await act(async () =>
+      finish({
+        id: "answer-1",
+        timestamp: "2026-11-15T12:00:02Z",
+        kind: "AskUserAnswerEvent",
+        source: "user",
+        ask_id: question.id,
+        option_index: 1,
+        option_label: "PostgreSQL",
+        text: "Use the EU region",
+      }),
+    );
+    expect(await within(card).findByText("ASK_USER$ANSWERED")).toBeVisible();
+    expect(within(card).queryByRole("button")).not.toBeInTheDocument();
+  },
+);
 
 it("allows words alone, preserves them after a failed request, and permits retry", async () => {
   const answer = vi
