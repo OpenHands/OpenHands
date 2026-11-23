@@ -50,6 +50,7 @@ import {
   type CloudTelemetryContextInput,
   type DeploymentKind,
 } from "#/services/telemetry-context";
+import { randomUUID } from "#/utils/random-uuid";
 
 const TELEMETRY_CONSENT_KEY = "openhands-telemetry-consent";
 const TELEMETRY_CONSENT_PENDING_CLOUD_SYNC_KEY =
@@ -939,7 +940,7 @@ export async function submitPrivateFeedback(message: string): Promise<void> {
     throw new Error("Feedback survey unavailable");
   }
 
-  const response = await fetch(`${host}/i/v0/e/`, {
+  const response = await fetch(`${host}/capture/`, {
     method: "POST",
     credentials: "omit",
     referrerPolicy: "no-referrer",
@@ -947,7 +948,7 @@ export async function submitPrivateFeedback(message: string): Promise<void> {
     body: JSON.stringify({
       api_key: apiKey,
       event: "survey sent",
-      distinct_id: crypto.randomUUID(),
+      distinct_id: randomUUID(),
       properties: {
         $survey_id: surveyId,
         $survey_questions: [{ id: question.id, question: question.question }],
@@ -960,8 +961,12 @@ export async function submitPrivateFeedback(message: string): Promise<void> {
     }),
   });
   if (!response.ok) throw new Error("Feedback submission failed");
-  const result = (await response.json()) as { quota_limited?: string[] };
-  if (result.quota_limited?.length) throw new Error("Feedback quota exceeded");
+  const result = (await response.json()) as {
+    status?: string;
+    quota_limited?: string[];
+  } | null;
+  if (result?.quota_limited?.length) throw new Error("Feedback quota exceeded");
+  if (result?.status !== "Ok") throw new Error("Feedback submission failed");
 }
 
 /**

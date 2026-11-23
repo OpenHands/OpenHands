@@ -60,6 +60,7 @@ describe("FeedbackButton", () => {
     );
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(fetchMock.mock.calls[0][0]).toContain("token=phc_feedback_project");
+    expect(fetchMock.mock.calls[1][0]).toBe("https://z.openhands.dev/capture/");
     const [, options] = fetchMock.mock.calls[1];
     const body = JSON.parse(options.body);
     expect(body.api_key).toBe("phc_feedback_project");
@@ -72,6 +73,34 @@ describe("FeedbackButton", () => {
       { id: "question-1", question: "Your feedback?" },
     ]);
     expect(localStorage.getItem("openhands-telemetry-consent")).toBe("denied");
+  });
+
+  it("rejects a successful HTTP response without a capture acknowledgment", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({
+            surveys: [
+              {
+                id: "01a19e14-c300-0000-d661-ad6bb5304fbe",
+                questions: [{ id: "question-1", question: "Your feedback?" }],
+              },
+            ],
+          }),
+        })
+        .mockResolvedValueOnce({ ok: true, json: async () => null }),
+    );
+    render(<FeedbackButton />);
+    fireEvent.click(screen.getByRole("button", { name: "FEEDBACK$TITLE" }));
+    const input = screen.getByLabelText("FEEDBACK$QUESTION");
+    fireEvent.change(input, { target: { value: "A draft" } });
+    fireEvent.click(screen.getByRole("button", { name: "FEEDBACK$SEND" }));
+    await waitFor(() => expect(screen.getByRole("alert")).toBeInTheDocument());
+    expect(input).toHaveValue("A draft");
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
   });
 
   it("preserves the message after a failed submission", async () => {
