@@ -5,6 +5,8 @@ import {
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { PluginSpec } from "#/api/conversation-service/agent-server-conversation-service.types";
 import { SuggestedTask } from "#/utils/types";
+import { type WorkItemReference } from "#/utils/work-item-reference";
+import { suggestedTaskToWorkItem } from "#/utils/suggested-task-work-item";
 import { Provider } from "#/types/settings";
 import { useTracking } from "#/hooks/use-tracking";
 import { useLlmProfiles } from "#/hooks/query/use-llm-profiles";
@@ -37,6 +39,13 @@ export interface CreateConversationVariables {
     branch?: string;
   };
   suggestedTask?: SuggestedTask;
+  /**
+   * A backlog work item this launch is explicitly associated with (see
+   * `work-item-reference.ts`). When set, the conversation is named after the
+   * item instead of by AI title generation. Callers that launch from an issue
+   * tracker set this; ordinary launches omit it.
+   */
+  workItem?: WorkItemReference;
   conversationInstructions?: string;
   parentConversationId?: string;
   agentType?: "default" | "plan";
@@ -122,7 +131,15 @@ export const useCreateConversation = ({
         llmProfile,
         sandboxId,
         suppressRouterAtStart,
+        workItem,
+        suggestedTask,
       } = variables;
+
+      // An explicit backlog work item may arrive either directly (`workItem`)
+      // or via the repo's `SuggestedTask` contract; the latter only names the
+      // conversation when it is an actual issue, never a PR chore.
+      const resolvedWorkItem =
+        workItem ?? suggestedTaskToWorkItem(suggestedTask);
 
       // The active AgentProfile is the default launch profile for new
       // conversations (#3727), on both local and cloud.
@@ -140,6 +157,7 @@ export const useCreateConversation = ({
           ...(automationSetupTags ? { automationSetupTags } : {}),
           automationSetupContext,
           conversationInstructions,
+          ...(resolvedWorkItem ? { workItem: resolvedWorkItem } : {}),
           plugins,
           metadata: repository
             ? {

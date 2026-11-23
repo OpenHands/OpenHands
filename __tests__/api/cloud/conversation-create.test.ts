@@ -94,6 +94,75 @@ describe("AgentServerConversationService cloud branch", () => {
     expect(result.app_conversation_id).toBeNull();
   });
 
+  it("createConversation names the conversation after a linked work item on the cloud path", async () => {
+    fetchMock.mockResolvedValue(
+      mockJsonResponse({
+        id: "task-125",
+        created_by_user_id: null,
+        status: "WORKING",
+        detail: null,
+        app_conversation_id: null,
+        agent_server_url: null,
+        request: {},
+        created_at: "2026-05-06T00:00:00Z",
+        updated_at: "2026-05-06T00:00:00Z",
+      }),
+    );
+
+    await AgentServerConversationService.createConversation({
+      initialUserMsg: "work on the issue",
+      workItem: {
+        provider: "github",
+        id: "142",
+        title: "Mission Provider Filtering",
+      },
+    });
+
+    const [, init] = getFetchCall(fetchMock);
+    const requestBody = getJsonBody(init) as {
+      title?: string | null;
+      generate_title_on_submit?: boolean;
+      tags?: Record<string, string>;
+    };
+
+    expect(requestBody.title).toBe("GH-142 \u2014 Mission Provider Filtering");
+    expect(requestBody.generate_title_on_submit).toBe(false);
+    expect(requestBody.tags).toMatchObject({
+      workitemprovider: "github",
+      workitemid: "142",
+      workitemtitle: "Mission Provider Filtering",
+    });
+  });
+
+  it("createConversation keeps AI titling and sends no title on the cloud path without a work item", async () => {
+    fetchMock.mockResolvedValue(
+      mockJsonResponse({
+        id: "task-126",
+        created_by_user_id: null,
+        status: "WORKING",
+        detail: null,
+        app_conversation_id: null,
+        agent_server_url: null,
+        request: {},
+        created_at: "2026-05-06T00:00:00Z",
+        updated_at: "2026-05-06T00:00:00Z",
+      }),
+    );
+
+    await AgentServerConversationService.createConversation({
+      initialUserMsg: "just chatting",
+    });
+
+    const [, init] = getFetchCall(fetchMock);
+    const requestBody = getJsonBody(init) as {
+      title?: string | null;
+      generate_title_on_submit?: boolean;
+    };
+
+    expect(requestBody.title).toBeNull();
+    expect(requestBody.generate_title_on_submit).toBe(true);
+  });
+
   it("createConversation forwards the route-at-start suffix as agent_launch_additions on the cloud path", async () => {
     fetchMock.mockResolvedValue(
       mockJsonResponse({

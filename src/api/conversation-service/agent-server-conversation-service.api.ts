@@ -86,6 +86,11 @@ import {
 import { isPlannerConversationOf } from "#/utils/plan-file";
 import { buildAutomationSetupModeTags } from "#/utils/automation-draft-tags";
 import {
+  buildWorkItemTags,
+  formatWorkItemTitle,
+  type WorkItemReference,
+} from "#/utils/work-item-reference";
+import {
   AUTOMATION_SETUP_SYSTEM_SUFFIX,
   buildAutomationFormUpdateClientTool,
 } from "../automation-form-client-tool";
@@ -536,6 +541,13 @@ export interface CreateConversationOptions {
   suppressRouterAtStart?: boolean;
   /** Local only: the launched ACP profile's server, for the conversation tag. */
   acpServer?: string;
+  /**
+   * A backlog work item this launch was explicitly associated with (see
+   * `work-item-reference.ts`). When set, the conversation is named after the
+   * item and the snapshot is persisted, instead of being named by the AI
+   * title generator. Omitted for every ordinary launch.
+   */
+  workItem?: WorkItemReference | null;
   // The LLM profile the launched agent profile runs. When set and no explicit
   // title_llm_profile preference exists, title generation uses this profile so
   // both the agent and its title use the same model.
@@ -625,6 +637,7 @@ class AgentServerConversationService {
       profileHasRouter,
       acpServer,
       llmProfile,
+      workItem,
     } = options;
 
     if (getActiveBackend().backend.kind === "cloud") {
@@ -642,8 +655,13 @@ class AgentServerConversationService {
         options.runRouterAtConversationStart ?? false,
         options.hasActiveMetaProfile ?? false,
       );
+      // A linked work item names the conversation from its launch-time
+      // snapshot; an explicit user title (conversationInstructions) still wins,
+      // and every ordinary launch keeps AI title generation.
+      const workItemTitle = formatWorkItemTitle(workItem);
+      const namedByWorkItem = !!workItemTitle && !conversationInstructions;
       const request: AppConversationStartRequest = {
-        generate_title_on_submit: true,
+        generate_title_on_submit: !namedByWorkItem,
         initial_message: initialUserMsg
           ? {
               role: "user",
@@ -660,7 +678,7 @@ class AgentServerConversationService {
               ],
             }
           : null,
-        title: conversationInstructions ?? null,
+        title: conversationInstructions ?? workItemTitle ?? null,
         selected_repository: metadata?.selected_repository ?? null,
         selected_branch: metadata?.selected_branch ?? null,
         git_provider: metadata?.git_provider ?? null,
@@ -681,8 +699,15 @@ class AgentServerConversationService {
             }
           : {}),
         trigger: "gui",
-        ...(automationSetup
-          ? { tags: buildAutomationSetupModeTags(automationSetupTags) }
+        ...(automationSetup || workItem
+          ? {
+              tags: {
+                ...(automationSetup
+                  ? buildAutomationSetupModeTags(automationSetupTags)
+                  : {}),
+                ...buildWorkItemTags(workItem),
+              },
+            }
           : {}),
         ...(automationSetup && agentProfileKind !== "acp"
           ? {
@@ -763,6 +788,7 @@ class AgentServerConversationService {
       suppressRouterAtStart: options.suppressRouterAtStart,
       acpServer,
       titleLlmProfile,
+      workItem,
     });
 
     // Persist the selected workspace as a server-side conversation tag so local
@@ -793,15 +819,29 @@ class AgentServerConversationService {
     }
 
     const telemetryDistinctId = await getTelemetryDistinctId();
-    const data = await new ConversationClient(
+    const client = new ConversationClient(
       getAgentServerClientOptions({ timeout: CREATE_CONVERSATION_TIMEOUT_MS }),
-    ).createConversation<DirectConversationInfo>({
+    );
+    const data = await client.createConversation<DirectConversationInfo>({
       ...payload,
       ...(conversationRuntime
         ? { conversation_runtime: conversationRuntime }
         : {}),
       ...(telemetryDistinctId ? { user_id: telemetryDistinctId } : {}),
     });
+
+    // A linked work item names the conversation from its launch-time snapshot.
+    // The agent-server's create payload has no `title` field (only `autotitle`,
+    // already suppressed in the builder), so the name is applied with a
+    // follow-up rename. Best effort: a failed rename must not fail the launch —
+    // the snapshot tags still carry the name for the display path.
+    const workItemTitle = formatWorkItemTitle(workItem);
+    if (workItemTitle) {
+      await client
+        .updateConversation(data.id, { title: workItemTitle })
+        .catch(() => undefined);
+    }
+
     const localBackend = getEffectiveLocalBackend();
     if (!localBackend) throw new NoBackendAvailableError();
 
@@ -834,6 +874,7 @@ class AgentServerConversationService {
         initial_message: payload.initial_message as
           AppConversationStartRequest["initial_message"] | undefined,
         plugins: plugins ?? null,
+        ...(workItemTitle ? { title: workItemTitle } : {}),
       },
       created_at: data.created_at,
       updated_at: data.updated_at,

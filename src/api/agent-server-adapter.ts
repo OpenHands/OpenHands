@@ -52,6 +52,12 @@ import {
   buildAutomationSetupModeTags,
 } from "#/utils/automation-draft-tags";
 import {
+  WORK_ITEM_TAG_KEYS,
+  buildWorkItemTags,
+  formatWorkItemTitle,
+  type WorkItemReference,
+} from "#/utils/work-item-reference";
+import {
   buildSkillEnablementFilter,
   findInvokedCatalogSkill,
   profileSkillEnablement,
@@ -665,6 +671,10 @@ export const RESERVED_CONVERSATION_TAG_KEYS: ReadonlySet<string> = new Set([
   // hovercard names the profile instead of echoing the raw id and revision.
   "agentprofileid",
   "agentprofilerevision",
+  // The launch-time work-item snapshot (see `work-item-reference.ts`): the
+  // display name already renders it, so it must not also appear as an
+  // editable tag chip.
+  ...WORK_ITEM_TAG_KEYS,
 ]);
 
 /**
@@ -1112,6 +1122,14 @@ export interface StartConversationOptions {
   suppressRouterAtStart?: boolean;
   /** The ACP profile's server, stamped as the `acpserver` tag. */
   acpServer?: string;
+  /**
+   * A backlog work item the launch was explicitly associated with. When set,
+   * the conversation is named after the item (its identifier + title) and the
+   * snapshot is persisted as tags, so the name survives reload/resume and a
+   * later issue-title edit does not rename the conversation. Omitted for every
+   * ordinary launch, which keeps the existing title-generation behavior.
+   */
+  workItem?: WorkItemReference | null;
   titleLlmProfile?: string;
   runtimeServicesInfo?: RuntimeServicesInfo | null;
   executionRuntime?: AgentServerInfo["execution_runtime"];
@@ -1154,6 +1172,10 @@ export function buildCustomSecrets(
 export function buildStartConversationRequest(
   options: StartConversationOptions,
 ): ProfileStartConversationPayload {
+  // The work-item display name, when the launch was explicitly associated with
+  // one. Null for every ordinary launch, so the rest of the builder is
+  // unchanged. The name is derived purely from the launch-time snapshot.
+  const workItemTitle = formatWorkItemTitle(options.workItem);
   const launchSuffix = [
     buildRuntimeServicesSystemSuffix(options.runtimeServicesInfo),
     // A home-page model pick made before the first message is an explicit
@@ -1241,7 +1263,13 @@ export function buildStartConversationRequest(
       getConversationConfirmationPolicy(conversationSettings),
     max_iterations: resolveMaxIterations(conversationSettings.max_iterations),
     stuck_detection: true,
-    autotitle: true,
+    // A linked work item already names the conversation, so title generation
+    // is suppressed — no LLM call is needed when a complete reference provides
+    // a valid name. Any other launch keeps autotitling. The name itself cannot
+    // ride this request: the agent-server's create payload has no `title`
+    // field (only `autotitle`), so the caller applies it with a follow-up
+    // rename once the conversation exists (see createConversation).
+    autotitle: !workItemTitle,
     ...(options.titleLlmProfile
       ? { title_llm_profile: options.titleLlmProfile }
       : {}),
@@ -1261,6 +1289,7 @@ export function buildStartConversationRequest(
     ...(options.agentProfileKind === "acp" && options.acpServer
       ? { [ACP_SERVER_TAG_KEY]: options.acpServer }
       : {}),
+    ...buildWorkItemTags(options.workItem),
     [CLIENT_SOURCE_TAG_KEY]: AGENT_CANVAS_SOURCE,
   };
 
@@ -1644,6 +1673,7 @@ export async function buildStartConversationRequestWithEncryptedSettings(options
   profileHasRouter?: boolean;
   suppressRouterAtStart?: boolean;
   acpServer?: string;
+  workItem?: WorkItemReference | null;
   titleLlmProfile?: string;
 }): Promise<Record<string, unknown>> {
   const [{ SecretsService }, { default: HooksService }] = await Promise.all([

@@ -17,7 +17,12 @@ import type {
   AppConversationPage,
   AppConversationStartTask,
 } from "#/api/conversation-service/agent-server-conversation-service.types";
-import { isPlaceholderConversationTitle } from "#/utils/conversation-title";
+import {
+  getAutomationWorkItemOverrideTitle,
+  getAutomationWorkItemTitleFromTags,
+  isPlaceholderConversationTitle,
+} from "#/utils/conversation-title";
+import { getWorkItemDisplayTitleFromTags } from "#/utils/work-item-reference";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import { useConversationLaunchStore } from "#/stores/conversation-launch-store";
 import { I18nKey } from "#/i18n/declaration";
@@ -181,10 +186,36 @@ export function useConversationDisplayTitleState() {
           Date.now() < Date.parse(generation.deadline_at)) ||
         optimisticPending
       );
+      // A launch-time work-item snapshot (persisted as conversation tags) names
+      // the conversation. It sits just below the server title — which carries
+      // the explicit user title *and* the same snapshot, so a user rename wins
+      // — and above the prompt/default fallbacks, so a work item keeps its name
+      // even if the server title is unavailable. AI title generation is
+      // suppressed at launch for these conversations, so this never races a
+      // generated title. Tags are read from whichever record we hold, even when
+      // its title is still a placeholder (and so filtered out of `candidates`).
+      const tags = (conversation ?? active ?? listed)?.tags;
+      const workItemTitle = getWorkItemDisplayTitleFromTags(tags) ?? null;
+      // An automation-born conversation carries the automation's configured
+      // name in its tags; when it is also linked to a work item, prefix that
+      // name so a run is attributable to both the agent and the backlog item
+      // ("🧬 CIPHER: GH-142 — Mission Provider Filtering"). The automation SDK
+      // writes its own machine title into the server title, which the composed
+      // name replaces; a genuine user rename still wins the slot.
+      const automationWorkItemTitle =
+        getAutomationWorkItemTitleFromTags(tags) ?? null;
+      const overrideTitle = getAutomationWorkItemOverrideTitle(
+        tags,
+        serverTitle,
+        realId ?? "",
+      );
       const title = pending
         ? t(I18nKey.SIDEBAR$NEW_CHAT)
-        : generation?.title?.trim() ||
+        : overrideTitle ||
+          generation?.title?.trim() ||
           serverTitle?.trim() ||
+          automationWorkItemTitle ||
+          workItemTitle ||
           activeTask?.request.title?.trim() ||
           prompt?.trim().replace(/\s+/g, " ") ||
           fallback?.trim() ||
