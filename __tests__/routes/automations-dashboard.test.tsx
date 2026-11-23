@@ -76,6 +76,7 @@ function mockServiceAccountsEnabled(isServiceAccountsEnabled: boolean) {
     isAgentProfilesEnabled: false,
     isServiceAccountsEnabled,
     isOauthV2LoginEnabled: false,
+    isClientToolsEnabled: false,
   };
   vi.mocked(fetchCloudIntegrationsConfig).mockResolvedValue(config);
 }

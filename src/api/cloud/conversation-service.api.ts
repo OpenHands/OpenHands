@@ -167,6 +167,36 @@ export async function createCloudAppConversation(
   return data;
 }
 
+/** How the instance answered a request to attach a saved secret. */
+export interface CloudSecretAttachResult {
+  /**
+   * `attached`: the running conversation has it. `deferred`: the sandbox is
+   * not running, so nothing was attached. `not_found`: no saved secret by that
+   * name. `error`: the push to the conversation failed.
+   */
+  status: "attached" | "deferred" | "not_found" | "error";
+  /** Detail for the caller; never carries the secret value. */
+  message?: string | null;
+}
+
+/**
+ * Attach a saved secret to a running cloud conversation by name:
+ * `POST /api/v1/app-conversations/{id}/secrets`. The instance resolves the
+ * value server-side, so it never leaves the browser a second time.
+ */
+export async function attachCloudConversationSecret(
+  conversationId: string,
+  secretName: string,
+): Promise<CloudSecretAttachResult> {
+  const backend = getActiveCloudBackend();
+  return callCloudProxy<CloudSecretAttachResult>({
+    backend,
+    method: "POST",
+    path: `/api/v1/app-conversations/${conversationId}/secrets`,
+    body: { secret_name: secretName },
+  });
+}
+
 /**
  * Download a v1 app-conversation as a ZIP from the cloud backend. Mirrors
  * the local `AgentServerConversationService.downloadConversation` interface but

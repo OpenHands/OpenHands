@@ -1,7 +1,12 @@
 import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import {
+  __resetActiveStoreForTests,
+  setActiveSelection,
+  setRegisteredBackends,
+} from "#/api/backend-registry/active-store";
 import { server } from "#/mocks/node";
 import { SecretRequestCard } from "#/components/features/conversation/secret-request-card";
 import { handleRequestSecretAction } from "#/services/secret-request";
@@ -167,6 +172,95 @@ describe("secret request user flow", () => {
       expect(writes).toEqual([]);
       expect(attachments).toEqual([]);
       expect(valueReads).toBe(0);
+    },
+  );
+});
+
+describe("secret request user flow on a cloud backend", () => {
+  const runtimeUrl = "https://runtime.example.dev";
+  let attachStatus: string;
+
+  beforeEach(() => {
+    __resetActiveStoreForTests();
+    setRegisteredBackends([
+      {
+        id: "cloud-1",
+        name: "Cloud",
+        host: "https://app.example.dev",
+        apiKey: "key",
+        kind: "cloud",
+      },
+    ]);
+    setActiveSelection({ backendId: "cloud-1", orgId: null });
+    attachStatus = "attached";
+    server.use(
+      http.get("*/api/v1/secrets/search", () =>
+        HttpResponse.json({ items: [], next_page_id: null }),
+      ),
+      http.post("*/api/v1/secrets", async ({ request }) => {
+        writes.push(await request.json());
+        return HttpResponse.json({ id: name });
+      }),
+      http.post(
+        "*/api/v1/app-conversations/:id/secrets",
+        async ({ request, params }) => {
+          attachments.push({ id: params.id, body: await request.json() });
+          return HttpResponse.json({ status: attachStatus, message: null });
+        },
+      ),
+      http.get("*/api/v1/app-conversations", () =>
+        HttpResponse.json([
+          {
+            id: conversationId,
+            conversation_url: `${runtimeUrl}/api/conversations/${conversationId}`,
+            session_api_key: "session-key",
+          },
+        ]),
+      ),
+    );
+  });
+
+  afterEach(() => __resetActiveStoreForTests());
+
+  async function saveRequestedSecret() {
+    const user = userEvent.setup();
+    await handleRequestSecretAction(
+      { kind: REQUEST_SECRET_ACTION_KIND, name, reason: "Deploy" },
+      conversationId,
+      "cloud-call",
+    );
+    renderWithProviders(<PendingCards />);
+    await user.type(await screen.findByTestId("value-input"), "cloud-value");
+    await user.click(screen.getByTestId("submit-button"));
+    await waitFor(() => expect(messages).toHaveLength(1));
+    return JSON.parse(messages[0].slice(SECRET_REQUEST_RESULT_PREFIX.length));
+  }
+
+  it("attaches the saved secret by name and reports it saved", async () => {
+    const result = await saveRequestedSecret();
+
+    expect(writes).toEqual([{ name, value: "cloud-value" }]);
+    expect(attachments).toEqual([
+      { id: conversationId, body: { secret_name: name } },
+    ]);
+    expect(result).toEqual({ status: "saved", name });
+    expect(JSON.stringify(attachments)).not.toContain("cloud-value");
+    expect(messages[0]).not.toContain("cloud-value");
+  });
+
+  it.each([
+    ["deferred", "not_saved"],
+    ["not_found", "error"],
+    ["error", "error"],
+  ])(
+    "never reports saved when the instance answers %s",
+    async (status, reported) => {
+      attachStatus = status;
+
+      const result = await saveRequestedSecret();
+
+      expect(attachments).toHaveLength(1);
+      expect(result).toMatchObject({ status: reported, name });
     },
   );
 });

@@ -1,9 +1,10 @@
 import type { CustomSecretInput } from "#/api/agent-server-adapter";
+import type { CloudSecretAttachResult } from "#/api/cloud/conversation-service.api";
 import {
   REQUEST_SECRET_TOOL_NAME,
   SECRET_REQUEST_RESULT_PREFIX,
 } from "#/constants/secret-request";
-import { updateConversationSecrets } from "#/hooks/mutation/conversation-mutation-utils";
+import { attachConversationSecret } from "#/hooks/mutation/conversation-mutation-utils";
 import {
   type SecretRequest,
   useSecretRequestStore,
@@ -58,17 +59,51 @@ async function resolveResult(
     };
   }
 
+  const { name } = savedSecret;
+  const notAttachedGuidance =
+    "The secret was saved to the user's settings but could not be attached to this conversation. It will be available in new conversations; tell the user.";
+  let attach: CloudSecretAttachResult;
   try {
-    await updateConversationSecrets(request.conversationId, [savedSecret]);
-    return { status: "saved", name: savedSecret.name };
+    attach = await attachConversationSecret(
+      request.conversationId,
+      savedSecret,
+    );
   } catch (error) {
     return {
       status: "error",
-      name: savedSecret.name,
+      name,
       error: error instanceof Error ? error.message : String(error),
-      guidance:
-        "The secret was saved to the user's settings but could not be attached to this conversation. It will be available in new conversations; tell the user.",
+      guidance: notAttachedGuidance,
     };
+  }
+
+  switch (attach.status) {
+    case "attached":
+      return { status: "saved", name };
+    case "deferred":
+      return {
+        status: "not_saved",
+        name,
+        guidance:
+          "The user saved the secret to their settings, but this conversation's sandbox was not running, so it was not attached to this conversation and is not set in your environment. It will be available in new conversations. Tell the user; never ask them to paste it into the chat.",
+      };
+    case "not_found":
+      return {
+        status: "error",
+        name,
+        error: `The saved secret ${name} could not be found.`,
+        guidance:
+          "The secret could not be found in the user's saved secrets, so it was not attached to this conversation. Tell the user to check it in Settings > Secrets; never ask them to paste it into the chat.",
+      };
+    default:
+      return {
+        status: "error",
+        name,
+        error:
+          attach.message ||
+          `The secret ${name} could not be attached to this conversation.`,
+        guidance: notAttachedGuidance,
+      };
   }
 }
 

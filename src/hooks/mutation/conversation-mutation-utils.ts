@@ -8,6 +8,8 @@ import { ConversationClient } from "@openhands/typescript-client/clients";
 import type { StartGoalRequest } from "@openhands/typescript-client";
 import { getActiveBackend } from "#/api/backend-registry/active-store";
 import {
+  attachCloudConversationSecret,
+  type CloudSecretAttachResult,
   pauseCloudSandbox,
   resumeCloudSandbox,
 } from "#/api/cloud/conversation-service.api";
@@ -133,24 +135,27 @@ export const resumeGoal = async (conversationId: string): Promise<void> => {
 };
 
 /**
- * Hand saved secrets to a running conversation. Conversations receive their
+ * Hand a saved secret to a running conversation. Conversations receive their
  * secrets once at start, so a secret saved mid-conversation is otherwise
- * invisible to the agent. Secrets ride as LookupSecrets, never as values.
- * Cloud resolves secrets server-side, so this is local-only.
+ * invisible to the agent. Local sends a LookupSecret, never the value; Cloud
+ * sends only the name and the instance resolves the value server-side.
+ * Rejects when the request fails; otherwise the status says whether the
+ * conversation got it.
  */
-export const updateConversationSecrets = async (
+export const attachConversationSecret = async (
   conversationId: string,
-  customSecrets: CustomSecretInput[],
-): Promise<void> => {
-  if (getActiveBackend().backend.kind === "cloud") return;
-  const secrets = buildCustomSecrets(customSecrets);
-  if (!secrets) return;
-
+  secret: CustomSecretInput,
+): Promise<CloudSecretAttachResult> => {
+  if (getActiveBackend().backend.kind === "cloud") {
+    return attachCloudConversationSecret(conversationId, secret.name);
+  }
+  const secrets = buildCustomSecrets([secret]) ?? {};
   const { conversationUrl, sessionApiKey } =
     await fetchConversationData(conversationId);
   await new ConversationClient(
     getAgentServerClientOptions({ conversationUrl, sessionApiKey }),
   ).updateSecrets(conversationId, { secrets });
+  return { status: "attached" };
 };
 
 /**
