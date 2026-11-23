@@ -10,6 +10,7 @@ import { AUTOMATION_CATALOG } from "@openhands/extensions/automations";
 import { I18nKey } from "#/i18n/declaration";
 
 import AutomationService from "#/api/automation-service/automation-service.api";
+import { experimentalFeaturesService } from "#/api/experimental-features-service/experimental-features-service.api";
 import {
   getCloudOrganizationMember,
   listCloudServiceAccounts,
@@ -45,7 +46,12 @@ vi.mock("#/api/automation-service/automation-service.api", () => ({
     fetchTarballBytes: vi.fn(),
     checkHealth: vi.fn(),
     getCapabilities: vi.fn(),
+    listKvKeys: vi.fn(),
+    getKvEntry: vi.fn(),
+    setKvEntries: vi.fn(),
     changeRunAs: vi.fn(),
+    supportsFactories: vi.fn(),
+    listFactories: vi.fn(),
   },
 }));
 
@@ -102,7 +108,10 @@ vi.mock("#/api/cloud/settings-service.api", async (importOriginal) => ({
   fetchCloudIntegrationsConfig: vi.fn(),
 }));
 
-function mockServiceAccountsEnabled(isServiceAccountsEnabled: boolean) {
+function mockServiceAccountsEnabled(
+  isServiceAccountsEnabled: boolean,
+  isFactoriesEnabled = false,
+) {
   const config: CloudIntegrationsConfig = {
     providersConfigured: [],
     isJiraEnabled: false,
@@ -113,6 +122,8 @@ function mockServiceAccountsEnabled(isServiceAccountsEnabled: boolean) {
     isOrgMcpServersEnabled: false,
     isAgentProfilesEnabled: false,
     isServiceAccountsEnabled,
+    isOauthV2LoginEnabled: false,
+    isFactoriesEnabled,
   };
   vi.mocked(fetchCloudIntegrationsConfig).mockResolvedValue(config);
 }
@@ -213,6 +224,23 @@ beforeEach(() => {
     triggers: {},
     features: [],
   });
+  vi.mocked(AutomationService.supportsFactories).mockReset();
+  vi.mocked(AutomationService.supportsFactories).mockReturnValue(false);
+  vi.spyOn(
+    experimentalFeaturesService,
+    "listExperimentalFeatures",
+  ).mockResolvedValue([
+    {
+      key: "factories",
+      label: "Factories",
+      description: "Shows Factories in the sidebar.",
+      enabled: true,
+    },
+  ]);
+  vi.mocked(AutomationService.listKvKeys).mockReset();
+  vi.mocked(AutomationService.getKvEntry).mockReset();
+  vi.mocked(AutomationService.setKvEntries).mockReset();
+  displaySuccessToast.mockClear();
   window.localStorage.clear();
   __resetActiveStoreForTests();
   vi.mocked(AutomationService.checkHealth).mockReset();
@@ -294,6 +322,304 @@ describe("AutomationDetail — Edit in the header", () => {
     expect(detailMocks.navigate).toHaveBeenCalledWith(
       "/automations/setup?automationId=auto-1",
     );
+  });
+});
+
+describe("AutomationDetail — key-value store", () => {
+  const kvEntry = (key: string, value: unknown, version: number) => ({
+    key,
+    value,
+    version,
+    created_at: "2026-01-01T00:00:00Z",
+    updated_at: "2026-01-02T00:00:00Z",
+  });
+
+  const withKvStore = (features: string[]) =>
+    vi.mocked(AutomationService.getCapabilities).mockResolvedValue({
+      ready: true,
+      triggerKinds: [],
+      eventSources: [],
+      eventTypes: [],
+      triggers: {},
+      features,
+    });
+
+  async function openKvMenuItem(user: ReturnType<typeof userEvent.setup>) {
+    await user.click(
+      await screen.findByLabelText(I18nKey.AUTOMATIONS$ACTIONS_MENU),
+    );
+    await user.click(
+      await screen.findByRole("button", {
+        name: I18nKey.AUTOMATIONS$DETAIL$KV_VIEW_STORE,
+      }),
+    );
+  }
+
+  async function openKvDialog(
+    entries: ReturnType<typeof kvEntry>[],
+    total = entries.length,
+  ) {
+    withKvStore(["kvStore"]);
+    vi.mocked(AutomationService.listKvKeys).mockResolvedValue({
+      keys: entries.map((entry) => entry.key),
+      count: entries.length,
+      total,
+      limit: 100,
+      offset: 0,
+    });
+    vi.mocked(AutomationService.getKvEntry).mockImplementation(async (_, key) =>
+      entries.find((entry) => entry.key === key)!,
+    );
+    const user = userEvent.setup();
+    renderDetail();
+    await openKvMenuItem(user);
+    await screen.findAllByTestId("automation-kv-entry");
+    return user;
+  }
+
+  const editValue = (key: string, text: string) =>
+    fireEvent.change(screen.getByLabelText(key), { target: { value: text } });
+
+  it("shows the stored keys and values in a dialog opened from the actions menu", async () => {
+    // Arrange
+    const user = await openKvDialog([kvEntry("cursor", { page: 7 }, 1)], 3);
+
+    // Assert
+    expect(AutomationService.getKvEntry).toHaveBeenCalledWith(
+      "auto-1",
+      "cursor",
+    );
+    expect(screen.getByLabelText("cursor")).toHaveValue(
+      JSON.stringify({ page: 7 }, null, 2),
+    );
+    expect(
+      screen.getByText("AUTOMATIONS$DETAIL$KV_TRUNCATED"),
+    ).toBeInTheDocument();
+
+    // Act
+    await user.click(screen.getByLabelText(I18nKey.BUTTON$CLOSE));
+
+    // Assert
+    expect(screen.queryByTestId("automation-kv-modal")).not.toBeInTheDocument();
+  });
+
+  it("saves only the values that changed, in one write against the oldest version", async () => {
+    // Arrange
+    const user = await openKvDialog([
+      kvEntry("cursor", { page: 7 }, 5),
+      kvEntry("seen", [1, 2], 4),
+      kvEntry("note", "hi", 5),
+    ]);
+    vi.mocked(AutomationService.setKvEntries).mockResolvedValue({
+      version: 6,
+      results: [],
+    });
+    expect(screen.getByTestId("automation-kv-save")).toBeDisabled();
+
+    // Act — one real edit, and one reformat that leaves the value unchanged
+    editValue("cursor", '{"page": 8}');
+    editValue("note", '"hi"');
+    await user.click(screen.getByTestId("automation-kv-save"));
+
+    // Assert
+    await waitFor(() => {
+      expect(AutomationService.setKvEntries).toHaveBeenCalledWith(
+        "auto-1",
+        [{ key: "cursor", value: { page: 8 } }],
+        4,
+      );
+    });
+    expect(AutomationService.setKvEntries).toHaveBeenCalledTimes(1);
+    await waitFor(() => {
+      expect(displaySuccessToast).toHaveBeenCalledWith(
+        "AUTOMATIONS$DETAIL$KV_SAVED",
+      );
+    });
+    // The saved values are reloaded and the draft is gone.
+    expect(AutomationService.listKvKeys).toHaveBeenCalledTimes(2);
+    expect(screen.getByTestId("automation-kv-save")).toBeDisabled();
+  });
+
+  it("blocks saving while a changed value is not valid JSON", async () => {
+    // Arrange
+    const user = await openKvDialog([
+      kvEntry("cursor", { page: 7 }, 1),
+      kvEntry("note", "hi", 1),
+    ]);
+
+    // Act
+    editValue("note", '"bye"');
+    editValue("cursor", "{ not json");
+
+    // Assert
+    expect(
+      screen.getByText("AUTOMATIONS$DETAIL$KV_INVALID_JSON"),
+    ).toBeVisible();
+    expect(screen.getByLabelText("cursor")).toHaveAttribute(
+      "aria-invalid",
+      "true",
+    );
+    expect(screen.getByTestId("automation-kv-save")).toBeDisabled();
+
+    // Act — fix it
+    editValue("cursor", "{}");
+
+    // Assert
+    expect(screen.getByTestId("automation-kv-save")).toBeEnabled();
+    await user.click(screen.getByTestId("automation-kv-save"));
+    await waitFor(() => {
+      expect(AutomationService.setKvEntries).toHaveBeenCalledWith(
+        "auto-1",
+        [
+          { key: "cursor", value: {} },
+          { key: "note", value: "bye" },
+        ],
+        1,
+      );
+    });
+  });
+
+  it("keeps the edit and offers a reload when a run changed the store meanwhile", async () => {
+    // Arrange
+    const user = await openKvDialog([kvEntry("cursor", { page: 7 }, 1)]);
+    vi.mocked(AutomationService.setKvEntries).mockRejectedValue(
+      new HttpError(409, "Conflict", { detail: { error: "version_mismatch" } }),
+    );
+    editValue("cursor", '{"page": 8}');
+
+    // Act
+    await user.click(screen.getByTestId("automation-kv-save"));
+
+    // Assert
+    expect(
+      await screen.findByText("AUTOMATIONS$DETAIL$KV_CONFLICT"),
+    ).toBeVisible();
+    expect(screen.getByLabelText("cursor")).toHaveValue('{"page": 8}');
+
+    // Act — reload picks up the run's value and drops the edit
+    vi.mocked(AutomationService.getKvEntry).mockResolvedValue(
+      kvEntry("cursor", { page: 9 }, 2),
+    );
+    await user.click(screen.getByTestId("automation-kv-reload"));
+
+    // Assert
+    await waitFor(() => {
+      expect(screen.getByLabelText("cursor")).toHaveValue(
+        JSON.stringify({ page: 9 }, null, 2),
+      );
+    });
+    expect(
+      screen.queryByText("AUTOMATIONS$DETAIL$KV_CONFLICT"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("reports a value that is too large to save", async () => {
+    // Arrange
+    const user = await openKvDialog([kvEntry("cursor", 1, 1)]);
+    vi.mocked(AutomationService.setKvEntries).mockRejectedValue(
+      new HttpError(413, "Payload Too Large", {}),
+    );
+    editValue("cursor", "2");
+
+    // Act
+    await user.click(screen.getByTestId("automation-kv-save"));
+
+    // Assert
+    expect(
+      await screen.findByText("AUTOMATIONS$DETAIL$KV_TOO_LARGE"),
+    ).toBeVisible();
+  });
+
+  it("asks before closing the dialog with unsaved edits", async () => {
+    // Arrange
+    const user = await openKvDialog([kvEntry("cursor", 1, 1)]);
+    editValue("cursor", "2");
+
+    // Act — closing is held back
+    await user.click(screen.getByLabelText(I18nKey.BUTTON$CLOSE));
+
+    // Assert
+    expect(
+      screen.getByText("AUTOMATIONS$DETAIL$KV_DISCARD_PROMPT"),
+    ).toBeVisible();
+    expect(screen.getByTestId("automation-kv-modal")).toBeInTheDocument();
+
+    // Act — keep editing, then close and confirm
+    await user.click(screen.getByText("AUTOMATIONS$DETAIL$KV_KEEP_EDITING"));
+    expect(screen.getByLabelText("cursor")).toHaveValue("2");
+    await user.click(screen.getByLabelText(I18nKey.BUTTON$CLOSE));
+    await user.click(screen.getByTestId("automation-kv-confirm-discard"));
+
+    // Assert
+    expect(screen.queryByTestId("automation-kv-modal")).not.toBeInTheDocument();
+    expect(AutomationService.setKvEntries).not.toHaveBeenCalled();
+  });
+
+  it("shows the values read-only to someone who cannot manage the automation", async () => {
+    // Arrange
+    permissionMocks.canManage = false;
+    permissionMocks.isOwner = false;
+
+    // Act
+    await openKvDialog([kvEntry("cursor", { page: 7 }, 1)]);
+
+    // Assert
+    expect(screen.getByTestId("automation-kv-modal")).toHaveTextContent(
+      '"page": 7',
+    );
+    expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("automation-kv-save")).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("automation-kv-warning"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("warns a manager that editing the values may break the automation", async () => {
+    // Act
+    await openKvDialog([kvEntry("cursor", { page: 7 }, 1)]);
+
+    // Assert
+    const warning = screen.getByTestId("automation-kv-warning");
+    expect(warning).toHaveTextContent("AUTOMATIONS$DETAIL$KV_WARNING_TITLE");
+    expect(warning).toHaveTextContent("AUTOMATIONS$DETAIL$KV_WARNING");
+  });
+
+  it("reports a store that cannot be read", async () => {
+    // Arrange
+    withKvStore(["kvStore"]);
+    vi.mocked(AutomationService.listKvKeys).mockRejectedValue(new Error("503"));
+    const user = userEvent.setup();
+    renderDetail();
+
+    // Act
+    await openKvMenuItem(user);
+
+    // Assert
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "AUTOMATIONS$DETAIL$KV_ERROR",
+    );
+  });
+
+  it("offers no viewer when the deployment has no key-value store", async () => {
+    // Arrange
+    withKvStore([]);
+    const user = userEvent.setup();
+    renderDetail();
+    await waitFor(() => {
+      expect(AutomationService.getCapabilities).toHaveBeenCalled();
+    });
+
+    // Act
+    await user.click(
+      await screen.findByLabelText(I18nKey.AUTOMATIONS$ACTIONS_MENU),
+    );
+
+    // Assert
+    expect(
+      screen.queryByRole("button", {
+        name: I18nKey.AUTOMATIONS$DETAIL$KV_VIEW_STORE,
+      }),
+    ).not.toBeInTheDocument();
   });
 });
 
@@ -691,6 +1017,37 @@ describe("AutomationDetail — runs as a service account", () => {
     );
   });
 
+  it("lists View key-value store directly below Change Runs As", async () => {
+    // Arrange
+    vi.mocked(AutomationService.getCapabilities).mockResolvedValue({
+      ready: true,
+      triggerKinds: [],
+      eventSources: [],
+      eventTypes: [],
+      triggers: {},
+      features: ["serviceAccountRunAs", "kvStore"],
+    });
+    const user = userEvent.setup();
+    renderDetail();
+
+    // Act
+    await user.click(
+      await screen.findByLabelText(I18nKey.AUTOMATIONS$ACTIONS_MENU),
+    );
+    const changeRunAs = await screen.findByRole("button", {
+      name: I18nKey.AUTOMATIONS$CHANGE_RUN_AS,
+    });
+    const viewStore = await screen.findByRole("button", {
+      name: I18nKey.AUTOMATIONS$DETAIL$KV_VIEW_STORE,
+    });
+
+    // Assert
+    expect(changeRunAs.closest("li")?.nextElementSibling).toBe(
+      viewStore.closest("li"),
+    );
+    expect(AutomationService.listKvKeys).not.toHaveBeenCalled();
+  });
+
   it("shows the service account under Runs As and the person under Created By", async () => {
     // Arrange — the creator is an org member; the service account is not.
     vi.mocked(getCloudOrganizationMember).mockResolvedValue({
@@ -860,6 +1217,140 @@ describe("AutomationDetail — runs as a service account", () => {
     });
     await waitFor(() => {
       expect(AutomationService.getAutomation).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  describe("changing the factory", () => {
+    const coreFactory = {
+      id: "f-core",
+      name: "Core SDLC",
+      automation_count: 2,
+      created_at: "2026-01-01T00:00:00Z",
+      updated_at: "2026-01-01T00:00:00Z",
+    };
+
+    beforeEach(() => {
+      mockServiceAccountsEnabled(true, true);
+      vi.mocked(AutomationService.supportsFactories).mockReturnValue(true);
+      vi.mocked(AutomationService.listFactories).mockResolvedValue({
+        factories: [coreFactory],
+        total: 1,
+      });
+      vi.mocked(AutomationService.updateAutomation).mockResolvedValue(
+        automation,
+      );
+    });
+
+    async function openChangeFactory() {
+      const user = userEvent.setup();
+      renderDetail();
+      await screen.findByText(automation.name);
+      await user.click(screen.getByLabelText(I18nKey.AUTOMATIONS$ACTIONS_MENU));
+      await user.click(
+        screen.getByRole("button", {
+          name: I18nKey.AUTOMATIONS$CHANGE_FACTORY,
+        }),
+      );
+      return user;
+    }
+
+    it("puts the automation in the chosen factory", async () => {
+      // Arrange + Act
+      const user = await openChangeFactory();
+      await screen.findByRole("option", { name: coreFactory.name });
+      await user.selectOptions(
+        screen.getByTestId("change-factory-target"),
+        coreFactory.name,
+      );
+      await user.click(screen.getByTestId("change-factory-confirm"));
+
+      // Assert
+      await waitFor(() =>
+        expect(AutomationService.updateAutomation).toHaveBeenCalledWith(
+          "auto-1",
+          { factory_id: "f-core" },
+        ),
+      );
+    });
+
+    it("takes the automation out of its factory with a null factory_id", async () => {
+      // Arrange
+      vi.mocked(AutomationService.getAutomation).mockResolvedValue({
+        ...automation,
+        factory_id: "f-core",
+      });
+
+      // Act
+      const user = await openChangeFactory();
+      await screen.findByRole("option", { name: coreFactory.name });
+      await user.selectOptions(
+        screen.getByTestId("change-factory-target"),
+        I18nKey.AUTOMATIONS$CHANGE_FACTORY_NONE,
+      );
+      await user.click(screen.getByTestId("change-factory-confirm"));
+
+      // Assert
+      await waitFor(() =>
+        expect(AutomationService.updateAutomation).toHaveBeenCalledWith(
+          "auto-1",
+          { factory_id: null },
+        ),
+      );
+    });
+
+    it("is not offered to the owner without manage_automations", async () => {
+      // Arrange
+      permissionMocks.canManage = false;
+      permissionMocks.isOwner = true;
+      const user = userEvent.setup();
+
+      // Act
+      renderDetail();
+      await screen.findByText(automation.name);
+      await user.click(screen.getByLabelText(I18nKey.AUTOMATIONS$ACTIONS_MENU));
+
+      // Assert
+      expect(
+        screen.queryByRole("button", {
+          name: I18nKey.AUTOMATIONS$CHANGE_FACTORY,
+        }),
+      ).not.toBeInTheDocument();
+    });
+
+    it("is not offered when the instance has Factories off", async () => {
+      // Arrange
+      mockServiceAccountsEnabled(true, false);
+      const user = userEvent.setup();
+
+      // Act
+      renderDetail();
+      await screen.findByText(automation.name);
+      await user.click(screen.getByLabelText(I18nKey.AUTOMATIONS$ACTIONS_MENU));
+
+      // Assert
+      expect(
+        screen.queryByRole("button", {
+          name: I18nKey.AUTOMATIONS$CHANGE_FACTORY,
+        }),
+      ).not.toBeInTheDocument();
+    });
+
+    it("is not offered when the service has no factories", async () => {
+      // Arrange
+      vi.mocked(AutomationService.supportsFactories).mockReturnValue(false);
+      const user = userEvent.setup();
+
+      // Act
+      renderDetail();
+      await screen.findByText(automation.name);
+      await user.click(screen.getByLabelText(I18nKey.AUTOMATIONS$ACTIONS_MENU));
+
+      // Assert
+      expect(
+        screen.queryByRole("button", {
+          name: I18nKey.AUTOMATIONS$CHANGE_FACTORY,
+        }),
+      ).not.toBeInTheDocument();
     });
   });
 

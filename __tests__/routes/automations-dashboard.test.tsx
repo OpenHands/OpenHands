@@ -75,6 +75,8 @@ function mockServiceAccountsEnabled(isServiceAccountsEnabled: boolean) {
     isOrgMcpServersEnabled: false,
     isAgentProfilesEnabled: false,
     isServiceAccountsEnabled,
+    isOauthV2LoginEnabled: false,
+    isFactoriesEnabled: false,
   };
   vi.mocked(fetchCloudIntegrationsConfig).mockResolvedValue(config);
 }
@@ -674,6 +676,7 @@ describe("AutomationsList — created-by filter on cloud workspaces", () => {
       0,
       "me",
       undefined,
+      undefined,
     );
   });
 
@@ -818,6 +821,7 @@ describe("AutomationsList — created-by filter on cloud workspaces", () => {
         0,
         "me",
         undefined,
+        undefined,
       ),
     );
     expect(screen.getByTestId("automations-empty")).toBeInTheDocument();
@@ -935,6 +939,7 @@ describe("AutomationsList — created-by filter on cloud workspaces", () => {
       0,
       undefined,
       undefined,
+      undefined,
     );
   });
 
@@ -988,6 +993,7 @@ describe("AutomationsList — created-by filter on cloud workspaces", () => {
       50,
       0,
       "service",
+      undefined,
       undefined,
     );
   });

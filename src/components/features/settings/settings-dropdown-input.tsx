@@ -111,7 +111,10 @@ export function SettingsDropdownInput({
   defaultSelectedKey,
   selectedKey,
   inputValue,
-  isClearable = false,
+  // HeroUI v2's Autocomplete was clearable by default; the v3 ComboBox port
+  // restored that default so callers keep the clear affordance unless they
+  // explicitly opt out (#19648).
+  isClearable = true,
   allowsCustomValue,
   required,
   onSelectionChange,

@@ -12,7 +12,7 @@ import {
   ProfilesClient,
   VSCodeClient,
 } from "@openhands/typescript-client/clients";
-import { v4 as uuidv4 } from "uuid";
+import { randomUUID } from "#/utils/random-uuid";
 import { AgentKind, Provider } from "#/types/settings";
 import type { ConversationRuntimeContext } from "#/api/conversation-file-upload.api";
 import { getAgentServerWorkingDir } from "../agent-server-config";
@@ -21,11 +21,13 @@ import {
   resolveNewConversationWorkspace,
 } from "../conversation-workspace";
 import HooksService from "../hooks-service";
+import type { Backend } from "../backend-registry/types";
 import {
   getActiveBackend,
   getEffectiveLocalBackend,
 } from "../backend-registry/active-store";
 import { callCloudProxy } from "../cloud/proxy";
+import { activeOrgForBackend } from "../cloud/client";
 import ProfilesService from "../profiles-service/profiles-service.api";
 import {
   batchGetCloudConversations,
@@ -105,6 +107,20 @@ import type {
 } from "./agent-server-conversation-service.types";
 
 const DEFAULT_CONVERSATION_TIMESTAMP = "1970-01-01T00:00:00.000Z";
+
+/** Captured synchronously before a delete mutation's asynchronous callbacks. */
+export type ConversationDeletionScope =
+  | {
+      kind: "local";
+      client: ConversationClient;
+      backend: Backend;
+      orgId: string | null;
+    }
+  | {
+      kind: "cloud";
+      backend: Backend;
+      orgId: string | null;
+    };
 // Creating the first conversation right after a cold agent-server boot (fresh
 // machine or the packaged desktop app, where uvx may still be warming caches)
 // can exceed the client's 60s default timeout.
@@ -531,6 +547,23 @@ export interface CreateConversationOptions {
 }
 
 class AgentServerConversationService {
+  static async answerAskUser(
+    conversationId: string,
+    askId: string,
+    answer: { optionIndex?: number; text?: string },
+    runtime?: ConversationRuntimeContext | null,
+  ) {
+    if (
+      getActiveBackend().backend.kind === "cloud" &&
+      (!runtime?.conversationUrl || !runtime.sessionApiKey)
+    ) {
+      throw new Error("Conversation sandbox is still starting.");
+    }
+    return new ConversationClient(
+      getAgentServerClientOptions(runtime ?? {}),
+    ).answerAskUser(conversationId, askId, answer);
+  }
+
   static async sendMessage(
     conversationId: string,
     message: SendMessageRequest,
@@ -631,6 +664,9 @@ class AgentServerConversationService {
         selected_repository: metadata?.selected_repository ?? null,
         selected_branch: metadata?.selected_branch ?? null,
         git_provider: metadata?.git_provider ?? null,
+        ...(metadata?.git_provider_id != null
+          ? { git_provider_id: metadata.git_provider_id }
+          : {}),
         plugins: plugins ?? null,
         parent_conversation_id: parentConversationId ?? null,
         agent_type: agentType,
@@ -681,7 +717,7 @@ class AgentServerConversationService {
       profiles,
       agentLlmProfileRef,
     );
-    const conversationId = uuidv4();
+    const conversationId = randomUUID();
     const resolvedWorkspaceMode =
       workspaceMode ?? (workingDirOverride ? "local_repo" : "new_worktree");
     const inContainer = resolvedWorkspaceMode === "docker_container";
@@ -872,18 +908,20 @@ class AgentServerConversationService {
    */
   static async getLocalPlanningConversationIds(
     parentConversationId: string,
+    client?: ConversationClient,
   ): Promise<string[]> {
-    if (getActiveBackend().backend.kind === "cloud") return [];
+    if (!client && getActiveBackend().backend.kind === "cloud") return [];
 
     const ids = new Set<string>();
 
     try {
-      const [parent] = await this.batchGetAppConversations([
-        parentConversationId,
-      ]);
+      const [parent] = await this.batchGetAppConversations(
+        [parentConversationId],
+        client,
+      );
       const childIds = parent?.sub_conversation_ids ?? [];
       if (childIds.length > 0) {
-        const children = await this.batchGetAppConversations(childIds);
+        const children = await this.batchGetAppConversations(childIds, client);
         for (const child of children) {
           if (child && isPlannerConversationOf(child, parentConversationId)) {
             ids.add(child.id);
@@ -981,15 +1019,16 @@ class AgentServerConversationService {
 
   static async batchGetAppConversations(
     ids: string[],
+    client?: ConversationClient,
   ): Promise<(AppConversation | null)[]> {
     if (ids.length === 0) return [];
 
-    if (getActiveBackend().backend.kind === "cloud") {
+    if (!client && getActiveBackend().backend.kind === "cloud") {
       return batchGetCloudConversations(ids);
     }
 
-    const data: unknown = await new ConversationClient(
-      getAgentServerClientOptions(),
+    const data: unknown = await (
+      client ?? new ConversationClient(getAgentServerClientOptions())
     ).getConversations<DirectConversationInfo>(ids);
 
     return requireDirectConversationBatch(data).map((item) =>
@@ -1012,6 +1051,7 @@ class AgentServerConversationService {
     repository: string | null,
     branch?: string | null,
     gitProvider?: Provider | null,
+    gitProviderId?: number | null,
   ): Promise<AppConversation> {
     // Cloud conversations keep the repository on the server, so other
     // browsers and server features see it. Best effort: an older server can
@@ -1024,6 +1064,7 @@ class AgentServerConversationService {
           repository,
           branch ?? null,
           gitProvider ?? null,
+          gitProviderId,
         );
       } catch (error) {
         console.warn(
@@ -1033,12 +1074,15 @@ class AgentServerConversationService {
       }
     }
     if (repository) {
-      const existing = getStoredConversationMetadata(conversationId);
+      // The previous id belongs to the previous repository, so drop it.
+      const { git_provider_id: _previous, ...existing } =
+        getStoredConversationMetadata(conversationId) ?? {};
       setStoredConversationMetadata(conversationId, {
-        ...(existing ?? {}),
+        ...existing,
         selected_repository: repository,
         selected_branch: branch ?? null,
         git_provider: gitProvider ?? null,
+        ...(gitProviderId != null ? { git_provider_id: gitProviderId } : {}),
       });
     } else {
       removeStoredConversationMetadata(conversationId);
@@ -1181,9 +1225,29 @@ class AgentServerConversationService {
     return toConversationPage(requireConversationSearchPage(data));
   }
 
-  static async deleteConversation(conversationId: string): Promise<void> {
-    if (getActiveBackend().backend.kind === "cloud") {
-      await deleteCloudConversation(conversationId);
+  static createConversationDeletionScope(): ConversationDeletionScope {
+    const { backend, orgId } = getActiveBackend();
+    if (backend.kind === "cloud") {
+      return {
+        kind: "cloud",
+        backend,
+        orgId: activeOrgForBackend(backend),
+      };
+    }
+    return {
+      kind: "local",
+      client: new ConversationClient(getAgentServerClientOptions()),
+      backend,
+      orgId,
+    };
+  }
+
+  static async deleteConversation(
+    conversationId: string,
+    scope: ConversationDeletionScope = this.createConversationDeletionScope(),
+  ): Promise<void> {
+    if (scope.kind === "cloud") {
+      await deleteCloudConversation(conversationId, scope);
       removeStoredConversationMetadata(conversationId);
       return;
     }
@@ -1192,10 +1256,12 @@ class AgentServerConversationService {
     // planner helper is hidden from the conversation list by its
     // `plannerparent` tag — so without this it would survive its parent as an
     // invisible, unreachable conversation (plus its events and state).
-    const planningConversationIds =
-      await this.getLocalPlanningConversationIds(conversationId);
+    const planningConversationIds = await this.getLocalPlanningConversationIds(
+      conversationId,
+      scope.client,
+    );
 
-    const client = new ConversationClient(getAgentServerClientOptions());
+    const { client } = scope;
     await Promise.all(
       planningConversationIds.map(async (planningConversationId) => {
         try {
@@ -1431,7 +1497,7 @@ class AgentServerConversationService {
       // the profile config would otherwise default it to stream=False.
       stream: true,
       // Avoid stale first-write-wins entries in the backend LLM registry.
-      usage_id: `profile:${profileName}:${uuidv4()}`,
+      usage_id: `profile:${profileName}:${randomUUID()}`,
     } as LLMConfig);
   }
 

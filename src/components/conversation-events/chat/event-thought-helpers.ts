@@ -102,6 +102,9 @@ export const splitInlineThink = (
  *
  * `ThinkAction` is intentionally excluded because its thought IS the
  * action body and is rendered through a separate codepath.
+ *
+ * Pass `actionById` (from `buildActionById`) when resolving many events
+ * against the same history; otherwise the action is located by a linear scan.
  */
 export const getThoughtSourceAction = (
   event: OpenHandsEvent,

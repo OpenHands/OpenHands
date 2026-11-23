@@ -47,6 +47,22 @@
   /* ─────────────────────────────────────────────────────────────────────── */
 }
 
+.app-shell-safe-area {
+  padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px)
+    env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px);
+}
+
+.mobile-sidebar-drawer-safe-area {
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-right: env(safe-area-inset-right, 0px);
+  padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 0.5rem);
+  padding-left: calc(env(safe-area-inset-left, 0px) + 0.625rem);
+}
+
+.app-shell-titlebar-inset {
+  padding-top: calc(env(safe-area-inset-top, 0px) + 1.75rem);
+}
+
 body {
   margin: 0;
   background-color: var(--oh-color-base);

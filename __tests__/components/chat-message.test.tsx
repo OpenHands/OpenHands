@@ -9,6 +9,8 @@ import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi } from "vitest";
 import util from "util";
 import { ChatMessage } from "#/components/features/chat/chat-message";
+import { RowExpansionContext } from "#/components/features/chat/row-expansion-context";
+import { useMessageExpansionStore } from "#/stores/message-expansion-store";
 
 describe("ChatMessage", () => {
   it.each(["user", "agent"] as const)(
@@ -206,6 +208,25 @@ describe("ChatMessage", () => {
     render(<ChatMessage type="user" message="Hello, World!" />);
     expect(screen.getByTestId("user-message")).toBeInTheDocument();
     expect(screen.getByText("Hello, World!")).toBeInTheDocument();
+  });
+
+  it("does not leave a truncation entry behind when a streamed message changes", () => {
+    // Inside the virtualized list the row's "view more" state is persisted by
+    // row key. A streamed reply's text changes on every reveal tick, and the
+    // reset must clear the entry rather than write `false` — otherwise every
+    // streaming message leaves a meaningless `false` entry in the store.
+    useMessageExpansionStore.setState({ expanded: {} });
+    const rowKey = "single-row";
+    const renderInRow = (message: string) => (
+      <RowExpansionContext.Provider value={rowKey}>
+        <ChatMessage type="agent" message={message} isStreaming />
+      </RowExpansionContext.Provider>
+    );
+    const { rerender } = render(renderInRow("first"));
+
+    rerender(renderInRow("first second"));
+
+    expect(useMessageExpansionStore.getState().expanded).toEqual({});
   });
 
   it("blends wide-table fades into the user bubble, not the page", () => {

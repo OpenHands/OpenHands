@@ -24,7 +24,7 @@ import {
   AutomationSetupPanel,
 } from "#/components/features/automations/setup/automation-setup-panel";
 import AutomationService from "#/api/automation-service/automation-service.api";
-import { useEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useState } from "react";
 import {
   PENDING_AUTOMATION_SETUP_ID,
   clearAutomationFormSession,
@@ -49,6 +49,7 @@ import {
   setRegisteredBackends,
 } from "#/api/backend-registry/active-store";
 import type { Backend } from "#/api/backend-registry/types";
+import { ActiveBackendProvider } from "#/contexts/active-backend-context";
 import { server } from "#/mocks/node";
 import { http, HttpResponse } from "msw";
 import type { AutomationDraftApiResponse } from "#/manifests/types";
@@ -308,9 +309,11 @@ function renderPanel(
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   }),
   onAskAgent?: (prompt: string) => void,
+  currentSearch = "",
 ) {
   const value: NavigationContextValue = {
     currentPath: `/conversations/${conversationId}`,
+    currentSearch,
     conversationId,
     isNavigating: false,
     navigate: mockNavigate,
@@ -445,15 +448,14 @@ describe("AutomationSetupPanel", () => {
       expect(trayStyle.paddingTop).toBe("23px");
     };
     const scheduleWidth = (element: HTMLElement) => {
-      // jsdom keeps var() in computed widths. Resolve it from the actual row
-      // to verify both the field's winning width and the variable's owner.
-      const rowStyle = getComputedStyle(
-        screen.getByTestId("automation-setup-at-row"),
+      // jsdom 31 resolves var()-based widths to pixels instead of retaining
+      // `var(...)`; convert back to the declared rem value via the root font
+      // size so the assertion still checks the schedule row's variable owner.
+      const rootFontSize = parseFloat(
+        getComputedStyle(document.documentElement).fontSize,
       );
-      return getComputedStyle(element).width.replace(
-        /var\((--[\w-]+)\)/g,
-        (_, property: string) => rowStyle.getPropertyValue(property).trim(),
-      );
+      const widthPx = parseFloat(getComputedStyle(element).width);
+      return `${widthPx / rootFontSize}rem`;
     };
 
     try {
@@ -1653,6 +1655,125 @@ describe("AutomationSetupPanel", () => {
     ).toBeInTheDocument();
   });
 
+  it("keeps agent-filled fields after leaving the conversation and returning", async () => {
+    const conversationId = "conv-return-after-agent-fill";
+    const draft: AutomationSetupDraft = { prompt: "", kind: "prompt" };
+    initializeAutomationFormSession(conversationId, draft);
+    const first = renderPanel(draft, conversationId);
+
+    await act(async () => {
+      handleAutomationFormUpdateAction(
+        {
+          kind: AUTOMATION_FORM_UPDATE_ACTION_KIND,
+          fields: {
+            name: "Nightly Triage",
+            prompt: "Triage new issues every night",
+            frequency: "weekly",
+          },
+        },
+        conversationId,
+        "agent-event-return-1",
+        "2026-01-01T00:00:00.000Z",
+      );
+    });
+    await waitFor(
+      () =>
+        expect(
+          screen.getByTestId("automation-setup-frequency-weekly"),
+        ).toHaveAttribute("aria-checked", "true"),
+      { timeout: 3000 },
+    );
+    await userEvent
+      .setup()
+      .type(screen.getByTestId("automation-setup-name"), " v2");
+
+    // Opening another conversation unmounts the panel; returning builds it
+    // from the conversation's form session, as ConversationMain does.
+    first.unmount();
+    renderPanel(
+      getAutomationFormSession(conversationId) ?? draft,
+      conversationId,
+    );
+
+    expect(screen.getByTestId("automation-setup-prompt")).toHaveValue(
+      "Triage new issues every night",
+    );
+    expect(screen.getByTestId("automation-setup-name")).toHaveValue(
+      "Nightly Triage v2",
+    );
+    expect(
+      screen.getByTestId("automation-setup-frequency-weekly"),
+    ).toHaveAttribute("aria-checked", "true");
+    clearAutomationFormSession(conversationId);
+  });
+
+  it("keeps an agent update that lands while a returning panel mounts", () => {
+    const conversationId = "conv-update-during-mount";
+    initializeAutomationFormSession(conversationId, {
+      prompt: "Old prompt",
+      kind: "prompt",
+    });
+    const draft = getAutomationFormSession(conversationId)!;
+    // Layout effects run before the panel's own effects, as a socket message
+    // handled during the same commit would.
+    function AgentUpdateDuringMount() {
+      useLayoutEffect(() => {
+        handleAutomationFormUpdateAction(
+          {
+            kind: AUTOMATION_FORM_UPDATE_ACTION_KIND,
+            fields: { name: "Added while mounting" },
+          },
+          conversationId,
+          "agent-event-during-mount",
+          new Date().toISOString(),
+        );
+      }, []);
+      return null;
+    }
+    const queryClient = new QueryClient();
+    render(
+      <QueryClientProvider client={queryClient}>
+        <NavigationProvider
+          value={{
+            currentPath: `/conversations/${conversationId}`,
+            conversationId,
+            isNavigating: false,
+            navigate: mockNavigate,
+          }}
+        >
+          <AutomationSetupPanel
+            draft={draft}
+            conversationId={conversationId}
+            conversationTags={null}
+          />
+          <AgentUpdateDuringMount />
+        </NavigationProvider>
+      </QueryClientProvider>,
+    );
+
+    expect(getAutomationFormSession(conversationId)?.form?.name).toBe(
+      "Added while mounting",
+    );
+    expect(screen.getByTestId("automation-setup-name")).toHaveValue(
+      "Added while mounting",
+    );
+  });
+
+  it("starts a new automation clean after leaving its setup page", () => {
+    initializeAutomationFormSession(PENDING_AUTOMATION_SETUP_ID, {
+      prompt: "Unsent idea",
+      kind: "prompt",
+    });
+    const first = renderPanel(
+      { prompt: "Unsent idea", kind: "prompt" },
+      PENDING_AUTOMATION_SETUP_ID,
+    );
+
+    first.unmount();
+
+    expect(getAutomationFormSession(PENDING_AUTOMATION_SETUP_ID)).toBeNull();
+  });
+
   it("shows a weekday dropdown for a weekly schedule", async () => {
     vi.mocked(AutomationService.createServerDraft).mockRejectedValue({
       response: { status: 404 },
@@ -1736,7 +1857,9 @@ describe("AutomationSetupPanel", () => {
     await waitFor(() =>
       expect(AutomationService.createAutomationDraft).toHaveBeenCalledWith(
         expect.objectContaining({
-          enabled: false,
+          // A completed setup creates the automation enabled (#19718); the
+          // user should not need a second manual step to start it.
+          enabled: true,
           prompt: "Summarize Slack blockers",
           plugins: [{ source: "github:org/blockers-plugin" }],
         }),
@@ -1801,6 +1924,96 @@ describe("AutomationSetupPanel", () => {
     expect(
       vi.mocked(AutomationService.createAutomationDraft).mock.calls[0][0],
     ).not.toHaveProperty("run_as_user_id");
+    expect(
+      vi.mocked(AutomationService.createAutomationDraft).mock.calls[0][0],
+    ).not.toHaveProperty("factory_id");
+  });
+
+  it("creates the automation in the factory the form was opened from, and refreshes the lists and factory counts", async () => {
+    vi.mocked(AutomationService.createAutomationDraft).mockResolvedValue({
+      id: "automation-1",
+    });
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const invalidate = vi.spyOn(queryClient, "invalidateQueries");
+
+    const user = userEvent.setup();
+    renderPanel(
+      { prompt: "Review every pull request", kind: "prompt", factoryId: "f-1" },
+      "conv-1",
+      null,
+      queryClient,
+    );
+    await user.click(screen.getByTestId("automation-setup-create"));
+
+    await waitFor(() =>
+      expect(AutomationService.createAutomationDraft).toHaveBeenCalledWith(
+        expect.objectContaining({ factory_id: "f-1" }),
+        expect.anything(),
+      ),
+    );
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ["automations"] });
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ["factories"] });
+  });
+
+  it("opens the new automation with the factory context, so the sidebar stays on Factories", async () => {
+    vi.mocked(AutomationService.createAutomationDraft).mockResolvedValue({
+      id: "automation-1",
+    });
+
+    const user = userEvent.setup();
+    renderPanel(
+      { prompt: "Review every pull request", kind: "prompt", factoryId: "f-1" },
+      "conv-1",
+      null,
+      undefined,
+      undefined,
+      "?factory=f-1",
+    );
+    await user.click(screen.getByTestId("automation-setup-create"));
+
+    await waitFor(() =>
+      expect(mockNavigate).toHaveBeenCalledWith(
+        "/automations/automation-1?factory=f-1",
+      ),
+    );
+  });
+
+  it("opens the new automation without a factory context when created from Automate", async () => {
+    vi.mocked(AutomationService.createAutomationDraft).mockResolvedValue({
+      id: "automation-1",
+    });
+
+    const user = userEvent.setup();
+    renderPanel({ prompt: "Review every pull request", kind: "prompt" });
+    await user.click(screen.getByTestId("automation-setup-create"));
+
+    await waitFor(() =>
+      expect(mockNavigate).toHaveBeenCalledWith("/automations/automation-1"),
+    );
+  });
+
+  it("creates in a factory through the plugin endpoint too", async () => {
+    vi.mocked(AutomationService.createAutomationDraft).mockResolvedValue({
+      id: "automation-1",
+    });
+
+    const user = userEvent.setup();
+    renderPanel({
+      prompt: "Summarize Slack blockers",
+      kind: "plugin",
+      plugins: ["github:org/blockers-plugin"],
+      factoryId: "f-1",
+    });
+    await user.click(screen.getByTestId("automation-setup-create"));
+
+    await waitFor(() =>
+      expect(AutomationService.createAutomationDraft).toHaveBeenCalledWith(
+        expect.objectContaining({ factory_id: "f-1" }),
+        "plugin",
+      ),
+    );
   });
 
   it("does not offer the run-as picker when editing an existing automation", () => {
@@ -1810,6 +2023,142 @@ describe("AutomationSetupPanel", () => {
     expect(
       screen.queryByTestId("automation-setup-run-as"),
     ).not.toBeInTheDocument();
+  });
+
+  describe("visibility", () => {
+    const teamBackend: Backend = {
+      id: "cloud-1",
+      name: "Enterprise",
+      host: "https://app.example.test",
+      apiKey: "bearer-token",
+      kind: "cloud",
+    };
+
+    /**
+     * Renders the panel for member `user-1` of the team org `org-1`, on an
+     * automation service that stores a visibility.
+     */
+    function renderInTeamWorkspace(
+      draft: AutomationSetupDraft = {
+        prompt: "Review every pull request",
+        kind: "prompt",
+      },
+    ) {
+      setRegisteredBackends([teamBackend]);
+      setActiveSelection({ backendId: teamBackend.id, orgId: "org-1" });
+      server.use(
+        http.get(`${teamBackend.host}/api/organizations/org-1/me`, () =>
+          HttpResponse.json({
+            org_id: "org-1",
+            user_id: "user-1",
+            role: "member",
+            permissions: ["view_automations"],
+          }),
+        ),
+      );
+      vi.mocked(useDeploymentCapabilities).mockReturnValue({
+        data: { features: ["automationVisibility"] },
+        isLoading: false,
+      } as never);
+      const navigation: NavigationContextValue = {
+        currentPath: "/conversations/conv-1",
+        conversationId: "conv-1",
+        isNavigating: false,
+        navigate: mockNavigate,
+      };
+
+      return render(
+        <QueryClientProvider
+          client={
+            new QueryClient({ defaultOptions: { queries: { retry: false } } })
+          }
+        >
+          <ActiveBackendProvider>
+            <NavigationProvider value={navigation}>
+              <AutomationSetupPanel
+                draft={draft}
+                conversationId="conv-1"
+                conversationTags={null}
+              />
+            </NavigationProvider>
+          </ActiveBackendProvider>
+        </QueryClientProvider>,
+      );
+    }
+
+    afterEach(() => {
+      window.localStorage.clear();
+      __resetActiveStoreForTests();
+    });
+
+    it("creates a private automation when Private is chosen", async () => {
+      // Arrange
+      vi.mocked(AutomationService.createAutomationDraft).mockResolvedValue({
+        id: "automation-1",
+      });
+      const user = userEvent.setup();
+      renderInTeamWorkspace();
+
+      // Act
+      await user.selectOptions(
+        await screen.findByTestId("automation-setup-visibility"),
+        "private",
+      );
+      await user.click(screen.getByTestId("automation-setup-create"));
+
+      // Assert
+      await waitFor(() =>
+        expect(AutomationService.createAutomationDraft).toHaveBeenCalledWith(
+          expect.objectContaining({ visibility: "private" }),
+          expect.anything(),
+        ),
+      );
+    });
+
+    it("offers no visibility for an automation that runs as a service account", async () => {
+      // Arrange
+      serviceAccountMocks.enabled = true;
+      const user = userEvent.setup();
+      renderInTeamWorkspace();
+      await screen.findByTestId("automation-setup-visibility");
+
+      // Act
+      await user.selectOptions(
+        screen.getByTestId("automation-setup-run-as"),
+        "sa-1",
+      );
+
+      // Assert
+      expect(
+        screen.queryByTestId("automation-setup-visibility"),
+      ).not.toBeInTheDocument();
+    });
+
+    it("keeps a private automation private when it is saved", async () => {
+      // Arrange
+      const privateReviewer = savedReviewer({
+        user_id: "user-1",
+        run_as_kind: "user",
+        visibility: "private",
+      });
+      vi.mocked(AutomationService.updateAutomation).mockResolvedValue(
+        privateReviewer,
+      );
+      const user = userEvent.setup();
+      renderInTeamWorkspace(setupDraftFromAutomation(privateReviewer));
+      await screen.findByTestId("automation-setup-visibility");
+
+      // Act
+      await user.click(screen.getByTestId("automation-setup-save"));
+
+      // Assert
+      await waitFor(() =>
+        expect(AutomationService.updateAutomation).toHaveBeenCalledWith(
+          "auto-1",
+          expect.objectContaining({ visibility: "private" }),
+        ),
+      );
+    });
   });
 
   it("hides the event filter until Add Event Filter is clicked", async () => {
@@ -2758,6 +3107,105 @@ describe("AutomationSetupPanel", () => {
       expect(
         AgentServerConversationService.replaceConversationTags,
       ).not.toHaveBeenCalled();
+    });
+
+    it("shows a saved draft as saved after returning to the conversation", async () => {
+      // The service may normalize the saved body, so the panel must not
+      // compare the returned form with the server's copy.
+      vi.mocked(AutomationService.createServerDraft).mockImplementation(
+        async (request) =>
+          echoSavedDraft(request, {
+            validationErrors: null,
+            draft: { ...request.draft, normalized: true } as never,
+          }),
+      );
+      const conversationId = "conv-saved-draft-clean-return";
+      const user = userEvent.setup();
+      const first = renderPanel(undefined, conversationId, null);
+      await saveDraftAndWaitForTest(user);
+      const savedRequest = vi.mocked(AutomationService.createServerDraft).mock
+        .calls[0][0];
+
+      first.unmount();
+      vi.mocked(AutomationService.getServerDraft).mockResolvedValue(
+        echoSavedDraft(savedRequest, {
+          validationErrors: null,
+          draft: { ...savedRequest.draft, normalized: true } as never,
+        }),
+      );
+      renderPanel(
+        getAutomationFormSession(conversationId) ?? undefined,
+        conversationId,
+        { automationdraftid: "draft-1" },
+      );
+
+      await waitFor(() =>
+        expect(AutomationService.getServerDraft).toHaveBeenCalledWith(
+          "draft-1",
+        ),
+      );
+      await waitFor(() =>
+        expect(screen.getByTestId("automation-setup-test")).toBeEnabled(),
+      );
+      expect(
+        screen.getByTestId("automation-setup-save-state"),
+      ).not.toHaveTextContent("AUTOMATION_SETUP$UNSAVED_CHANGES");
+      clearAutomationFormSession(conversationId);
+    });
+
+    it("keeps unsaved agent edits over the saved draft after returning to the conversation", async () => {
+      mockSavedDraftEcho({ validationErrors: null });
+      const conversationId = "conv-saved-draft-return";
+      const user = userEvent.setup();
+      const first = renderPanel(undefined, conversationId, null);
+      await user.click(screen.getByTestId("automation-setup-save-draft"));
+      await waitFor(() =>
+        expect(
+          screen.getByTestId("automation-setup-save-state"),
+        ).toHaveTextContent("AUTOMATION_SETUP$SAVED_JUST_NOW"),
+      );
+      const savedRequest = vi.mocked(AutomationService.createServerDraft).mock
+        .calls[0][0];
+
+      await act(async () => {
+        handleAutomationFormUpdateAction(
+          {
+            kind: AUTOMATION_FORM_UPDATE_ACTION_KIND,
+            fields: { prompt: "Review and label every pull request" },
+          },
+          conversationId,
+          "agent-event-saved-return",
+          new Date().toISOString(),
+        );
+      });
+      await waitFor(
+        () =>
+          expect(screen.getByTestId("automation-setup-prompt")).toHaveValue(
+            "Review and label every pull request",
+          ),
+        { timeout: 3000 },
+      );
+
+      first.unmount();
+      vi.mocked(AutomationService.getServerDraft).mockResolvedValue(
+        echoSavedDraft(savedRequest),
+      );
+      renderPanel(
+        getAutomationFormSession(conversationId) ?? undefined,
+        conversationId,
+        { automationdraftid: "draft-1" },
+      );
+
+      await waitFor(() =>
+        expect(
+          screen.getByTestId("automation-setup-save-state"),
+        ).toHaveTextContent("AUTOMATION_SETUP$UNSAVED_CHANGES"),
+      );
+      expect(AutomationService.getServerDraft).toHaveBeenCalledWith("draft-1");
+      expect(screen.getByTestId("automation-setup-prompt")).toHaveValue(
+        "Review and label every pull request",
+      );
+      clearAutomationFormSession(conversationId);
     });
 
     describe("service account run-as", () => {

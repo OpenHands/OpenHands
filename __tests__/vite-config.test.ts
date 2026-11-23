@@ -650,6 +650,9 @@ describe("vite library build", () => {
     expect(declarations(recipe("context-menu-icon-stroke"))).toMatchObject({
       "stroke-width": "1.75px",
     });
+    expect(declarations(recipe("catalog-remove-icon-stroke"))).toMatchObject({
+      "stroke-width": "2.5px",
+    });
 
     // Preserve exact menu units and text metrics in the shipped scoped CSS.
     const menuGeometryContracts = {
@@ -719,6 +722,9 @@ describe("vite library build", () => {
       },
       "onboarding-viewport-height": {
         "max-height": "90vh",
+      },
+      "onboarding-step-height": {
+        "max-height": "calc(90vh - 7rem)",
       },
       "dialog-content-height": {
         "max-height": "80vh",

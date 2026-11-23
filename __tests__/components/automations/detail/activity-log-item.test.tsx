@@ -121,6 +121,28 @@ describe("ActivityLogItem — logs button", () => {
     expect(modal.getAttribute("data-bash-command-id")).toBe("cmd-xyz");
   });
 
+  it("shows a conversation indicator to the left of the logs button when a conversation was started", () => {
+    renderItem(makeRun({ conversation_id: "conv-1" }));
+
+    const indicator = screen.getByTestId("run-conversation-indicator");
+    const logsButton = screen.getByRole("button", { name: LOGS_BUTTON_NAME });
+    expect(indicator).toHaveAttribute(
+      "aria-label",
+      I18nKey.AUTOMATIONS$DETAIL$CONVERSATION_STARTED,
+    );
+    expect(
+      indicator.compareDocumentPosition(logsButton) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  it("shows no conversation indicator when the run has no conversation", () => {
+    renderItem(makeRun({ conversation_id: null }));
+    expect(
+      screen.queryByTestId("run-conversation-indicator"),
+    ).not.toBeInTheDocument();
+  });
+
   it("renders the logs button inside the row link without breaking its href", () => {
     renderItem(makeRun({ conversation_id: "conv-abc" }));
 
