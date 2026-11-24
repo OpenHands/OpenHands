@@ -31,7 +31,11 @@ import {
   redirectToMainAppLogin,
   shouldUseMainAppCookieAuth,
 } from "#/api/main-app-auth";
-import { getEffectiveLocalBackend } from "#/api/backend-registry/active-store";
+import {
+  getEffectiveLocalBackend,
+  isNoBackend,
+} from "#/api/backend-registry/active-store";
+import type { Backend } from "#/api/backend-registry/types";
 import { useActiveBackendContext } from "#/contexts/active-backend-context";
 import {
   isCloudBackendApiKeyOrNetworkHealthError,
@@ -41,6 +45,7 @@ import {
 import { TOAST_OPTIONS } from "#/utils/custom-toast-handlers";
 import { LoadingSpinner } from "#/components/shared/loading-spinner";
 import { useConfig } from "#/hooks/query/use-config";
+import { useSettings } from "#/hooks/query/use-settings";
 import { useRestoreMarsTunnels } from "#/hooks/use-mars-tunnel-backend";
 import { QUERY_KEYS } from "#/hooks/query/query-keys";
 import { AgentServerUIRoot } from "#/components/providers";
@@ -232,6 +237,63 @@ function FirstRunOnboardingScreen({ onClose }: { onClose: () => void }) {
   );
 }
 
+function LocalFirstRunOnboardingSequence({
+  backend,
+  onClose,
+}: {
+  backend: Backend;
+  onClose: () => void;
+}) {
+  const settings = useSettings();
+  const [hasAnsweredTelemetry, setHasAnsweredTelemetry] = React.useState(false);
+
+  React.useEffect(() => {
+    setHasAnsweredTelemetry(false);
+  }, [backend.id]);
+
+  const needsTelemetryChoice =
+    settings.isSuccess &&
+    settings.data?.user_consents_to_analytics === null &&
+    !hasAnsweredTelemetry;
+
+  if (needsTelemetryChoice) {
+    return (
+      <>
+        <AgentServerBootstrapLoading />
+        <TelemetryConsentBanner
+          onChoice={() => setHasAnsweredTelemetry(true)}
+        />
+      </>
+    );
+  }
+
+  if (settings.isLoading) {
+    return <AgentServerBootstrapLoading />;
+  }
+
+  return <FirstRunOnboardingScreen onClose={onClose} />;
+}
+
+function FirstRunOnboardingSequence({
+  backend,
+  onClose,
+}: {
+  backend: Backend;
+  onClose: () => void;
+}) {
+  if (
+    getLockedCloudHost() !== null ||
+    backend.kind !== "local" ||
+    isNoBackend(backend)
+  ) {
+    return <FirstRunOnboardingScreen onClose={onClose} />;
+  }
+
+  return (
+    <LocalFirstRunOnboardingSequence backend={backend} onClose={onClose} />
+  );
+}
+
 export const links: LinksFunction = () => [
   {
     rel: "icon",
@@ -392,10 +454,10 @@ export default function App() {
 
   if (showFirstRunOnboarding) {
     return (
-      <>
-        <FirstRunOnboardingScreen onClose={markCompleted} />
-        <TelemetryConsentBanner />
-      </>
+      <FirstRunOnboardingSequence
+        backend={active.backend}
+        onClose={markCompleted}
+      />
     );
   }
 

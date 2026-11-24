@@ -26,6 +26,63 @@ import { CLOUD_BACKEND_LOGGED_OUT_ERROR } from "#/hooks/query/use-backends-healt
 import { ActiveBackendProvider } from "#/contexts/active-backend-context";
 import { ONBOARDING_COMPLETED_STORAGE_KEY } from "#/components/features/onboarding/use-onboarding-completion";
 
+const rootMocks = vi.hoisted(() => ({
+  settings: {
+    data: { user_consents_to_analytics: false as boolean | null },
+    isLoading: false,
+    isSuccess: true,
+  },
+  showTelemetryBanner: false,
+}));
+
+vi.mock("#/api/settings-service/settings-service.api", () => ({
+  default: {
+    getSettings: vi.fn(async () => rootMocks.settings.data),
+    saveSettings: vi.fn(async () => true),
+  },
+}));
+
+vi.mock(
+  "#/components/features/analytics/telemetry-consent-banner",
+  async () => {
+    const React = await import("react");
+
+    return {
+      TelemetryConsentBanner: ({
+        onChoice,
+      }: {
+        onChoice?: (granted: boolean) => void;
+      }) => {
+        if (!rootMocks.showTelemetryBanner) return null;
+
+        return React.createElement(
+          "div",
+          { role: "dialog", "aria-label": "Help improve OpenHands" },
+          React.createElement(
+            "form",
+            {
+              "data-testid": "telemetry-consent-form",
+              onSubmit: (event: { preventDefault: () => void }) => {
+                event.preventDefault();
+                rootMocks.showTelemetryBanner = false;
+                onChoice?.(true);
+              },
+            },
+            React.createElement(
+              "button",
+              {
+                type: "submit",
+                "data-testid": "confirm-telemetry-preferences",
+              },
+              "Confirm preferences",
+            ),
+          ),
+        );
+      },
+    };
+  },
+);
+
 const TRANSLATIONS: Record<string, string> = {
   BACKEND$MANAGE_TITLE: "Manage backends",
   BACKEND$RECONNECT_CLOUD_TITLE: "Reconnect to Cloud",
@@ -62,7 +119,11 @@ vi.mock("#/components/features/onboarding/onboarding-modal", async () => {
       const { navigate } = useNavigation();
       return React.createElement(
         "div",
-        { "data-testid": "onboarding-modal" },
+        {
+          "data-testid": "onboarding-modal",
+          role: "dialog",
+          "aria-label": "Welcome to OpenHands",
+        },
         React.createElement("div", {
           "data-testid": "onboarding-step-check-backend",
         }),
@@ -166,6 +227,25 @@ describe("App root agent-server availability guard", () => {
       window as unknown as Record<string, unknown>
     ).__AGENT_CANVAS_SESSION_API_KEY__ = "test-session-key";
     __resetActiveStoreForTests();
+    rootMocks.settings = {
+      data: { user_consents_to_analytics: false },
+      isLoading: false,
+      isSuccess: true,
+    };
+    rootMocks.showTelemetryBanner = false;
+
+    server.use(
+      http.get("*/api/settings", () =>
+        HttpResponse.json({
+          agent_settings: {},
+          conversation_settings: {},
+          llm_api_key_is_set: false,
+          misc_settings: {
+            app_preferences: { user_consents_to_analytics: false },
+          },
+        }),
+      ),
+    );
   });
 
   afterEach(() => {
@@ -220,6 +300,49 @@ describe("App root agent-server availability guard", () => {
     expect(
       screen.queryByTestId("manage-backends-modal"),
     ).not.toBeInTheDocument();
+  });
+
+  it("collects local telemetry consent before showing first-run onboarding", async () => {
+    rootMocks.settings = {
+      data: { user_consents_to_analytics: null },
+      isLoading: false,
+      isSuccess: true,
+    };
+    rootMocks.showTelemetryBanner = true;
+
+    server.use(
+      http.get("*/api/settings", () =>
+        HttpResponse.json({
+          agent_settings: {},
+          conversation_settings: {},
+          llm_api_key_is_set: false,
+          misc_settings: {
+            app_preferences: { user_consents_to_analytics: null },
+          },
+        }),
+      ),
+      http.get("*/server_info", () =>
+        HttpResponse.json({ uptime: 0, idle_time: 0, version: "1.63.1" }),
+      ),
+    );
+
+    await renderApp(["/"]);
+
+    expect(
+      await screen.findByTestId("telemetry-consent-form"),
+    ).toBeInTheDocument();
+    expect(screen.getAllByRole("dialog")).toHaveLength(1);
+    expect(screen.queryByTestId("onboarding-modal")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId("confirm-telemetry-preferences"));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("onboarding-modal")).toBeInTheDocument();
+    });
+    expect(
+      screen.queryByTestId("telemetry-consent-form"),
+    ).not.toBeInTheDocument();
+    expect(screen.getAllByRole("dialog")).toHaveLength(1);
   });
 
   it("lets root-level onboarding navigate to the launched conversation before closing", async () => {
@@ -370,6 +493,9 @@ describe("App root agent-server availability guard", () => {
           llm_api_key_is_set: true,
           agent_settings: {
             llm: { model: "openai/gpt-5.5", api_key: "stored" },
+          },
+          misc_settings: {
+            app_preferences: { user_consents_to_analytics: false },
           },
         }),
       ),
@@ -770,6 +896,9 @@ describe("App root agent-server availability guard", () => {
           llm_api_key_is_set: true,
           agent_settings: {
             llm: { model: "openai/gpt-5.5", api_key: "stored" },
+          },
+          misc_settings: {
+            app_preferences: { user_consents_to_analytics: false },
           },
         }),
       ),

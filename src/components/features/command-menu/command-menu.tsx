@@ -6,6 +6,10 @@ import { I18nKey } from "#/i18n/declaration";
 import { useNavigation } from "#/context/navigation-context";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import { useCloseOnEscape } from "#/hooks/use-close-on-escape";
+import {
+  SIDEBAR_RAIL_COLLAPSE_MAX_WIDTH,
+  useBreakpoint,
+} from "#/hooks/use-breakpoint";
 import { useCommandMenuStore } from "#/stores/command-menu-store";
 import { useSidebarStore } from "#/stores/sidebar-store";
 import { cn } from "#/utils/utils";
@@ -71,6 +75,7 @@ export function CommandMenu() {
   const [activeIndex, setActiveIndex] = React.useState(0);
   const inputRef = React.useRef<HTMLInputElement>(null);
   const optionRefs = React.useRef(new Map<string, HTMLElement>());
+  const isSidebarRailHidden = useBreakpoint(SIDEBAR_RAIL_COLLAPSE_MAX_WIDTH);
 
   React.useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -117,8 +122,9 @@ export function CommandMenu() {
       createCommandMenuItems({
         toggleSidebar: () => useSidebarStore.getState().toggleCollapsed(),
         backendKind: backend.kind,
+        includeDesktopSidebarToggle: !isSidebarRailHidden,
       }),
-    [backend.kind],
+    [backend.kind, isSidebarRailHidden],
   );
 
   const filteredItems = React.useMemo(

@@ -21,6 +21,8 @@ export default [
     route("apps", "routes/canvas-extensions.tsx"),
     route("extensions/:extensionName/*", "routes/canvas-extension-page.tsx"),
     route("mcp", "routes/mcp.tsx"),
+    route("projects", "routes/projects.tsx"),
+    route("projects/:projectId", "routes/project.tsx"),
     route("settings", "routes/settings.tsx", [
       index("routes/settings-index.tsx"),
       route("llm", "routes/llm-settings.tsx"),
@@ -45,6 +47,7 @@ export default [
     route("automations/:automationId", "routes/automation-detail.tsx"),
     route("factories", "routes/factories-list.tsx"),
     route("factories/:factoryId", "routes/factory-detail.tsx"),
+    route("factories/:factoryId/worklogs", "routes/factory-worklogs.tsx"),
     // Unknown URLs (including /settings/<x>) render inside the app shell.
     route("*", "routes/not-found.tsx"),
   ]),

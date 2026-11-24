@@ -42,12 +42,22 @@ export function indexDecisionClosures(
 ): Map<string, DecisionClosure> {
   const closures = new Map<string, DecisionClosure>();
   const next = new Map<boolean, DecisionClosure>();
+  // Projects: the user answers a worker's question on the coordinator's
+  // card, and the server delivers the answer to the worker with the
+  // coordinator as its `sender`. That delivery settles the answer too, as
+  // the Agent Server's `find_pending_ask` reads it; on its own it closes
+  // nothing.
+  const relayed = new Map<boolean, MessageEvent>();
   for (let index = events.length - 1; index >= 0; index -= 1) {
     const event = events[index];
     const planner = !!event.isFromPlanningAgent;
     if ("kind" in event && isAskUserAnswerEvent(event)) {
       const later = next.get(planner);
-      if (
+      const delivery = relayed.get(planner);
+      if (delivery) {
+        next.set(planner, { closing: event, delivery });
+        relayed.delete(planner);
+      } else if (
         later &&
         isMessageEvent(later.closing) &&
         isAskUserAnswerMessage(later.closing)
@@ -66,6 +76,13 @@ export function indexDecisionClosures(
     }
     if (isQuestion || isUserOwnMessage(event)) {
       next.set(planner, { closing: event });
+      relayed.delete(planner);
+    } else if (
+      isMessageEvent(event) &&
+      event.source === "user" &&
+      isAskUserAnswerMessage(event)
+    ) {
+      relayed.set(planner, event);
     }
   }
   return closures;
