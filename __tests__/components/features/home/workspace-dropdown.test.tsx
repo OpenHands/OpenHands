@@ -287,3 +287,29 @@ describe("WorkspaceDropdown empty state", () => {
     },
   );
 });
+
+describe("WorkspaceDropdown keyboard footer access", () => {
+  it("moves focus to Add Workspace on Tab without selecting the highlighted row", async () => {
+    const user = userEvent.setup();
+    const onAddClick = vi.fn();
+    const { onChange } = renderDropdown({ onAddClick });
+    const menu = await openMenu(user);
+
+    await user.keyboard("{ArrowDown}");
+    expect(within(menu).getAllByRole("option")[0]).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+
+    await user.keyboard("{Tab}");
+
+    // Selecting here would remount the dropdown in WorkspaceSelectionForm
+    // (it is keyed by the selected path) and drop focus to <body>.
+    expect(onChange).not.toHaveBeenCalled();
+    expect(screen.getByTestId("add-workspaces-button")).toHaveFocus();
+    expect(screen.getByTestId("workspace-dropdown-menu")).toBeVisible();
+
+    await user.keyboard("{Enter}");
+    expect(onAddClick).toHaveBeenCalledTimes(1);
+  });
+});

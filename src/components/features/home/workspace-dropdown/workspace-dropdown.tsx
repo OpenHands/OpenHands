@@ -205,7 +205,15 @@ export function WorkspaceDropdown({
         actionAndChanges.type === useCombobox.stateChangeTypes.InputBlur &&
         keepOpenForFooterFocusRef.current
       ) {
-        return { ...actionAndChanges.changes, isOpen: true };
+        // Tabbing into the footer is not a selection: Downshift would select
+        // the highlighted row on blur, and the parent form remounts this
+        // dropdown on selection (keyed by path), dropping focus to <body>.
+        return {
+          ...actionAndChanges.changes,
+          isOpen: true,
+          selectedItem: state.selectedItem,
+          inputValue: state.inputValue,
+        };
       }
 
       return actionAndChanges.changes;
