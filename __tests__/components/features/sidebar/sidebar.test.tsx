@@ -11,7 +11,9 @@ import {
   waitFor,
 } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { CommandMenu } from "#/components/features/command-menu/command-menu";
 import { Sidebar } from "#/components/features/sidebar/sidebar";
 import { SidebarMobileNavProvider } from "#/components/features/sidebar/sidebar-mobile-nav-context";
 import { SidebarMobileMenuBar } from "#/components/features/sidebar/sidebar-mobile-menu-bar";
@@ -273,6 +275,7 @@ function renderSidebar(currentPath: string, currentSearch = "") {
         <SidebarMobileNavProvider>
           <Sidebar />
           <SidebarMobileMenuBar />
+          <CommandMenu />
         </SidebarMobileNavProvider>
       </NavigationProvider>
     </QueryClientProvider>,
@@ -317,6 +320,29 @@ describe("Sidebar", () => {
         screen.queryByTestId("sidebar-mobile-drawer"),
       ).not.toBeInTheDocument();
     });
+  });
+
+  it("keeps keyboard focus in the command menu opened over the mobile drawer", async () => {
+    const user = userEvent.setup();
+    const { navigate } = renderSidebar("/conversations");
+    await user.click(screen.getByTestId("sidebar-mobile-menu-toggle"));
+    const drawer = await screen.findByRole("dialog");
+    const trigger = within(drawer).getByTestId("command-menu-trigger");
+
+    await user.click(trigger);
+    const input = await screen.findByRole("combobox");
+    await waitFor(() => expect(input).toHaveFocus());
+    await user.keyboard("{Escape}");
+    expect(trigger).toHaveFocus();
+
+    await user.keyboard("{Control>}k{/Control}");
+    const reopenedInput = await screen.findByRole("combobox");
+    await waitFor(() => expect(reopenedInput).toHaveFocus());
+    await user.keyboard("secrets");
+    expect(reopenedInput).toHaveValue("secrets");
+    await user.keyboard("{Enter}");
+    expect(navigate).toHaveBeenCalledWith("/settings/secrets");
+    expect(screen.queryByRole("combobox")).not.toBeInTheDocument();
   });
 
   it("applies safe-area padding to the fixed mobile drawer", () => {

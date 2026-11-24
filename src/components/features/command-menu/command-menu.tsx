@@ -1,5 +1,6 @@
 import React from "react";
 import { AppearancePortal } from "#/components/shared/appearance-portal";
+import { useModalFocus } from "#/components/shared/modals/use-modal-focus";
 import { Search, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { I18nKey } from "#/i18n/declaration";
@@ -64,58 +65,23 @@ function matchesQuery({
   return terms.every((term) => searchableText.includes(term));
 }
 
-export function CommandMenu() {
+function CommandMenuDialog() {
   const { t } = useTranslation("openhands");
   const { navigate } = useNavigation();
   const { backend } = useActiveBackend();
-  const isOpen = useCommandMenuStore((state) => state.isOpen);
-  const open = useCommandMenuStore((state) => state.open);
   const close = useCommandMenuStore((state) => state.close);
   const [query, setQuery] = React.useState(EMPTY_QUERY);
   const [activeIndex, setActiveIndex] = React.useState(0);
   const inputRef = React.useRef<HTMLInputElement>(null);
   const optionRefs = React.useRef(new Map<string, HTMLElement>());
   const isSidebarRailHidden = useBreakpoint(SIDEBAR_RAIL_COLLAPSE_MAX_WIDTH);
+  const focus = useModalFocus({ elevated: true });
+  useCloseOnEscape(true, close);
 
   React.useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (
-        (event.metaKey || event.ctrlKey) &&
-        event.key.toLocaleLowerCase() === COMMAND_MENU_SHORTCUT_KEY
-      ) {
-        event.preventDefault();
-        open();
-      }
-    };
-
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [open]);
-
-  // Escape closes the modal from any element inside it, not only the input.
-  useCloseOnEscape(isOpen, close);
-
-  React.useEffect(() => {
-    if (!isOpen) {
-      setQuery(EMPTY_QUERY);
-      setActiveIndex(0);
-      optionRefs.current.clear();
-      return undefined;
-    }
-
-    // Return focus to whatever had it (for example the composer) on close.
-    const previouslyFocused =
-      document.activeElement instanceof HTMLElement
-        ? document.activeElement
-        : null;
     const frame = requestAnimationFrame(() => inputRef.current?.focus());
-    return () => {
-      cancelAnimationFrame(frame);
-      if (previouslyFocused?.isConnected) {
-        previouslyFocused.focus();
-      }
-    };
-  }, [isOpen]);
+    return () => cancelAnimationFrame(frame);
+  }, []);
 
   const items = React.useMemo(
     () =>
@@ -199,15 +165,16 @@ export function CommandMenu() {
     }
   };
 
-  if (!isOpen || typeof document === "undefined") {
-    return null;
-  }
-
   const activeItem = filteredItems[activeIndex];
 
   return (
     <AppearancePortal>
+      {/* eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions -- the dialog contains keyboard focus while open. */}
       <div
+        ref={focus.rootRef}
+        tabIndex={-1}
+        onFocus={focus.onFocus}
+        onKeyDown={focus.onKeyDown}
         className="fixed inset-0 z-70 flex items-start justify-center px-3 command-menu-overlay sm:px-6"
         data-testid={COMMAND_MENU_TEST_ID}
         role="dialog"
@@ -412,4 +379,28 @@ export function CommandMenu() {
       </div>
     </AppearancePortal>
   );
+}
+
+export function CommandMenu() {
+  const isOpen = useCommandMenuStore((state) => state.isOpen);
+  const open = useCommandMenuStore((state) => state.open);
+
+  React.useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (
+        (event.metaKey || event.ctrlKey) &&
+        event.key.toLocaleLowerCase() === COMMAND_MENU_SHORTCUT_KEY
+      ) {
+        event.preventDefault();
+        open();
+      }
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [open]);
+
+  return isOpen && typeof document !== "undefined" ? (
+    <CommandMenuDialog />
+  ) : null;
 }
