@@ -195,8 +195,8 @@ describe("useWorkspaceFiles — local backend", () => {
 
     await waitFor(() => expect(result.current.data).toEqual(["src/a.ts"]));
     const command = executeCommandSpy.mock.calls[0][2] as string;
-    expect(command).not.toContain('/c:"\\build\\"');
-    expect(command).toContain('/c:"\\node_modules\\"');
+    expect(command).not.toContain('/c:"\\\\build\\\\"');
+    expect(command).toContain('/c:"\\\\node_modules\\\\"');
   });
 
   // @spec WFD-002 — Workspace-scoped server persistence
