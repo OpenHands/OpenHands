@@ -34,13 +34,9 @@ function openConversation(id: string, project?: string) {
   view.conversation = { tags: project ? { project } : {} };
 }
 
-function renderSidebar(path = `/conversations/${view.conversationId}`) {
-  return render(
-    <QueryClientProvider
-      client={
-        new QueryClient({ defaultOptions: { queries: { retry: false } } })
-      }
-    >
+function sidebarAt(path: string, client: QueryClient) {
+  return (
+    <QueryClientProvider client={client}>
       <MemoryRouter initialEntries={[path]}>
         <NavigationProvider
           value={{
@@ -53,8 +49,23 @@ function renderSidebar(path = `/conversations/${view.conversationId}`) {
           <SidebarConversationList collapsed={false} />
         </NavigationProvider>
       </MemoryRouter>
-    </QueryClientProvider>,
+    </QueryClientProvider>
   );
+}
+
+function renderSidebar(path = `/conversations/${view.conversationId}`) {
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  const result = render(sidebarAt(path, client));
+  return {
+    ...result,
+    /** Moves to another conversation in place, as a link in the app does. */
+    navigateTo: (id: string, project?: string) => {
+      openConversation(id, project);
+      result.rerender(sidebarAt(`/conversations/${id}`, client));
+    },
+  };
 }
 
 const rowOf = async (title: string) =>
@@ -135,6 +146,43 @@ describe("Sidebar in a project view", () => {
     openConversation(AUDIT, PROJECT_ID);
     renderSidebar();
     expect(await rowOf("Audit auth flows")).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+  });
+
+  it("opens the folded group of a conversation the user moves to", async () => {
+    const { navigateTo } = renderSidebar();
+    const resolved = await screen.findByTestId(
+      "project-panel-group-resolved-toggle",
+    );
+    expect(resolved).toHaveAttribute("aria-expanded", "false");
+
+    // As from a mention in the coordinator's chat: no reload, no remount.
+    navigateTo(AUDIT, PROJECT_ID);
+    expect(resolved).toHaveAttribute("aria-expanded", "true");
+    expect(await rowOf("Audit auth flows")).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+
+    // Folding it by hand sticks while the user stays on that conversation.
+    await userEvent.click(resolved);
+    expect(resolved).toHaveAttribute("aria-expanded", "false");
+    await waitFor(() =>
+      expect(
+        screen.getByTestId("project-panel-group-resolved"),
+      ).toHaveTextContent("PROJECTS$GROUP_RESOLVED · 1"),
+    );
+    expect(resolved).toHaveAttribute("aria-expanded", "false");
+
+    // Any folded group opens the same way, not only Resolved.
+    const working = screen.getByTestId("project-panel-group-working-toggle");
+    await userEvent.click(working);
+    expect(working).toHaveAttribute("aria-expanded", "false");
+    navigateTo(RETRY, PROJECT_ID);
+    expect(working).toHaveAttribute("aria-expanded", "true");
+    expect(await rowOf("Fix login retry")).toHaveAttribute(
       "aria-current",
       "page",
     );

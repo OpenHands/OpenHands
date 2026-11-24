@@ -10,6 +10,7 @@ export function ProjectPanelGroup({
   label,
   count,
   defaultOpen = true,
+  revealKey = null,
   emphasized = false,
   children,
 }: {
@@ -17,11 +18,24 @@ export function ProjectPanelGroup({
   label: string;
   count: number;
   defaultOpen?: boolean;
+  /**
+   * Set while the group holds something the user is looking at, such as the
+   * open conversation. Each time it changes to a new value the group opens,
+   * so arriving at a row in a folded group shows it; folding by hand sticks
+   * while the value stays the same.
+   */
+  revealKey?: string | null;
   /** Draw the heading in the foreground color, for groups that need the user. */
   emphasized?: boolean;
   children: React.ReactNode;
 }) {
-  const [open, setOpen] = React.useState(defaultOpen);
+  const [open, setOpen] = React.useState(defaultOpen || revealKey !== null);
+  const [revealed, setRevealed] = React.useState(revealKey);
+  if (revealed !== revealKey) {
+    // Adjust state while rendering, so the row shows without a folded frame.
+    setRevealed(revealKey);
+    if (revealKey !== null) setOpen(true);
+  }
   if (!count) return null;
   const Chevron = open ? ChevronDown : ChevronRight;
   return (

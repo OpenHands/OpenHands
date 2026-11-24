@@ -372,10 +372,14 @@ export function ProjectConversationList({
             id={group.id}
             label={t(group.label)}
             count={items.length}
-            // Resolved starts folded, unless the open conversation is in it.
-            defaultOpen={
-              group.id !== "resolved" ||
+            // Resolved starts folded. Whichever group holds the open
+            // conversation opens, on load and on each move to another one.
+            defaultOpen={group.id !== "resolved"}
+            revealKey={
+              current &&
               items.some((c) => projectIdKey(c.conversation_id) === current)
+                ? current
+                : null
             }
             emphasized={group.id === "needs_you"}
           >
