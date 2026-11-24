@@ -18,6 +18,7 @@ export function FeedbackButton() {
   const [showDisclosure, setShowDisclosure] = useState(false);
   const [message, setMessage] = useState("");
   const [email, setEmail] = useState("");
+  const [isEmailValid, setIsEmailValid] = useState(false);
   const [status, setStatus] = useState<"idle" | "sending" | "error" | "sent">(
     "idle",
   );
@@ -34,12 +35,13 @@ export function FeedbackButton() {
   const submit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const text = message.trim();
-    if (!text || status === "sending") return;
+    if (!text || !isEmailValid || status === "sending") return;
     setStatus("sending");
     try {
       await submitPrivateFeedback(text, email);
       setMessage("");
       setEmail("");
+      setIsEmailValid(false);
       setStatus("sent");
     } catch {
       setStatus("error");
@@ -114,10 +116,17 @@ export function FeedbackButton() {
                 <input
                   id="feedback-email"
                   type="email"
+                  required
                   autoComplete="email"
                   maxLength={254}
                   value={email}
-                  onChange={(event) => setEmail(event.target.value)}
+                  onChange={(event) => {
+                    setEmail(event.currentTarget.value);
+                    setIsEmailValid(
+                      event.currentTarget.validity.valid &&
+                        Boolean(event.currentTarget.value.trim()),
+                    );
+                  }}
                   className="w-full rounded-md border border-border bg-base-secondary p-2 text-contrast"
                 />
                 <p className="text-xs text-muted">
@@ -131,7 +140,9 @@ export function FeedbackButton() {
                 <BrandButton
                   type="submit"
                   variant="primary"
-                  isDisabled={!message.trim() || status === "sending"}
+                  isDisabled={
+                    !message.trim() || !isEmailValid || status === "sending"
+                  }
                 >
                   {t(I18nKey.FEEDBACK$SEND)}
                 </BrandButton>
