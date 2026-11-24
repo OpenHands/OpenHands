@@ -277,31 +277,6 @@ describe("CommandMenu", () => {
     expect(useCommandMenuStore.getState().isOpen).toBe(false);
   });
 
-  it("cancels deferred focus and safely ignores it after unmount", () => {
-    let focusCallback: FrameRequestCallback | undefined;
-    const requestFrame = vi
-      .spyOn(globalThis, "requestAnimationFrame")
-      .mockImplementation((callback) => {
-        focusCallback = callback;
-        return 42;
-      });
-    const cancelFrame = vi
-      .spyOn(globalThis, "cancelAnimationFrame")
-      .mockImplementation(() => undefined);
-    useCommandMenuStore.getState().open();
-
-    const { unmount } = renderCommandMenu();
-    expect(requestFrame).toHaveBeenCalledOnce();
-    unmount();
-
-    expect(cancelFrame).toHaveBeenCalledWith(42);
-    expect(focusCallback).toBeDefined();
-    expect(() => focusCallback?.(0)).not.toThrow();
-
-    requestFrame.mockRestore();
-    cancelFrame.mockRestore();
-  });
-
   it("filters commands by page and setting keywords", async () => {
     useCommandMenuStore.getState().open();
     renderCommandMenu();

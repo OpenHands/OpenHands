@@ -6,6 +6,7 @@ import { I18nKey } from "#/i18n/declaration";
 import { useNavigation } from "#/context/navigation-context";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import { useCloseOnEscape } from "#/hooks/use-close-on-escape";
+import { useModalFocus } from "#/components/shared/modals/use-modal-focus";
 import {
   SIDEBAR_RAIL_COLLAPSE_MAX_WIDTH,
   useBreakpoint,
@@ -65,17 +66,8 @@ function matchesQuery({
 }
 
 export function CommandMenu() {
-  const { t } = useTranslation("openhands");
-  const { navigate } = useNavigation();
-  const { backend } = useActiveBackend();
   const isOpen = useCommandMenuStore((state) => state.isOpen);
   const open = useCommandMenuStore((state) => state.open);
-  const close = useCommandMenuStore((state) => state.close);
-  const [query, setQuery] = React.useState(EMPTY_QUERY);
-  const [activeIndex, setActiveIndex] = React.useState(0);
-  const inputRef = React.useRef<HTMLInputElement>(null);
-  const optionRefs = React.useRef(new Map<string, HTMLElement>());
-  const isSidebarRailHidden = useBreakpoint(SIDEBAR_RAIL_COLLAPSE_MAX_WIDTH);
 
   React.useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -92,30 +84,39 @@ export function CommandMenu() {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [open]);
 
+  if (!isOpen || typeof document === "undefined") {
+    return null;
+  }
+
+  // Mounted only while open, so search state resets on every open and the
+  // dialog joins the modal focus stack for exactly as long as it is shown.
+  return <CommandMenuDialog />;
+}
+
+function CommandMenuDialog() {
+  const { t } = useTranslation("openhands");
+  const { navigate } = useNavigation();
+  const { backend } = useActiveBackend();
+  const close = useCommandMenuStore((state) => state.close);
+  const [query, setQuery] = React.useState(EMPTY_QUERY);
+  const [activeIndex, setActiveIndex] = React.useState(0);
+  const inputRef = React.useRef<HTMLInputElement>(null);
+  const optionRefs = React.useRef(new Map<string, HTMLElement>());
+  const isSidebarRailHidden = useBreakpoint(SIDEBAR_RAIL_COLLAPSE_MAX_WIDTH);
+  // Registers as the topmost modal so a modal opened before it (the phone
+  // sidebar drawer, a settings dialog) stops pulling focus back into itself,
+  // and returns focus to whatever had it (for example the composer) on close.
+  // It paints at the elevated z-70 layer, so it owns focus like one.
+  const focus = useModalFocus({ elevated: true });
+
   // Escape closes the modal from any element inside it, not only the input.
-  useCloseOnEscape(isOpen, close);
+  useCloseOnEscape(true, close);
 
+  // Declared after useModalFocus: by now this dialog is the topmost modal, so
+  // a modal underneath no longer pulls the search field's focus back.
   React.useEffect(() => {
-    if (!isOpen) {
-      setQuery(EMPTY_QUERY);
-      setActiveIndex(0);
-      optionRefs.current.clear();
-      return undefined;
-    }
-
-    // Return focus to whatever had it (for example the composer) on close.
-    const previouslyFocused =
-      document.activeElement instanceof HTMLElement
-        ? document.activeElement
-        : null;
-    const frame = requestAnimationFrame(() => inputRef.current?.focus());
-    return () => {
-      cancelAnimationFrame(frame);
-      if (previouslyFocused?.isConnected) {
-        previouslyFocused.focus();
-      }
-    };
-  }, [isOpen]);
+    inputRef.current?.focus();
+  }, []);
 
   const items = React.useMemo(
     () =>
@@ -199,20 +200,21 @@ export function CommandMenu() {
     }
   };
 
-  if (!isOpen || typeof document === "undefined") {
-    return null;
-  }
-
   const activeItem = filteredItems[activeIndex];
 
   return (
     <AppearancePortal>
+      {/* eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions -- role=dialog owns its keyboard focus trap; see useModalFocus. */}
       <div
-        className="fixed inset-0 z-70 flex items-start justify-center px-3 command-menu-overlay sm:px-6"
+        ref={focus.rootRef}
+        className="fixed inset-0 z-70 flex items-start justify-center px-3 outline-none command-menu-overlay sm:px-6"
         data-testid={COMMAND_MENU_TEST_ID}
         role="dialog"
         aria-modal="true"
         aria-label={t(I18nKey.COMMAND_MENU$ARIA_LABEL)}
+        tabIndex={-1}
+        onFocus={focus.onFocus}
+        onKeyDown={focus.onKeyDown}
       >
         <button
           type="button"

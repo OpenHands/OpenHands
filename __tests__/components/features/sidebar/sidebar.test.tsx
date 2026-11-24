@@ -10,11 +10,14 @@ import {
   within,
   waitFor,
 } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Sidebar } from "#/components/features/sidebar/sidebar";
 import { SidebarMobileNavProvider } from "#/components/features/sidebar/sidebar-mobile-nav-context";
 import { SidebarMobileMenuBar } from "#/components/features/sidebar/sidebar-mobile-menu-bar";
+import { CommandMenu } from "#/components/features/command-menu/command-menu";
+import { useCommandMenuStore } from "#/stores/command-menu-store";
 import { useCloseOnEscape } from "#/hooks/use-close-on-escape";
 import { useSidebarStore } from "#/stores/sidebar-store";
 import {
@@ -257,7 +260,11 @@ function getDesktopSidebar(collapsed?: boolean): HTMLElement {
   return sidebar;
 }
 
-function renderSidebar(currentPath: string, currentSearch = "") {
+function renderSidebar(
+  currentPath: string,
+  currentSearch = "",
+  { withCommandMenu = false }: { withCommandMenu?: boolean } = {},
+) {
   const navigate = vi.fn();
   const value: NavigationContextValue = {
     currentPath,
@@ -273,6 +280,7 @@ function renderSidebar(currentPath: string, currentSearch = "") {
         <SidebarMobileNavProvider>
           <Sidebar />
           <SidebarMobileMenuBar />
+          {withCommandMenu ? <CommandMenu /> : null}
         </SidebarMobileNavProvider>
       </NavigationProvider>
     </QueryClientProvider>,
@@ -289,6 +297,7 @@ describe("Sidebar", () => {
     useSidebarStore.setState({ collapsed: false });
     sidebarConversationListMockState.renderNestedEscapeMenu = false;
     factoriesSupport.isSupported = false;
+    useCommandMenuStore.setState({ isOpen: false });
   });
 
   afterEach(() => {
@@ -471,6 +480,55 @@ describe("Sidebar", () => {
     fireEvent.keyDown(document.body, { key: "Escape" });
     expect(toggle).toHaveAttribute("aria-expanded", "false");
   });
+
+  it.each([
+    [
+      "its Search commands row",
+      async (drawer: HTMLElement, user: ReturnType<typeof userEvent.setup>) => {
+        await user.click(within(drawer).getByTestId("command-menu-trigger"));
+      },
+    ],
+    [
+      "Ctrl+K",
+      async (
+        _drawer: HTMLElement,
+        user: ReturnType<typeof userEvent.setup>,
+      ) => {
+        await user.keyboard("{Control>}k{/Control}");
+      },
+    ],
+  ])(
+    "keeps focus in the command menu opened over the mobile drawer from %s",
+    async (_opener, openCommandMenu) => {
+      // Arrange: the drawer is open and traps focus.
+      const user = userEvent.setup();
+      const { navigate } = renderSidebar("/conversations", "", {
+        withCommandMenu: true,
+      });
+      await user.click(screen.getByTestId("sidebar-mobile-menu-toggle"));
+      const drawer = screen.getByTestId("sidebar-mobile-drawer");
+      await waitFor(() =>
+        expect(drawer).toContainElement(document.activeElement as HTMLElement),
+      );
+
+      // Act: open the command menu on top of the drawer and search.
+      await openCommandMenu(drawer, user);
+      const search = within(
+        await screen.findByTestId("command-menu"),
+      ).getByRole("combobox");
+      await waitFor(() => expect(search).toHaveFocus());
+      await user.keyboard("secrets");
+
+      // Assert: the drawer did not pull focus back, so typing and Enter work.
+      expect(search).toHaveFocus();
+      expect(search).toHaveValue("secrets");
+      await user.keyboard("{Enter}");
+      expect(navigate).toHaveBeenCalledWith("/settings/secrets");
+      expect(screen.queryByTestId("command-menu")).not.toBeInTheDocument();
+      // With the menu gone the drawer owns focus again.
+      expect(drawer).toContainElement(document.activeElement as HTMLElement);
+    },
+  );
 
   it("toggles between expanded and collapsed states and persists the choice", () => {
     const { unmount } = renderSidebar("/conversations");
