@@ -1,0 +1,229 @@
+<!doctype html>
+<html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Keyboard focus over the mobile drawer · OpenHands</title>
+<style>
+:root{color-scheme:light;--fg:#182c26;--muted:#4c6158;--rule:#cbd6ce;--paper:#fcfcf8}*{box-sizing:border-box}body{margin:0;background:var(--paper);color:var(--fg);font:16px/1.55 system-ui,sans-serif}main{max-width:860px;padding:40px clamp(18px,5vw,50px) 65px;margin:auto}header{border-bottom:2px solid var(--fg);padding-bottom:15px}h1{font:600 clamp(2rem,4vw,3rem)/1.1 Georgia,serif;margin:12px 0}h2{font:600 1.5rem Georgia,serif;margin:32px 0 8px}h3{font-size:1rem;margin-bottom:0}article{padding:0 0 14px;border-bottom:1px solid var(--rule)}p{margin:7px 0 12px}a,summary{color:#1d5e4a;text-underline-offset:3px}summary{cursor:pointer;font-size:.88rem}a:focus-visible,summary:focus-visible{outline:2px solid #875012}pre{white-space:pre;overflow:auto;background:#f1f4ed;padding:12px;font:12px/1.45 ui-monospace,monospace}figure{margin:18px 0;overflow-x:auto}svg{display:block;width:100%;min-width:530px}svg text{fill:#1e3930;font:600 12px system-ui,sans-serif}svg .caption{font:11px system-ui,sans-serif;fill:#4e6057}svg .label{fill:#5b674f}table{border-collapse:collapse;width:100%}td,th{border-top:1px solid var(--rule);padding:10px 8px;text-align:left;vertical-align:top}th{width:30%}small{color:var(--muted)}
+</style><main><header><small>OpenHands Agent Canvas · <a href="https://github.com/OpenHands/OpenHands/issues/20033">Issue #20033</a></small>
+<h1>Keyboard focus over the mobile drawer</h1><p>At 390 px the drawer and command menu are separate DOM roots. Registering the open menu with the shared focus manager lets users type a command, execute it with Enter, or dismiss it and continue in the drawer.</p></header>
+<h2>Where focus goes</h2><figure><svg viewBox="0 0 690 135" role="img" aria-label="Opening the palette formerly redirected focus to the drawer. Registering its root lets the search field receive input."><text x="4" y="32" class="label">Base</text><a href="https://github.com/OpenHands/OpenHands/blob/47eed012171230b059c3f5cbf3798bded74ea248/src/components/features/command-menu/command-menu.tsx#L98"><rect x="68" y="8" width="188" height="48" rx="5" fill="#f1f5f1"/><text x="78" y="27">Open palette</text><text class="caption" x="78" y="43">CommandMenu</text></a><path d="M260 31h17m-5 -4 5 4-5 4" fill="none" stroke="#8d958e"/><a href="https://github.com/OpenHands/OpenHands/blob/47eed012171230b059c3f5cbf3798bded74ea248/src/components/features/command-menu/command-menu.tsx#L111"><rect x="282" y="8" width="188" height="48" rx="5" fill="#f1f5f1"/><text x="292" y="27">Focus search</text><text class="caption" x="292" y="43">requestAnimationFrame</text></a><path d="M474 31h17m-5 -4 5 4-5 4" fill="none" stroke="#8d958e"/><a href="https://github.com/OpenHands/OpenHands/blob/47eed012171230b059c3f5cbf3798bded74ea248/src/components/shared/modals/use-modal-focus.ts#L114"><rect x="496" y="8" width="188" height="48" rx="5" fill="#fcf4e9"/><text x="506" y="27">Focus returns to drawer</text><text class="caption" x="506" y="43">handleFocusIn</text></a><text x="4" y="97" class="label">Patch</text><a href="https://github.com/juemimgcd/OpenHands/blob/4d2a1fe7053d3134afcfa6136efcd056796023da/src/components/features/command-menu/command-menu.tsx#L407"><rect x="68" y="73" width="188" height="48" rx="5" fill="#f1f5f1"/><text x="78" y="92">Open palette</text><text class="caption" x="78" y="108">CommandMenuDialog</text></a><path d="M260 96h17m-5 -4 5 4-5 4" fill="none" stroke="#8d958e"/><a href="https://github.com/juemimgcd/OpenHands/blob/4d2a1fe7053d3134afcfa6136efcd056796023da/src/components/features/command-menu/command-menu.tsx#L81"><rect x="282" y="73" width="188" height="48" rx="5" fill="#f1f5f1"/><text x="292" y="92">Register elevated root</text><text class="caption" x="292" y="108">useModalFocus</text></a><path d="M474 96h17m-5 -4 5 4-5 4" fill="none" stroke="#8d958e"/><a href="https://github.com/juemimgcd/OpenHands/blob/4d2a1fe7053d3134afcfa6136efcd056796023da/src/components/features/command-menu/command-menu.tsx#L84"><rect x="496" y="73" width="188" height="48" rx="5" fill="#fcf4e9"/><text x="506" y="92">Search keeps focus</text><text class="caption" x="506" y="108">combobox receives input</text></a></svg></figure>
+<h2>Which dialog handles the key?</h2><article><h3>The palette registers only while it is open.</h3><p>Both entry points open the same dialog. Mounting it registers the elevated focus trap. Unmounting it returns focus to the opener and clears the query. · <a href="https://github.com/OpenHands/OpenHands/blob/47eed012171230b059c3f5cbf3798bded74ea248/src/components/features/command-menu/command-menu.tsx#L98">Base L98</a> · <a href="https://github.com/juemimgcd/OpenHands/blob/4d2a1fe7053d3134afcfa6136efcd056796023da/src/components/features/command-menu/command-menu.tsx#L81">Patch L81</a></p><details><summary>View patch for command-menu.tsx</summary><pre>diff --git a/src/components/features/command-menu/command-menu.tsx b/src/components/features/command-menu/command-menu.tsx
+index 87cf347bb..d7217f2c4 100644
+--- a/src/components/features/command-menu/command-menu.tsx
++++ b/src/components/features/command-menu/command-menu.tsx
+@@ -2,2 +2,6 @@ import React from &quot;react&quot;;
+ import { AppearancePortal } from &quot;#/components/shared/appearance-portal&quot;;
++import {
++  getTopmostModal,
++  useModalFocus,
++} from &quot;#/components/shared/modals/use-modal-focus&quot;;
+ import { Search, X } from &quot;lucide-react&quot;;
+@@ -66,3 +70,3 @@ function matchesQuery({
+
+-export function CommandMenu() {
++function CommandMenuDialog() {
+   const { t } = useTranslation(&quot;openhands&quot;);
+@@ -70,4 +74,2 @@ export function CommandMenu() {
+   const { backend } = useActiveBackend();
+-  const isOpen = useCommandMenuStore((state) =&gt; state.isOpen);
+-  const open = useCommandMenuStore((state) =&gt; state.open);
+   const close = useCommandMenuStore((state) =&gt; state.close);
+@@ -78,42 +80,9 @@ export function CommandMenu() {
+   const isSidebarRailHidden = useBreakpoint(SIDEBAR_RAIL_COLLAPSE_MAX_WIDTH);
++  const focus = useModalFocus({ elevated: true });
++  useCloseOnEscape(true, close);
+
+   React.useEffect(() =&gt; {
+-    const onKeyDown = (event: KeyboardEvent) =&gt; {
+-      if (
+-        (event.metaKey || event.ctrlKey) &amp;&amp;
+-        event.key.toLocaleLowerCase() === COMMAND_MENU_SHORTCUT_KEY
+-      ) {
+-        event.preventDefault();
+-        open();
+-      }
+-    };
+-
+-    window.addEventListener(&quot;keydown&quot;, onKeyDown);
+-    return () =&gt; window.removeEventListener(&quot;keydown&quot;, onKeyDown);
+-  }, [open]);
+-
+-  // Escape closes the modal from any element inside it, not only the input.
+-  useCloseOnEscape(isOpen, close);
+-
+-  React.useEffect(() =&gt; {
+-    if (!isOpen) {
+-      setQuery(EMPTY_QUERY);
+-      setActiveIndex(0);
+-      optionRefs.current.clear();
+-      return undefined;
+-    }
+-
+-    // Return focus to whatever had it (for example the composer) on close.
+-    const previouslyFocused =
+-      document.activeElement instanceof HTMLElement
+-        ? document.activeElement
+-        : null;
+     const frame = requestAnimationFrame(() =&gt; inputRef.current?.focus());
+-    return () =&gt; {
+-      cancelAnimationFrame(frame);
+-      if (previouslyFocused?.isConnected) {
+-        previouslyFocused.focus();
+-      }
+-    };
+-  }, [isOpen]);
++    return () =&gt; cancelAnimationFrame(frame);
++  }, []);
+
+@@ -201,6 +170,2 @@ export function CommandMenu() {
+
+-  if (!isOpen || typeof document === &quot;undefined&quot;) {
+-    return null;
+-  }
+-
+   const activeItem = filteredItems[activeIndex];
+@@ -209,3 +174,8 @@ export function CommandMenu() {
+     &lt;AppearancePortal&gt;
++      {/* eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions -- the dialog contains keyboard focus while open. */}
+       &lt;div
++        ref={focus.rootRef}
++        tabIndex={-1}
++        onFocus={focus.onFocus}
++        onKeyDown={focus.onKeyDown}
+         className=&quot;fixed inset-0 z-70 flex items-start justify-center px-3 command-menu-overlay sm:px-6&quot;
+@@ -415 +385,26 @@ export function CommandMenu() {
+ }
++
++export function CommandMenu() {
++  const isOpen = useCommandMenuStore((state) =&gt; state.isOpen);
++  const open = useCommandMenuStore((state) =&gt; state.open);
++
++  React.useEffect(() =&gt; {
++    const onKeyDown = (event: KeyboardEvent) =&gt; {
++      if (
++        (event.metaKey || event.ctrlKey) &amp;&amp;
++        event.key.toLocaleLowerCase() === COMMAND_MENU_SHORTCUT_KEY
++      ) {
++        event.preventDefault();
++        // An elevated dialog, such as telemetry consent, owns the keyboard.
++        if (!getTopmostModal()?.elevated.current) open();
++      }
++    };
++
++    window.addEventListener(&quot;keydown&quot;, onKeyDown);
++    return () =&gt; window.removeEventListener(&quot;keydown&quot;, onKeyDown);
++  }, [open]);
++
++  return isOpen &amp;&amp; typeof document !== &quot;undefined&quot; ? (
++    &lt;CommandMenuDialog /&gt;
++  ) : null;
++}</pre></details></article><article><h3>Focus and keyboard shortcuts read the same modal stack.</h3><p>The existing ordering prefers the newest elevated dialog, then the newest ordinary dialog. Returning the entry exposes its root and elevation to the shortcut and Escape handlers. · <a href="https://github.com/OpenHands/OpenHands/blob/47eed012171230b059c3f5cbf3798bded74ea248/src/components/shared/modals/use-modal-focus.ts#L26">Base L26</a> · <a href="https://github.com/juemimgcd/OpenHands/blob/4d2a1fe7053d3134afcfa6136efcd056796023da/src/components/shared/modals/use-modal-focus.ts#L26">Patch L26</a></p><details><summary>View patch for use-modal-focus.ts</summary><pre>diff --git a/src/components/shared/modals/use-modal-focus.ts b/src/components/shared/modals/use-modal-focus.ts
+index f0faddba3..2d3d2eb8d 100644
+--- a/src/components/shared/modals/use-modal-focus.ts
++++ b/src/components/shared/modals/use-modal-focus.ts
+@@ -22,12 +22,11 @@ interface OpenModal {
+
+-// Every mounted ModalBackdrop, in mount order. Only the topmost one owns focus.
++// Mounted modal focus traps in mount order.
+ const openModals: OpenModal[] = [];
+
+-function topmostModalRoot(): HTMLElement | null {
+-  // Elevated modals (the telemetry consent banner) paint above every default
+-  // modal regardless of mount order, so they own focus the same way.
+-  const topmost =
++export function getTopmostModal(): OpenModal | undefined {
++  // Among equally elevated modals, the most recently opened one paints on top.
++  return (
+     [...openModals].reverse().find((modal) =&gt; modal.elevated.current) ??
+-    openModals.at(-1);
+-  return topmost?.root ?? null;
++    openModals.at(-1)
++  );
+ }
+@@ -107,3 +106,6 @@ export function useModalFocus&lt;T extends HTMLElement = HTMLDivElement&gt;({
+
+-    if (topmostModalRoot() === root &amp;&amp; !root.contains(document.activeElement)) {
++    if (
++      getTopmostModal()?.root === root &amp;&amp;
++      !root.contains(document.activeElement)
++    ) {
+       focusFirstTabbable(root);
+@@ -115,3 +117,3 @@ export function useModalFocus&lt;T extends HTMLElement = HTMLDivElement&gt;({
+       // A closing dialog is already detached here; let the new focus stand.
+-      if (!root.isConnected || topmostModalRoot() !== root) return;
++      if (!root.isConnected || getTopmostModal()?.root !== root) return;
+       if (focusEventsFromDialogTree.current.has(event)) return;
+@@ -143,3 +145,3 @@ export function useModalFocus&lt;T extends HTMLElement = HTMLDivElement&gt;({
+       }
+-      const below = topmostModalRoot();
++      const below = getTopmostModal()?.root;
+       if (below?.isConnected) focusFirstTabbable(below);
+@@ -161,3 +163,3 @@ export function useModalFocus&lt;T extends HTMLElement = HTMLDivElement&gt;({
+       !root ||
+-      topmostModalRoot() !== root ||
++      getTopmostModal()?.root !== root ||
+       !root.contains(event.target as Node)
+@@ -172,3 +174,3 @@ export function useModalFocus&lt;T extends HTMLElement = HTMLDivElement&gt;({
+       window.setTimeout(() =&gt; {
+-        if (!root.isConnected || topmostModalRoot() !== root) return;
++        if (!root.isConnected || getTopmostModal()?.root !== root) return;
+         if (root.contains(document.activeElement)) return;</pre></details></article><article><h3>Escape belongs to the dialog that was on top at keydown.</h3><p>The backdrop snapshots the active root and expanded-combobox state during capture. Its bubble listener uses that snapshot even if the command menu has already closed. · <a href="https://github.com/OpenHands/OpenHands/blob/47eed012171230b059c3f5cbf3798bded74ea248/src/components/shared/modals/modal-backdrop.tsx#L45">Base L45</a> · <a href="https://github.com/juemimgcd/OpenHands/blob/4d2a1fe7053d3134afcfa6136efcd056796023da/src/components/shared/modals/modal-backdrop.tsx#L47">Patch L47</a></p><details><summary>View patch for modal-backdrop.tsx</summary><pre>diff --git a/src/components/shared/modals/modal-backdrop.tsx b/src/components/shared/modals/modal-backdrop.tsx
+index 6bba9931a..9e29919fd 100644
+--- a/src/components/shared/modals/modal-backdrop.tsx
++++ b/src/components/shared/modals/modal-backdrop.tsx
+@@ -3,3 +3,3 @@ import { AppearancePortal } from &quot;#/components/shared/appearance-portal&quot;;
+ import { useEscapeBoundary } from &quot;#/hooks/use-close-on-escape&quot;;
+-import { useModalFocus } from &quot;./use-modal-focus&quot;;
++import { getTopmostModal, useModalFocus } from &quot;./use-modal-focus&quot;;
+
+@@ -25,3 +25,3 @@ export function ModalBackdrop({
+ }: ModalBackdropProps) {
+-  const focus = useModalFocus({ elevated });
++  const { rootRef, onFocus, onKeyDown } = useModalFocus({ elevated });
+   // The dialog is on top: menus and drawers opened before it never take its
+@@ -44,23 +44,24 @@ export function ModalBackdrop({
+     // custom popovers) keeps shielding the dialog as before.
+-    let comboboxExpandedAtKeypress = false;
+-    const recordComboboxState = (e: KeyboardEvent) =&gt; {
++    // The top dialog may be gone by the time this key reaches window.
++    let shouldClose = false;
++    const recordEscapeTarget = (e: KeyboardEvent) =&gt; {
+       if (e.key !== &quot;Escape&quot;) return;
+       const target = e.target instanceof Element ? e.target : null;
+-      comboboxExpandedAtKeypress =
++      const comboboxExpanded =
+         target?.getAttribute(&quot;role&quot;) === &quot;combobox&quot; &amp;&amp;
+         target.getAttribute(&quot;aria-expanded&quot;) === &quot;true&quot;;
++      shouldClose =
++        getTopmostModal()?.root === rootRef.current &amp;&amp; !comboboxExpanded;
+     };
+     const handleEscape = (e: KeyboardEvent) =&gt; {
+-      if (e.key !== &quot;Escape&quot;) return;
+-      if (comboboxExpandedAtKeypress) return;
+-      onClose?.();
++      if (e.key === &quot;Escape&quot; &amp;&amp; shouldClose) onClose?.();
+     };
+
+-    window.addEventListener(&quot;keydown&quot;, recordComboboxState, true);
++    window.addEventListener(&quot;keydown&quot;, recordEscapeTarget, true);
+     window.addEventListener(&quot;keydown&quot;, handleEscape);
+     return () =&gt; {
+-      window.removeEventListener(&quot;keydown&quot;, recordComboboxState, true);
++      window.removeEventListener(&quot;keydown&quot;, recordEscapeTarget, true);
+       window.removeEventListener(&quot;keydown&quot;, handleEscape);
+     };
+-  }, [closeOnEscape, onClose]);
++  }, [closeOnEscape, onClose, rootRef]);
+
+@@ -84,3 +85,3 @@ export function ModalBackdrop({
+       &lt;div
+-        ref={focus.rootRef}
++        ref={rootRef}
+         role=&quot;dialog&quot;
+@@ -89,4 +90,4 @@ export function ModalBackdrop({
+         tabIndex={-1}
+-        onFocus={focus.onFocus}
+-        onKeyDown={focus.onKeyDown}
++        onFocus={onFocus}
++        onKeyDown={onKeyDown}
+         className={`fixed inset-0 flex items-center justify-center outline-none ${</pre></details></article><p>A pending telemetry choice already owns an elevated dialog. The global shortcut consults the stack before opening the palette. An ordinary editor still permits command search. <a href="https://github.com/juemimgcd/OpenHands/blob/4d2a1fe7053d3134afcfa6136efcd056796023da/src/components/features/command-menu/command-menu.tsx#L399">Shortcut guard</a></p>
+<h2>Regression coverage</h2><table><tbody><tr><th><a href="https://github.com/juemimgcd/OpenHands/blob/4d2a1fe7053d3134afcfa6136efcd056796023da/__tests__/components/features/sidebar/sidebar.test.tsx#L325">Drawer trigger and Ctrl+K</a></th><td>Escape restores the trigger. Reopening with Ctrl+K accepts “secrets” and Enter selects Secrets.</td></tr><tr><th><a href="https://github.com/juemimgcd/OpenHands/blob/4d2a1fe7053d3134afcfa6136efcd056796023da/__tests__/routes/mcp-page.test.tsx#L63">MCP editor draft</a></th><td>Escape from the focused result returns to the populated server-name field. The next Escape dismisses the editor.</td></tr><tr><th><a href="https://github.com/juemimgcd/OpenHands/blob/4d2a1fe7053d3134afcfa6136efcd056796023da/__tests__/components/analytics/telemetry-consent-banner.test.tsx#L78">Pending telemetry consent</a></th><td>The shortcut keeps focus in consent. After confirming, the same shortcut opens search.</td></tr></tbody></table></main></html>
