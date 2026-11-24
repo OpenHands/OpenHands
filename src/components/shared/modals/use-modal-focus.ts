@@ -81,8 +81,12 @@ function focusFirstTabbable(root: HTMLElement) {
  * portals elsewhere stay usable because their focus and key events still
  * bubble through the dialog in the React tree.
  */
-export function useModalFocus({ elevated }: { elevated: boolean }) {
-  const rootRef = React.useRef<HTMLDivElement>(null);
+export function useModalFocus<T extends HTMLElement = HTMLDivElement>({
+  elevated,
+}: {
+  elevated: boolean;
+}) {
+  const rootRef = React.useRef<T>(null);
   const elevatedRef = React.useRef(elevated);
   elevatedRef.current = elevated;
   // Read during the first render: children's autoFocus and mount effects run
@@ -164,6 +168,14 @@ export function useModalFocus({ elevated }: { elevated: boolean }) {
     const first = tabbable[0];
     const last = tabbable.at(-1);
     const active = document.activeElement;
+    const pullEscapedFocusBack = () => {
+      window.setTimeout(() => {
+        if (!root.isConnected || topmostModalRoot() !== root) return;
+        if (root.contains(document.activeElement)) return;
+        (event.shiftKey ? last : first)?.focus();
+      }, 0);
+    };
+
     if (!first || !last) {
       event.preventDefault();
       root.focus();
@@ -173,6 +185,8 @@ export function useModalFocus({ elevated }: { elevated: boolean }) {
     } else if (!event.shiftKey && (active === last || active === root)) {
       event.preventDefault();
       first.focus();
+    } else {
+      pullEscapedFocusBack();
     }
   }, []);
 

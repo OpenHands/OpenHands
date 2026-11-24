@@ -251,6 +251,13 @@ export interface AppConversation {
   active_profile?: string | null;
   public?: boolean;
   sub_conversation_ids: string[];
+  /**
+   * Server-owned link to the conversation this one was launched from
+   * (agent-server >= 1.37.1, SDK #4188). ``null``/absent for top-level
+   * conversations and on backends that omit the field (Cloud excludes child
+   * conversations from the list server-side).
+   */
+  parent_conversation_id?: string | null;
 }
 
 export interface AppConversationPage {

@@ -13,7 +13,10 @@ import type {
   AutomationSetupTriggerKind,
   AutomationSetupFrequency,
 } from "#/api/automation-setup-types";
-import type { AutomationRepository } from "#/types/automation";
+import type {
+  AutomationRepository,
+  AutomationVisibility,
+} from "#/types/automation";
 import { readAutomationRepositories } from "#/utils/automation-preset-sources";
 
 const AUTOMATION_FORM_SESSION_CHANGED_EVENT =
@@ -78,6 +81,10 @@ function isAutomationSetupKind(value: unknown): value is AutomationSetupKind {
   );
 }
 
+function isAutomationVisibility(value: unknown): value is AutomationVisibility {
+  return value === "organization" || value === "private";
+}
+
 function normalizeString(value: unknown): string | null {
   return typeof value === "string" ? value : null;
 }
@@ -112,6 +119,9 @@ function normalizeFormPatch(value: unknown): AutomationSetupFormPatch {
   }
   if (typeof source.showTimeout === "boolean") {
     form.showTimeout = source.showTimeout;
+  }
+  if (isAutomationVisibility(source.visibility)) {
+    form.visibility = source.visibility;
   }
   return form;
 }
@@ -196,6 +206,8 @@ function normalizeDraft(value: AutomationSetupDraft): AutomationSetupDraft {
     typeof value.materializedAutomationId === "string"
       ? value.materializedAutomationId.trim()
       : null;
+  const factoryId =
+    typeof value.factoryId === "string" ? value.factoryId.trim() : "";
   const appliedAgentEventIds = Array.isArray(value.appliedAgentEventIds)
     ? [
         ...new Set(
@@ -219,9 +231,13 @@ function normalizeDraft(value: AutomationSetupDraft): AutomationSetupDraft {
       ? { canUpdateRepositories: true }
       : {}),
     ...(existingEventTrigger ? { existingEventTrigger } : {}),
+    ...(isAutomationVisibility(value.existingVisibility)
+      ? { existingVisibility: value.existingVisibility }
+      : {}),
     ...(serverDraftId ? { serverDraftId } : {}),
     ...(savedDraftRequestKey ? { savedDraftRequestKey } : {}),
     ...(materializedAutomationId ? { materializedAutomationId } : {}),
+    ...(factoryId ? { factoryId } : {}),
     ...(fieldMetadata ? { fieldMetadata } : {}),
     ...(appliedAgentEventIds && appliedAgentEventIds.length > 0
       ? { appliedAgentEventIds }

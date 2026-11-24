@@ -1,0 +1,78 @@
+http://127.0.0.1:18800/conversations/5b631564-0d2e-450e-bd9b-7282093e2f10
+- complementary "Sidebar navigation":
+  - link "OpenHands Logo":
+    - /url: /conversations
+    - img
+  - button "Collapse sidebar"
+  - navigation:
+    - button "Search commands": Search commands Ctrl+K
+    - link "New Chat":
+      - /url: /conversations
+    - link "Customize":
+      - /url: /customize
+    - link "Automate":
+      - /url: /automations
+      - img
+      - text: Automate
+  - text: Conversations
+  - button "Create thread folder — choose workspace or repository"
+  - button "View"
+  - link "Saved After Cancel Browser 0s":
+    - /url: /conversations/5b631564-0d2e-450e-bd9b-7282093e2f10?backend=default-local
+    - paragraph: Saved After Cancel Browser
+    - paragraph:
+      - time: 0s
+  - button "Minimize checklist" [expanded]
+  - text: Getting started 2 complete
+  - list:
+    - listitem:
+      - link "Add LLM API key":
+        - /url: /settings/llm
+    - listitem:
+      - link "Configure a subscription agent":
+        - /url: /settings/agents
+    - listitem:
+      - link "Start your first chat":
+        - /url: /conversations
+    - listitem:
+      - link "Schedule a task":
+        - /url: /automations
+    - listitem:
+      - link "Customize your agent":
+        - /url: /settings/agents
+    - listitem:
+      - link "Connect an MCP integration":
+        - /url: /mcp
+    - listitem:
+      - link "Join the OpenHands Slack":
+        - /url: https://openhands.dev/joinslack
+  - status "Connected"
+  - combobox "Local"
+  - button
+  - link "Settings":
+    - /url: /settings
+- button "Server Status"
+- text: Saved After Cancel Browser
+- button "More options":
+  - img
+- button "Git actions"
+- button "Show overview"
+- button "Show panel":
+  - img
+- article:
+  - paragraph: Rename Escape review fix workflow test. Do not run any tools.
+  - button "Nov 23, 2026, 5:22 AM":
+    - time: Just now
+- status
+- button "Expand actions": Initialized session
+- article:
+  - paragraph: What should the workflow test be renamed to, and what is its current name/path?
+  - button "Nov 23, 2026, 5:22 AM":
+    - time: Just now
+- text: What do you want to build?
+- button "More actions"
+- button "default"
+- 'button "Context window usage: 1% used (99% left)"'
+- button "Start dictation"
+- button "Send message" [disabled]
+- status: Conversation title updated successfully
