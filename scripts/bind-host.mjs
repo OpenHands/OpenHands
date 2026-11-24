@@ -8,7 +8,11 @@
 export const DEFAULT_BIND_HOST = "127.0.0.1";
 
 const STATIC_LOOPBACK_HOSTS = new Set(["::1", "localhost"]);
-const IPV4_LOOPBACK_RE = /^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$/;
+const IPV4_LOOPBACK_RE = /^127(?:\.(?:25[0-5]|2[0-4]\d|[01]?\d\d?)){3}$/;
+const LOCALHOST_SUBDOMAIN_RE =
+  /^(?:[a-z\d](?:[a-z\d-]*[a-z\d])?\.)+localhost$/i;
+const HOST_AUTHORITY_RE = /^[a-z\d.:[\]-]+$/i;
+const SAFE_HTTP_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 
 export function isLoopbackBind(host) {
   if (host == null || host === "") return false;
@@ -16,7 +20,128 @@ export function isLoopbackBind(host) {
     .trim()
     .replace(/^\[|\]$/g, "")
     .toLowerCase();
-  return STATIC_LOOPBACK_HOSTS.has(normalized) || IPV4_LOOPBACK_RE.test(normalized);
+  return (
+    STATIC_LOOPBACK_HOSTS.has(normalized) || IPV4_LOOPBACK_RE.test(normalized)
+  );
+}
+
+/**
+ * Parse a `Host` header authority without permitting URL userinfo (`@`),
+ * whitespace, commas, or path/query suffixes.
+ *
+ * @param {unknown} rawHost
+ * @returns {{ host: string, hostname: string, port: string } | null}
+ */
+export function parseHttpHostHeader(rawHost) {
+  if (typeof rawHost !== "string") return null;
+  const trimmed = rawHost.trim();
+  if (!trimmed || !HOST_AUTHORITY_RE.test(trimmed)) return null;
+  try {
+    const parsed = new URL(`http://${trimmed}`);
+    if (
+      parsed.username ||
+      parsed.password ||
+      parsed.pathname !== "/" ||
+      parsed.search ||
+      parsed.hash
+    ) {
+      return null;
+    }
+    const hostname = parsed.hostname.replace(/^\[|\]$/g, "").toLowerCase();
+    if (!hostname) return null;
+    return {
+      host: parsed.host.toLowerCase(),
+      hostname,
+      port: parsed.port,
+    };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Parse an HTTP `Origin` header into a lowercase authority and unbracketed
+ * hostname, rejecting `"null"`, userinfo, and non-HTTP(S) schemes.
+ *
+ * @param {unknown} rawOrigin
+ * @returns {{ host: string, hostname: string } | null}
+ */
+export function parseHttpOriginHeader(rawOrigin) {
+  if (typeof rawOrigin !== "string") return null;
+  const trimmed = rawOrigin.trim();
+  if (!trimmed || trimmed === "null") return null;
+  try {
+    const parsed = new URL(trimmed);
+    if (
+      (parsed.protocol !== "http:" && parsed.protocol !== "https:") ||
+      parsed.username ||
+      parsed.password
+    ) {
+      return null;
+    }
+    const hostname = parsed.hostname.replace(/^\[|\]$/g, "").toLowerCase();
+    if (!hostname) return null;
+    return {
+      host: parsed.host.toLowerCase(),
+      hostname,
+    };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Whether an unbracketed lowercase hostname refers to loopback (`127.0.0.0/8`,
+ * `::1`, `localhost`, or `<label>.localhost` per RFC 6761).
+ *
+ * @param {string} hostname
+ */
+export function isLoopbackHostname(hostname) {
+  if (!hostname) return false;
+  return isLoopbackBind(hostname) || LOCALHOST_SUBDOMAIN_RE.test(hostname);
+}
+
+/**
+ * Check whether an incoming `Origin` header differs from `req.headers.host`.
+ * Requests without `Origin` (plain navigations, non-browser clients) pass.
+ *
+ * @param {import("node:http").IncomingMessage} req
+ */
+export function isCrossOriginHttpRequest(req) {
+  const rawOrigin = req.headers?.origin;
+  if (rawOrigin === undefined) return false;
+  const parsedOrigin = parseHttpOriginHeader(rawOrigin);
+  const parsedHost = parseHttpHostHeader(req.headers?.host);
+  if (!parsedOrigin || !parsedHost) return true;
+  return parsedOrigin.host !== parsedHost.host;
+}
+
+/**
+ * On a loopback listener, reject requests whose `Host` header is missing,
+ * malformed, carries userinfo (`@`), or names a non-loopback host (DNS rebinding),
+ * and reject WebSocket upgrades or unsafe HTTP mutations carrying a foreign or
+ * `null` `Origin` (CSWSH / CSRF).
+ *
+ * @param {import("node:http").IncomingMessage} req
+ * @param {string} [bindHost]
+ * @param {{ upgrade?: boolean }} [options]
+ */
+export function isForeignLoopbackRequest(
+  req,
+  bindHost,
+  { upgrade = false } = {},
+) {
+  if (!isLoopbackBind(bindHost)) return false;
+  const parsedHost = parseHttpHostHeader(req.headers?.host);
+  if (!parsedHost || !isLoopbackHostname(parsedHost.hostname)) {
+    return true;
+  }
+  const rawOrigin = req.headers?.origin;
+  if (rawOrigin === undefined) return false;
+  const method = String(req.method ?? "GET").toUpperCase();
+  if (!upgrade && SAFE_HTTP_METHODS.has(method)) return false;
+  const parsedOrigin = parseHttpOriginHeader(rawOrigin);
+  return !parsedOrigin || !isLoopbackHostname(parsedOrigin.hostname);
 }
 
 /**
