@@ -177,6 +177,48 @@ export function SetupDialog({ entry, onClose }: SetupDialogProps) {
     [],
   );
 
+  // The form body is its own scroll container and Continue sits in a fixed
+  // footer, so a field the user cannot see would otherwise be reported without
+  // any visible change. The request is state rather than an immediate `.focus()`
+  // so the effect runs after the error is in the DOM and can describe it.
+  const bodyRef = useRef<HTMLDivElement>(null);
+  const focusRequestIdRef = useRef(0);
+  const [focusRequest, setFocusRequest] = useState<{
+    testId: string;
+    id: number;
+  } | null>(null);
+  const requestFieldFocus = (testId: string) => {
+    focusRequestIdRef.current += 1;
+    setFocusRequest({ testId, id: focusRequestIdRef.current });
+  };
+  useEffect(() => {
+    if (!focusRequest || !bodyRef.current) return;
+    const direct = Array.from(
+      bodyRef.current.querySelectorAll<HTMLElement>("[data-testid]"),
+    ).find((element) => element.dataset.testid === focusRequest.testId);
+    // A repository picker is a composed control whose input answers to the
+    // picker's own test id, so the field marks its container and the first
+    // focusable control inside it is the one to focus.
+    const fieldName = focusRequest.testId.startsWith("setup-field-")
+      ? focusRequest.testId.slice("setup-field-".length)
+      : null;
+    const container = fieldName
+      ? Array.from(
+          bodyRef.current.querySelectorAll<HTMLElement>("[data-setup-field]"),
+        ).find((element) => element.dataset.setupField === fieldName)
+      : undefined;
+    const target = direct ?? container;
+    if (!target) return;
+    target.scrollIntoView?.({ block: "center" });
+    const focusTarget = target.matches(
+      "input, textarea, select, button, [tabindex]",
+    )
+      ? target
+      : (target.querySelector<HTMLElement>("input, textarea, select") ??
+        target.querySelector<HTMLElement>("button, [tabindex]"));
+    (focusTarget ?? target).focus();
+  }, [focusRequest]);
+
   const actionOptions = useMemo(() => {
     if (allActionOptions.length === 0) return [];
     const supported = capabilities.capabilities
@@ -442,6 +484,20 @@ export function SetupDialog({ entry, onClose }: SetupDialogProps) {
     }, PREFLIGHT_DEBOUNCE_MS);
   };
 
+  // Report failures in the order the user sees the fields, not the order the
+  // validator or the service happened to list them: the first control to fix is
+  // the first one on screen.
+  const firstInvalidField = (
+    fieldErrors: Record<string, unknown>,
+  ): string | undefined => {
+    const invalid = new Set(Object.keys(fieldErrors));
+    if (invalid.size === 0) return undefined;
+    return (
+      Object.keys(visibleFields).find((name) => invalid.has(name)) ??
+      invalid.values().next().value
+    );
+  };
+
   const handleContinue = async () => {
     if (currentStep === "prerequisites") {
       setStep("form");
@@ -457,6 +513,8 @@ export function SetupDialog({ entry, onClose }: SetupDialogProps) {
     );
     if (Object.keys(failures).length > 0) {
       setLocalErrors(failures);
+      const invalidField = firstInvalidField(failures);
+      if (invalidField) requestFieldFocus(`setup-field-${invalidField}`);
       Object.entries(failures).forEach(([field, error]) => {
         trackAutomationSetupBlocked({
           automationId: entry.id,
@@ -480,6 +538,10 @@ export function SetupDialog({ entry, onClose }: SetupDialogProps) {
     if (effectiveValuesRef.current !== effectiveValues) return;
     if (result && hasAnyError(result)) {
       setServiceErrors(result);
+      const invalidField = firstInvalidField(result.fieldErrors);
+      if (invalidField) requestFieldFocus(`setup-field-${invalidField}`);
+      else if (result.formErrors.length > 0)
+        requestFieldFocus("setup-form-error");
       Object.entries(result.fieldErrors).forEach(([field]) => {
         trackAutomationSetupBlocked({
           automationId: entry.id,
@@ -615,7 +677,7 @@ export function SetupDialog({ entry, onClose }: SetupDialogProps) {
           <h2 className={cn("pr-6", modalTitleLgClassName)}>{title}</h2>
         </header>
 
-        <div className="min-h-0 flex-1 overflow-y-auto px-6">
+        <div ref={bodyRef} className="min-h-0 flex-1 overflow-y-auto px-6">
           {isLoading && (
             <div className="flex justify-center py-6">
               <LoadingSpinner size="small" />
@@ -772,6 +834,7 @@ export function SetupDialog({ entry, onClose }: SetupDialogProps) {
             <p
               key={message}
               role="alert"
+              tabIndex={-1}
               data-testid="setup-form-error"
               className="pt-4 text-sm text-feedback-error"
             >

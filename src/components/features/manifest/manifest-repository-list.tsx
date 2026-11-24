@@ -17,6 +17,10 @@ export interface SetupRepositoryListProps {
   repositoryAddress: (repository: GitRepository) => string;
   placeholder?: string;
   disabled: boolean;
+  /** The id of the error rendered above, so the input can describe it. */
+  errorId?: string;
+  /** Whether the field is currently invalid. */
+  invalid?: boolean;
   onChange: (values: string[]) => void;
   onBlur: () => void;
 }
@@ -41,6 +45,8 @@ export function SetupRepositoryList({
   repositoryAddress,
   placeholder,
   disabled,
+  errorId,
+  invalid,
   onChange,
   onBlur,
 }: SetupRepositoryListProps) {
@@ -95,6 +101,8 @@ export function SetupRepositoryList({
           repositoryName={null}
           placeholder={placeholder}
           disabled={disabled}
+          ariaDescribedBy={errorId}
+          ariaInvalid={invalid}
           onChange={(selected) => {
             if (selected?.full_name) add(repositoryAddress(selected));
           }}
@@ -115,6 +123,8 @@ export function SetupRepositoryList({
               value={draft}
               placeholder={placeholder}
               isDisabled={disabled}
+              ariaDescribedBy={errorId}
+              ariaInvalid={invalid}
               onChange={setDraft}
               onKeyDown={(event) => {
                 if (event.key !== "Enter") return;

@@ -346,6 +346,49 @@ const LLM_PROFILE_ENTRY: SetupEntry = (() => {
   });
 })();
 
+/** An entry whose only required field is a textarea. */
+const TEXTAREA_ENTRY: SetupEntry = (() => {
+  const { form } = createSetup();
+  return createSetupEntry({
+    setup: createSetup({
+      form: {
+        ...form,
+        args: {
+          body: {
+            type: "textarea",
+            label: "Body",
+            help: "What to report.",
+            required: true,
+          },
+        },
+      },
+      prompt: "Report {{form.body}}.",
+    }),
+  });
+})();
+
+/** An entry whose only required field is a dropdown. */
+const SELECT_ENTRY: SetupEntry = (() => {
+  const { form } = createSetup();
+  return createSetupEntry({
+    setup: createSetup({
+      form: {
+        ...form,
+        args: {
+          choice: {
+            type: "select",
+            label: "Choice",
+            help: "Which one to report.",
+            required: true,
+            options: [{ value: "one", label: "One" }],
+          },
+        },
+      },
+      prompt: "Report {{form.choice}}.",
+    }),
+  });
+})();
+
 describe("SetupDialog", () => {
   it("does not count unresolved prerequisites as a blocked setup", () => {
     const blocked = {
@@ -645,6 +688,102 @@ describe("SetupDialog", () => {
       field: "widgetName",
       errorCode: "required",
     });
+  });
+
+  it("moves focus to the first invalid field in form order", async () => {
+    // Arrange — both required fields are empty, and the dialog body scrolls
+    // above the fixed Continue button.
+    const { user } = renderDialog();
+
+    // Act — Continue is blocked, and the first control to fix is the repository.
+    await user.click(screen.getByTestId("setup-continue-button"));
+
+    // Assert
+    expect(document.activeElement).toBe(
+      screen.getByTestId("setup-field-repository"),
+    );
+
+    // Act — the repository is answered, leaving the later field invalid.
+    await user.type(
+      screen.getByTestId("setup-field-repository"),
+      "OpenHands/agent-server-gui",
+    );
+    await user.click(screen.getByTestId("setup-continue-button"));
+
+    // Assert — focus follows the first remaining failure rather than staying
+    // on the footer button.
+    expect(document.activeElement).toBe(
+      screen.getByTestId("setup-field-widgetName"),
+    );
+  });
+
+  it("focuses the field a rejected preflight blames", async () => {
+    // Arrange — the local check passes and the service rejects the schedule.
+    vi.mocked(AutomationService.validateDraft).mockResolvedValue({
+      valid: false,
+      errors: [
+        {
+          field: "trigger.schedule",
+          code: "invalid",
+          message: "Interval is too short",
+        },
+      ],
+    });
+    const { user } = renderDialog();
+    await fillForm(user);
+
+    // Act
+    await user.click(screen.getByTestId("setup-continue-button"));
+
+    // Assert — the message is rendered and its control has focus, so a
+    // keyboard user is not left on Continue above an off-screen error.
+    await waitFor(() =>
+      expect(
+        screen.getByTestId("setup-field-schedule-error"),
+      ).toHaveTextContent("Interval is too short"),
+    );
+    expect(document.activeElement).toBe(
+      screen.getByTestId("setup-field-schedule"),
+    );
+  });
+
+  it("links a textarea error to the control it belongs to", async () => {
+    // Arrange
+    const { user } = renderDialog(TEXTAREA_ENTRY);
+
+    // Act
+    await user.click(screen.getByTestId("setup-continue-button"));
+
+    // Assert
+    const field = screen.getByTestId("setup-field-body");
+    expect(field).toHaveAttribute("aria-invalid", "true");
+    expect(field).toHaveAttribute("aria-describedby", "setup-field-body-error");
+    expect(screen.getByTestId("setup-field-body-error")).toHaveAttribute(
+      "id",
+      "setup-field-body-error",
+    );
+    expect(document.activeElement).toBe(field);
+  });
+
+  it("links a dropdown error to the control it belongs to", async () => {
+    // Arrange
+    const { user } = renderDialog(SELECT_ENTRY);
+
+    // Act
+    await user.click(screen.getByTestId("setup-continue-button"));
+
+    // Assert
+    const field = screen.getByTestId("setup-field-choice");
+    expect(field).toHaveAttribute("aria-invalid", "true");
+    expect(field).toHaveAttribute(
+      "aria-describedby",
+      "setup-field-choice-error",
+    );
+    expect(screen.getByTestId("setup-field-choice-error")).toHaveAttribute(
+      "id",
+      "setup-field-choice-error",
+    );
+    expect(document.activeElement).toBe(field);
   });
 
   it("creates from the derived payload and opens what was created", async () => {

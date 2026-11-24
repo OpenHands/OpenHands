@@ -36,6 +36,9 @@ export interface GitRepoDropdownProps {
   placeholder?: string;
   className?: string;
   disabled?: boolean;
+  /** The error rendered by the caller, which this input should describe. */
+  ariaDescribedBy?: string;
+  ariaInvalid?: boolean;
   onChange?: (repository?: GitRepository) => void;
 }
 
@@ -47,6 +50,8 @@ export function GitRepoDropdown({
   placeholder,
   className,
   disabled = false,
+  ariaDescribedBy,
+  ariaInvalid,
   onChange,
 }: GitRepoDropdownProps) {
   const { t } = useTranslation("openhands");
@@ -330,6 +335,8 @@ export function GitRepoDropdown({
             },
           })}
           data-testid="git-repo-dropdown"
+          aria-invalid={ariaInvalid || undefined}
+          aria-describedby={ariaDescribedBy}
         />
 
         <div className="absolute right-1 top-1/2 transform -translate-y-1/2 flex items-center">
