@@ -11,7 +11,7 @@ import { useActiveBackend } from "#/contexts/active-backend-context";
 export function useCloudMyBudget({ enabled }: { enabled: boolean }) {
   const { backend, orgId } = useActiveBackend();
 
-  // eslint-disable-next-line @tanstack/query/exhaustive-deps
+  // eslint-disable-next-line query/exhaustive-deps
   return useQuery({
     queryKey: [
       "cloud-my-budget",

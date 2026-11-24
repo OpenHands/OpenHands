@@ -28,6 +28,7 @@ export const useConversationSkills = () => {
   // back to the global catalog; only a missing route does.
   const cloudConversationId = isCloud ? conversationId : null;
 
+  // eslint-disable-next-line query/exhaustive-deps -- The conditional key includes the inputs for the active backend only.
   return useQuery<SkillInfo[]>({
     queryKey: cloudConversationId
       ? ["conversation", cloudConversationId, "skills"]

@@ -58,7 +58,7 @@ export function useSuperAdminSetupGuide() {
   );
 
   // Same query as `useAutomationPermissions`, so no extra request is issued.
-  // eslint-disable-next-line @tanstack/query/exhaustive-deps
+  // eslint-disable-next-line query/exhaustive-deps
   const meQuery = useQuery({
     queryKey: [
       "cloud-current-user",
@@ -76,7 +76,7 @@ export function useSuperAdminSetupGuide() {
     meQuery.data?.permissions?.includes(MANAGE_SUPER_ADMINS_PERMISSION) ===
     true;
 
-  // eslint-disable-next-line @tanstack/query/exhaustive-deps
+  // eslint-disable-next-line query/exhaustive-deps
   const setupStateQuery = useQuery({
     queryKey: setupStateQueryKey,
     queryFn: () => getCloudSetupState(backend),

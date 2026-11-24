@@ -181,6 +181,7 @@ export function useWorkspaceFileContent(relativePath: string | null) {
       : `${workspaceRoot}/${relativePath}`;
   }
 
+  // eslint-disable-next-line query/exhaustive-deps -- Cloud does not use baseUrl; local requests include it in the key.
   return useQuery<WorkspaceFileContent>({
     queryKey: [
       "workspace-file-content",

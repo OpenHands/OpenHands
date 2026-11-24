@@ -1,0 +1,16 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Canvas TypeScript 7 migration</title>
+<style>body{font:1rem/1.6 system-ui;max-width:52rem;margin:3rem auto;padding:0 1rem;color:#172033}section{border-top:1px solid #cad0de;padding:1rem 0}h1,h2{line-height:1.2}li+li{margin-top:.5rem}code{background:#eef1f7;padding:.1rem .25rem}</style>
+<h1>One TypeScript compiler for Canvas</h1>
+<p>Canvas already runs the TypeScript 7 compiler. This change removes the TypeScript 6 copy that old lint tools still load.</p>
+<section><h2>Before → after</h2><ul>
+<li><a href="../package.json">Build and typecheck</a>: the native compiler alias becomes a direct <code>typescript@7.0.2</code> pin.</li>
+<li><a href="../eslint.config.js">ESLint</a>: the Oxc parser replaces the TypeScript 6 parser. Canvas keeps its React, accessibility, translation, Tailwind, and local rules.</li>
+<li><a href="../.oxlintrc.json">TypeScript lint rules</a>: Oxlint handles TypeScript-specific rules, including type-aware optional chaining.</li>
+<li><a href="../scripts/check-query-returns.mjs">Query return check</a>: the TypeScript 7 checker rejects functions that return missing data, which the syntax-only Query plugin cannot detect.</li>
+</ul></section>
+<section><h2>Review focus</h2><p>The native checker exports an unstable API. Keep its usage in the query-return script and run the <a href="../__tests__/scripts/check-query-returns.test.ts">regression test</a> when bumping TypeScript. The upgrade does not change Canvas runtime APIs.</p></section>
+</html>

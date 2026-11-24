@@ -235,7 +235,7 @@ export function WorkspaceDropdown({
     index: number,
     itemHighlightedIndex: number,
     itemSelectedItem: LocalWorkspace | null,
-    itemGetItemProps: any, // eslint-disable-line @typescript-eslint/no-explicit-any
+    itemGetItemProps: any, // oxlint-disable-line typescript/no-explicit-any
   ) => (
     <DropdownItem
       key={item.id}

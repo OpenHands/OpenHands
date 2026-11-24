@@ -266,7 +266,7 @@ export function GitRepoDropdown({
     index: number,
     itemHighlightedIndex: number,
     itemSelectedItem: GitRepository | null,
-    itemGetItemProps: any, // eslint-disable-line @typescript-eslint/no-explicit-any
+    itemGetItemProps: any, // oxlint-disable-line typescript/no-explicit-any
   ) => (
     <DropdownItem
       key={item.id}

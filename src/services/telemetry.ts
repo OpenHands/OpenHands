@@ -380,8 +380,11 @@ function isDoNotTrackEnabled(): boolean {
   if (
     typeof navigator !== "undefined" &&
     (navigator.doNotTrack === "1" ||
-      // @ts-expect-error - Some browsers use window.doNotTrack
-      (typeof window !== "undefined" && window.doNotTrack === "1"))
+      // Optional chaining cannot guard an undeclared window in Node.
+      // oxlint-disable-next-line typescript/prefer-optional-chain
+      (typeof window !== "undefined" &&
+        // @ts-expect-error - Some browsers use window.doNotTrack
+        window.doNotTrack === "1"))
   ) {
     return true;
   }
