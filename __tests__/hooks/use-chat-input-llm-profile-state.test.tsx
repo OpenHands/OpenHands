@@ -429,6 +429,218 @@ describe("useChatInputLlmProfileState", () => {
     expect(stored?.local_planning_conversation_id).toBe("plan-123");
   });
 
+  describe("provider-prefixed running model (#20053)", () => {
+    // The agent server reports the running model as the LiteLLM-style route it
+    // resolved (`openai/gpt-6.2-sol`), while a profile can store the bare
+    // model id the user picked (`gpt-6.2-sol`). Exact string equality then
+    // rejects the profile the conversation is actually running, so the picker
+    // falls back to "Select a model" and the repair effect rewrites a valid
+    // stamp. Only a leading segment of the reported route is bridged — the
+    // profile's own saved id is never stripped, so profiles from distinct
+    // providers that merely share an unqualified model id stay distinct.
+    const BARE_PROFILE = {
+      name: "ChatGPT.6.2.Sol",
+      model: "gpt-6.2-sol",
+      base_url: null,
+      api_key_set: true,
+    };
+
+    const mockBareProfile = () =>
+      useLlmProfilesMock.mockReturnValue({
+        data: { profiles: [BARE_PROFILE], active_profile: "ChatGPT.6.2.Sol" },
+        isLoading: false,
+      });
+
+    it("keeps the stamped profile whose model differs from llm_model only by the provider prefix", () => {
+      mockBareProfile();
+      useActiveConversationMock.mockReturnValue({
+        data: {
+          active_profile: "ChatGPT.6.2.Sol",
+          llm_model: "openai/gpt-6.2-sol",
+        },
+      });
+      const { result } = renderState();
+      expect(result.current.currentProfileName).toBe("ChatGPT.6.2.Sol");
+    });
+
+    it("does not rewrite that stamp in the conversation metadata store", () => {
+      setStoredConversationMetadata("c1", {
+        selected_repository: "owner/repo",
+        selected_branch: "feat",
+        git_provider: null,
+        active_profile: "ChatGPT.6.2.Sol",
+        stamped_at: "2026-11-24T00:00:00.000Z",
+      });
+      mockBareProfile();
+      useActiveConversationMock.mockReturnValue({
+        data: {
+          active_profile: "ChatGPT.6.2.Sol",
+          llm_model: "openai/gpt-6.2-sol",
+        },
+      });
+      renderState();
+      const stored = getStoredConversationMetadata("c1");
+      expect(stored?.active_profile).toBe("ChatGPT.6.2.Sol");
+      expect(stored?.stamped_at).toBe("2026-11-24T00:00:00.000Z");
+      expect(stored?.selected_repository).toBe("owner/repo");
+    });
+
+    it("keeps the optimistic entry after the switch once the refetched model lands with the prefix", () => {
+      // The reported scenario: the switch landed, isSwitching is done, and the
+      // refetched conversation reports the resolved route. Before the shared
+      // comparison the optimistic entry was dropped as conflicting and no
+      // model matched, leaving the picker on "Select a model".
+      modelStoreState = {
+        ...freshModelStoreState(),
+        activeProfileByConversation: { c1: "ChatGPT.6.2.Sol" },
+      };
+      mockBareProfile();
+      useActiveConversationMock.mockReturnValue({
+        data: {
+          active_profile: "ChatGPT.6.2.Sol",
+          llm_model: "openai/gpt-6.2-sol",
+        },
+        isFetching: false,
+      });
+      useIsMutatingMock.mockReturnValue(0);
+      const { result } = renderState();
+      expect(result.current.currentProfileName).toBe("ChatGPT.6.2.Sol");
+      expect(modelStoreState.activeProfileByConversation.c1).toBe(
+        "ChatGPT.6.2.Sol",
+      );
+    });
+
+    it("still invalidates a stale selection when the running model genuinely differs", () => {
+      setStoredConversationMetadata("c1", {
+        selected_repository: "owner/repo",
+        selected_branch: "feat",
+        git_provider: null,
+        active_profile: "ChatGPT.6.2.Sol",
+        stamped_at: "2026-11-24T00:00:00.000Z",
+      });
+      mockBareProfile();
+      useActiveConversationMock.mockReturnValue({
+        data: {
+          active_profile: "ChatGPT.6.2.Sol",
+          llm_model: "anthropic/claude-sonnet-4-5-20250929",
+        },
+      });
+      const { result } = renderState();
+      expect(result.current.currentProfileName).toBeNull();
+      const stored = getStoredConversationMetadata("c1");
+      // The stale stamp is still repaired away — prefix equivalence must not
+      // swallow a genuine model change.
+      expect(stored?.active_profile).toBeNull();
+    });
+
+    it("does not conflate profiles from distinct providers that share an unqualified model id", () => {
+      useLlmProfilesMock.mockReturnValue({
+        data: {
+          profiles: [
+            {
+              name: "Azure-Sol",
+              model: "azure/gpt-6.2-sol",
+              base_url: null,
+              api_key_set: true,
+            },
+            BARE_PROFILE,
+          ],
+          active_profile: "ChatGPT.6.2.Sol",
+        },
+        isLoading: false,
+      });
+      useActiveConversationMock.mockReturnValue({
+        data: { llm_model: "openai/gpt-6.2-sol" },
+      });
+      const { result } = renderState();
+      expect(result.current.currentProfileName).toBe("ChatGPT.6.2.Sol");
+    });
+
+    it("keeps the user's stamped profile when several profiles share an equivalent model", () => {
+      useLlmProfilesMock.mockReturnValue({
+        data: {
+          profiles: [
+            {
+              name: "Sol-Plus",
+              model: "openai/gpt-6.2-sol",
+              base_url: null,
+              api_key_set: true,
+            },
+            BARE_PROFILE,
+          ],
+          active_profile: "Sol-Plus",
+        },
+        isLoading: false,
+      });
+      useActiveConversationMock.mockReturnValue({
+        data: {
+          active_profile: "ChatGPT.6.2.Sol",
+          llm_model: "openai/gpt-6.2-sol",
+        },
+      });
+      const { result } = renderState();
+      expect(result.current.currentProfileName).toBe("ChatGPT.6.2.Sol");
+    });
+
+    it("treats re-selecting the running profile as already running under the shared comparison", () => {
+      mockBareProfile();
+      useActiveConversationMock.mockReturnValue({
+        data: {
+          active_profile: "ChatGPT.6.2.Sol",
+          llm_model: "openai/gpt-6.2-sol",
+        },
+      });
+      const { result } = renderState();
+      result.current.selectProfile("ChatGPT.6.2.Sol");
+      expect(switchAndLog).not.toHaveBeenCalled();
+    });
+
+    it("does not fall back to the account default profile for a prefix-only mismatch", () => {
+      useLlmProfilesMock.mockReturnValue({
+        data: {
+          profiles: [
+            BARE_PROFILE,
+            {
+              name: "Account-Default",
+              model: "claude-opus",
+              base_url: null,
+              api_key_set: true,
+            },
+          ],
+          active_profile: "Account-Default",
+        },
+        isLoading: false,
+      });
+      useActiveConversationMock.mockReturnValue({
+        data: { llm_model: "openai/gpt-6.2-sol" },
+      });
+      const { result } = renderState();
+      expect(result.current.currentProfileName).toBe("ChatGPT.6.2.Sol");
+    });
+
+    it("matches a profile whose full saved route follows a routing prefix on the running model", () => {
+      useLlmProfilesMock.mockReturnValue({
+        data: {
+          profiles: [
+            {
+              name: "Proxy-GPT",
+              model: "openai/gpt-4o",
+              base_url: null,
+              api_key_set: true,
+            },
+          ],
+          active_profile: "Proxy-GPT",
+        },
+        isLoading: false,
+      });
+      useActiveConversationMock.mockReturnValue({
+        data: { llm_model: "litellm_proxy/openai/gpt-4o" },
+      });
+      const { result } = renderState();
+      expect(result.current.currentProfileName).toBe("Proxy-GPT");
+    });
+  });
+
   it("issues a switch when re-selecting the backend-consistent profile instead of falsely no-oping", () => {
     // Backend is running claude-opus, but local stamp was Fast (gpt-4o-mini).
     // Now currentProfileName resolves to Smart. Selecting Fast should switch cleanly.
