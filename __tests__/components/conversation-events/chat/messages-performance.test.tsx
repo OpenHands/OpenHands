@@ -3,7 +3,11 @@ import { describe, expect, it, vi } from "vitest";
 import { performance } from "node:perf_hooks";
 import { fireEvent, screen } from "@testing-library/react";
 import { Messages } from "#/components/conversation-events/chat/messages";
-import { createUserMessageEvent, renderWithProviders } from "test-utils";
+import {
+  createUserMessageEvent,
+  mirrorRectToClientMetrics,
+  renderWithProviders,
+} from "test-utils";
 import type { OpenHandsEvent } from "#/types/agent-server/core";
 
 // This benchmark is opt-in: `BENCH_MESSAGES=1 npx vitest run ...`. The default
@@ -138,6 +142,7 @@ describe("Messages virtualization performance", () => {
     y: 0,
     toJSON: () => ({}),
   } as DOMRect);
+  mirrorRectToClientMetrics();
 
   it("mounts a bounded window instead of every row for a long conversation", () => {
     const events = buildEvents(ROW_COUNT);
