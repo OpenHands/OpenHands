@@ -6,7 +6,12 @@ import { useCloseOnEscape } from "#/hooks/use-close-on-escape";
 import { I18nKey } from "#/i18n/declaration";
 
 const state = vi.hoisted(() => ({
-  conversation: undefined as { tags?: Record<string, string> } | undefined,
+  conversation: undefined as
+    | { id?: string; agent_kind?: string; tags?: Record<string, string> }
+    | undefined,
+  conversationId: undefined as string | undefined,
+  canConfigure: false,
+  canInstall: false,
   projectsEnabled: false,
 }));
 
@@ -18,6 +23,12 @@ vi.mock("#/hooks/query/use-projects", () => ({
   useProjectsEnabled: () => state.projectsEnabled,
 }));
 
+// This isolated menu test has no QueryClient; capability fetching is covered by integration tests.
+vi.mock("#/hooks/query/use-conversation-configuration-capability", () => ({
+  useConversationConfigurationCapability: () => ({ data: state.canConfigure }),
+  useConversationMcpCapabilities: () => ({ canInstall: state.canInstall }),
+}));
+
 vi.mock("#/components/features/projects/project-file-picker", () => ({
   ProjectFilePicker: ({ projectId }: { projectId: string }) => (
     <div data-testid="project-file-picker">{projectId}</div>
@@ -25,7 +36,7 @@ vi.mock("#/components/features/projects/project-file-picker", () => ({
 }));
 
 vi.mock("#/hooks/use-conversation-id", () => ({
-  useOptionalConversationId: () => ({ conversationId: undefined }),
+  useOptionalConversationId: () => ({ conversationId: state.conversationId }),
 }));
 
 vi.mock("#/hooks/use-conversation-name-context-menu", () => ({
@@ -65,7 +76,50 @@ function LayerOverMenu({
 describe("ChatAddFileButton", () => {
   beforeEach(() => {
     state.conversation = undefined;
+    state.conversationId = undefined;
+    state.canConfigure = false;
+    state.canInstall = false;
     state.projectsEnabled = false;
+  });
+
+  it("offers additions only for a supported live OpenHands conversation", async () => {
+    state.conversationId = "11111111-1111-4111-8111-111111111111";
+    state.conversation = { id: state.conversationId };
+    state.canConfigure = true;
+    state.canInstall = true;
+    const user = userEvent.setup();
+    render(<ChatAddFileButton handleFileIconClick={vi.fn()} />);
+
+    await user.click(screen.getByTestId("chat-plus-button"));
+    expect(
+      screen.getByTestId("conversation-add-secret-button"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByTestId("conversation-add-mcp-button"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByTestId("conversation-add-llm-button"),
+    ).toBeInTheDocument();
+  });
+
+  it("does not offer MCP or model additions for ACP conversations", async () => {
+    state.conversationId = "11111111-1111-4111-8111-111111111111";
+    state.conversation = { id: state.conversationId, agent_kind: "acp" };
+    state.canConfigure = true;
+    state.canInstall = true;
+    const user = userEvent.setup();
+    render(<ChatAddFileButton handleFileIconClick={vi.fn()} />);
+
+    await user.click(screen.getByTestId("chat-plus-button"));
+    expect(
+      screen.getByTestId("conversation-add-secret-button"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("conversation-add-mcp-button"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("conversation-add-llm-button"),
+    ).not.toBeInTheDocument();
   });
 
   it("uses the translated aria-label for the plus menu trigger", () => {
