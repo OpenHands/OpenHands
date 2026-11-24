@@ -10,11 +10,8 @@ import {
 import { TaskStartupProgress } from "./task-startup-progress";
 import React from "react";
 import { AppearancePortal } from "#/components/shared/appearance-portal";
-import { useNavigate } from "react-router";
 import { useTracking } from "#/hooks/use-tracking";
 import { useTranslation } from "react-i18next";
-import { isAcpAuthErrorCode } from "#/utils/acp-error-codes";
-import { getLockedCloudHost } from "#/api/agent-server-config";
 import { convertImageToBase64 } from "#/utils/convert-image-to-base-64";
 import { createChatMessage } from "#/services/chat-service";
 import { BtwMessages } from "./btw-messages";
@@ -58,6 +55,7 @@ import { ResolvedConversationBanner } from "./resolved-conversation-banner";
 import { LlmNotConfiguredBanner } from "#/components/features/home/llm-not-configured-banner";
 import { useLlmConfigured } from "#/hooks/use-llm-configured";
 import { useBudgetLimitError } from "#/hooks/use-budget-limit-error";
+import { useAcpReauthAction } from "#/hooks/use-acp-reauth-action";
 import {
   Messages,
   type MessagesHandle,
@@ -129,7 +127,7 @@ export function ChatInterface({
     setErrorMessage,
   } = useErrorMessageStore();
   const budgetLimitError = useBudgetLimitError(errorMessage);
-  const navigate = useNavigate();
+  const acpReauth = useAcpReauthAction(errorCode);
   const { isTask, taskStatus, taskDetail } = useTaskPolling();
   // Hide empty-state chrome for the entire `/conversations/task-{uuid}` route,
   // including the brief READY window before redirect completes.
@@ -925,7 +923,7 @@ export function ChatInterface({
             {errorMessage && !hideConnectionError && (
               <ErrorMessageBanner
                 message={budgetLimitError?.message ?? errorMessage}
-                link={budgetLimitError?.link}
+                link={budgetLimitError?.link ?? acpReauth.link}
                 code={errorCode}
                 classification={errorClassification}
                 onDismiss={removeErrorMessage}
@@ -934,13 +932,7 @@ export function ChatInterface({
                     ? () => conversationWebSocket?.reconnect()
                     : undefined
                 }
-                // Locked-to-Cloud blocks the Canvas agent settings page
-                // (OHE-3457).
-                onReauth={
-                  isAcpAuthErrorCode(errorCode) && getLockedCloudHost() === null
-                    ? () => navigate("/settings/agents")
-                    : undefined
-                }
+                onReauth={acpReauth.onReauth}
               />
             )}
 

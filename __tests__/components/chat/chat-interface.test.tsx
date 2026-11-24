@@ -2349,3 +2349,105 @@ describe("ChatInterface - Budget limit error", () => {
     ).toHaveTextContent("Contact #it-help");
   });
 });
+
+describe("ChatInterface - ACP authentication error recovery", () => {
+  beforeEach(() => {
+    (useConfig as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
+      data: {},
+    });
+    (
+      useUnifiedUploadFiles as unknown as ReturnType<typeof vi.fn>
+    ).mockReturnValue({ mutateAsync: vi.fn(), isLoading: false });
+    vi.spyOn(ProfilesService, "listProfiles").mockResolvedValue({
+      profiles: [],
+      active_profile: null,
+    } as Awaited<ReturnType<typeof ProfilesService.listProfiles>>);
+    window.localStorage.clear();
+    __resetActiveStoreForTests();
+    setRegisteredBackends([
+      {
+        id: "cloud",
+        name: "OpenHands Cloud",
+        host: "https://cloud.example.com/",
+        apiKey: "bearer-token",
+        kind: "cloud",
+      },
+    ]);
+    setActiveSelection({ backendId: "cloud", orgId: "org-1" });
+  });
+
+  afterEach(() => {
+    cleanup();
+    vi.unstubAllEnvs();
+    vi.restoreAllMocks();
+    useErrorMessageStore.getState().removeErrorMessage();
+    window.localStorage.clear();
+    __resetActiveStoreForTests();
+  });
+
+  const renderWithError = (errorCode: string) => {
+    useErrorMessageStore.setState({
+      errorMessage: "Agent rejected the credentials",
+      errorType: "conversation",
+      errorCode,
+    });
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <ActiveBackendProvider>
+          <MemoryRouter initialEntries={["/test-conversation-id"]}>
+            <Routes>
+              <Route path=":conversationId" element={<ChatInterface />} />
+              <Route
+                path="/settings/agents"
+                element={<div data-testid="canvas-agent-settings" />}
+              />
+            </Routes>
+          </MemoryRouter>
+        </ActiveBackendProvider>
+      </QueryClientProvider>,
+    );
+  };
+
+  it("opens the Canvas agent settings when the canvas is not locked to Cloud", () => {
+    renderWithError("ACPAuthRequired");
+
+    fireEvent.click(screen.getByTestId("error-message-banner-reauth"));
+
+    expect(screen.getByTestId("canvas-agent-settings")).toBeInTheDocument();
+  });
+
+  it("links to the Cloud agent settings in the same tab when locked to Cloud", () => {
+    vi.stubEnv("VITE_LOCK_TO_CLOUD", "https://cloud.example.com");
+
+    renderWithError("ACPAuthRequired");
+
+    const link = screen.getByRole("link", {
+      name: I18nKey.ERROR$ACP_UPDATE_CREDENTIALS,
+    });
+    expect(link).toHaveAttribute(
+      "href",
+      "https://cloud.example.com/settings/agent?org=org-1",
+    );
+    expect(link).not.toHaveAttribute("target");
+    expect(
+      screen.queryByTestId("error-message-banner-reauth"),
+    ).not.toBeInTheDocument();
+  });
+
+  it.each([false, true])(
+    "offers no credential action for a non-ACP error (locked: %s)",
+    (locked) => {
+      if (locked) vi.stubEnv("VITE_LOCK_TO_CLOUD", "https://cloud.example.com");
+
+      renderWithError("LLMAuthenticationError");
+
+      expect(screen.getByTestId("error-message-banner")).toBeVisible();
+      expect(
+        screen.queryByTestId("error-message-banner-reauth"),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByTestId("error-message-banner-link"),
+      ).not.toBeInTheDocument();
+    },
+  );
+});
