@@ -23,7 +23,7 @@ const slackEntry = mcpMarketplace.find((e) => e.id === "slack")!;
 const tavilyEntry = mcpMarketplace.find((e) => e.id === "tavily")!;
 const linearEntry = mcpMarketplace.find((e) => e.id === "linear")!;
 
-function optionTransport(entry: typeof slackEntry, optionId = "api") {
+function optionTransport(entry: typeof slackEntry, optionId = "user-token") {
   const transport = entry.connectionOptions.find(
     (option) => option.id === optionId,
   )?.transport;
@@ -32,27 +32,25 @@ function optionTransport(entry: typeof slackEntry, optionId = "api") {
 }
 
 describe("findInstalledMatch", () => {
-  it("matches stdio servers by command and args", () => {
+  it("matches Slack's hosted MCP server by URL", () => {
     const result = findInstalledMatch(optionTransport(slackEntry), [
       {
-        id: "stdio-0",
-        type: "stdio",
+        id: "shttp-0",
+        type: "shttp",
         name: "slack",
-        command: "npx",
-        args: ["-y", "@zencoderai/slack-mcp-server"],
+        url: "https://mcp.slack.com/mcp",
       },
     ]);
-    expect(result).toEqual(expect.objectContaining({ id: "stdio-0" }));
+    expect(result).toEqual(expect.objectContaining({ id: "shttp-0" }));
   });
 
-  it("does not match a stdio server running a different package", () => {
+  it("does not match an shttp server running a different URL", () => {
     const result = findInstalledMatch(optionTransport(slackEntry), [
       {
-        id: "stdio-0",
-        type: "stdio",
+        id: "shttp-0",
+        type: "shttp",
         name: "github",
-        command: "npx",
-        args: [],
+        url: "https://example.com/mcp",
       },
     ]);
     expect(result).toBeNull();
@@ -97,11 +95,14 @@ describe("findInstalledMatch", () => {
 });
 
 describe("getInstallableMcpConnectionOption", () => {
-  it("prefers Slack's API fallback over the default OAuth option", () => {
+  it("prefers Slack's user-token option over the default OAuth option", () => {
     const option = getInstallableMcpConnectionOption(slackEntry);
-    expect(option?.id).toBe("api");
-    expect(option?.auth.strategy).toBe("api_key");
-    expect(option?.transport.kind).toBe("stdio");
+    expect(option?.id).toBe("user-token");
+    expect(option?.auth.strategy).toBe("bearer");
+    expect(option?.transport.kind).toBe("shttp");
+    if (option?.transport.kind === "shttp") {
+      expect(option.transport.url).toBe("https://mcp.slack.com/mcp");
+    }
   });
 
   // @spec MCP-006 — Library installs never dead-end
@@ -220,10 +221,10 @@ describe("getInstallableMcpConnectionOptions", () => {
     expect(getInstallableMcpConnectionOption(sentry)).toBe(options[0]);
   });
 
-  it("keeps a single option for entries with one installable option", () => {
+  it("keeps a single installable option for entries with one installable option", () => {
     expect(
       getInstallableMcpConnectionOptions(slackEntry).map((o) => o.id),
-    ).toEqual(["api"]);
+    ).toEqual(["user-token"]);
   });
 
   it("offers one OAuth fallback when no option is directly installable", () => {
@@ -301,23 +302,24 @@ describe("marketplaceEntryMatchesQuery", () => {
 });
 
 describe("installedServerMatchesQuery", () => {
-  const slackServer = {
+  const stdioServer = {
     id: "stdio-0",
     type: "stdio" as const,
-    name: "slack",
+    name: "tavily",
     command: "npx",
-    args: ["-y", "@zencoderai/slack-mcp-server"],
+    args: ["-y", "tavily-mcp"],
   };
 
   it("matches by stdio server name", () => {
-    expect(installedServerMatchesQuery(slackServer, undefined, "slack")).toBe(
+    expect(installedServerMatchesQuery(stdioServer, undefined, "tavily")).toBe(
       true,
     );
   });
 
   it("matches via the catalog entry's name even if server.name differs", () => {
-    const renamed = { ...slackServer, name: "my-slack-instance" };
-    expect(installedServerMatchesQuery(renamed, slackEntry, "slack")).toBe(
+    const renamed = { ...stdioServer, name: "my-tavily-instance" };
+    const tavilyEntry = mcpMarketplace.find((e) => e.id === "tavily")!;
+    expect(installedServerMatchesQuery(renamed, tavilyEntry, "tavily")).toBe(
       true,
     );
   });
@@ -334,15 +336,15 @@ describe("installedServerMatchesQuery", () => {
   });
 
   it("empty query always matches", () => {
-    expect(installedServerMatchesQuery(slackServer, undefined, "")).toBe(true);
+    expect(installedServerMatchesQuery(stdioServer, undefined, "")).toBe(true);
   });
 
   it("returns false when no installed-server field matches", () => {
     expect(
-      installedServerMatchesQuery(slackServer, undefined, "zzzz-no-match"),
+      installedServerMatchesQuery(stdioServer, undefined, "zzzz-no-match"),
     ).toBe(false);
     expect(
-      installedServerMatchesQuery(slackServer, undefined, "Stryker was here"),
+      installedServerMatchesQuery(stdioServer, undefined, "Stryker was here"),
     ).toBe(false);
   });
 
@@ -363,18 +365,18 @@ describe("installedServerMatchesQuery", () => {
   });
 
   it.each([
-    ["name", "slack"],
+    ["name", "tavily"],
     ["command", "npx"],
-    ["args", "-y @zencoderai/slack-mcp-server"],
-    ["name and command", "slack npx"],
+    ["args", "-y tavily-mcp"],
+    ["name and command", "tavily npx"],
   ])("searches isolated %s values", (_field, query) => {
-    expect(installedServerMatchesQuery(slackServer, undefined, query)).toBe(
+    expect(installedServerMatchesQuery(stdioServer, undefined, query)).toBe(
       true,
     );
   });
 
   it("handles a runtime stdio server whose args are missing", () => {
-    const server = { ...slackServer, args: undefined };
+    const server = { ...stdioServer, args: undefined };
 
     expect(
       installedServerMatchesQuery(server as never, undefined, "no-match"),
@@ -383,14 +385,13 @@ describe("installedServerMatchesQuery", () => {
 });
 
 describe("findCatalogEntryForServer", () => {
-  it("finds the Slack catalog entry for an installed Slack stdio server", () => {
+  it("finds the Slack catalog entry for an installed Slack hosted MCP server", () => {
     const match = findCatalogEntryForServer(
       {
-        id: "stdio-0",
-        type: "stdio",
+        id: "shttp-0",
+        type: "shttp",
         name: "slack",
-        command: "npx",
-        args: ["-y", "@zencoderai/slack-mcp-server"],
+        url: "https://mcp.slack.com/mcp",
       },
       mcpMarketplace,
     );

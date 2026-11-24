@@ -64,7 +64,7 @@ describe("InstallServerModal", () => {
     });
   });
 
-  it("uses Slack's API fallback when the default option is OAuth", async () => {
+  it("installs Slack through its user-token bearer option", async () => {
     const slack = MCP_MARKETPLACE.find((e) => e.id === "slack")!;
     const saveSpy = vi
       .spyOn(SettingsService, "saveSettings")
@@ -87,11 +87,8 @@ describe("InstallServerModal", () => {
       expect(saveSpy).not.toHaveBeenCalled();
     });
 
-    fireEvent.change(screen.getByTestId("mcp-install-field-SLACK_BOT_TOKEN"), {
-      target: { value: "xoxb-abc" },
-    });
-    fireEvent.change(screen.getByTestId("mcp-install-field-SLACK_TEAM_ID"), {
-      target: { value: "T01" },
+    fireEvent.change(screen.getByTestId("mcp-install-field-api_key"), {
+      target: { value: "xoxp-abc" },
     });
     fireEvent.click(screen.getByTestId("mcp-install-submit"));
 
@@ -103,9 +100,8 @@ describe("InstallServerModal", () => {
     };
     expect(sentMcpConfig.mcp_config).toMatchObject({
       slack: {
-        command: "npx",
-        args: ["-y", "@zencoderai/slack-mcp-server"],
-        env: { SLACK_BOT_TOKEN: "xoxb-abc", SLACK_TEAM_ID: "T01" },
+        url: "https://mcp.slack.com/mcp",
+        auth: { strategy: "bearer", value: "xoxp-abc" },
       },
     });
     expect(onClose).toHaveBeenCalled();
@@ -128,11 +124,8 @@ describe("InstallServerModal", () => {
     await screen.findByTestId("mcp-install-modal");
 
     // Act: complete the install.
-    fireEvent.change(screen.getByTestId("mcp-install-field-SLACK_BOT_TOKEN"), {
-      target: { value: "xoxb-abc" },
-    });
-    fireEvent.change(screen.getByTestId("mcp-install-field-SLACK_TEAM_ID"), {
-      target: { value: "T01" },
+    fireEvent.change(screen.getByTestId("mcp-install-field-api_key"), {
+      target: { value: "xoxp-abc" },
     });
     fireEvent.click(screen.getByTestId("mcp-install-submit"));
 
@@ -140,11 +133,10 @@ describe("InstallServerModal", () => {
     // mocked test returns no tool_result, so it proves connectivity only).
     const expectedKey = getMcpServerHealthKey({
       id: "irrelevant-for-key",
-      type: "stdio",
+      type: "shttp",
       name: "slack",
-      command: "npx",
-      args: ["-y", "@zencoderai/slack-mcp-server"],
-      env: { SLACK_TEAM_ID: "T01", SLACK_BOT_TOKEN: "xoxb-abc" },
+      url: "https://mcp.slack.com/mcp",
+      auth: { strategy: "bearer", value: "xoxp-abc" },
     });
     await waitFor(() =>
       expect(getMcpHealthSnapshot()[expectedKey]).toMatchObject({
@@ -213,25 +205,22 @@ describe("InstallServerModal", () => {
       },
     ]);
     setActiveSelection({ backendId: "cloud-1" });
-    const slack = MCP_MARKETPLACE.find((e) => e.id === "slack")!;
+    const tavily = MCP_MARKETPLACE.find((e) => e.id === "tavily")!;
     const saveSpy = vi
       .spyOn(SettingsService, "saveSettings")
       .mockResolvedValue(true);
     renderWith(
       <InstallServerModal
         existingServers={[]}
-        entry={slack}
+        entry={tavily}
         onClose={vi.fn()}
       />,
     );
     await screen.findByTestId("mcp-install-modal");
 
     // Act
-    fireEvent.change(screen.getByTestId("mcp-install-field-SLACK_BOT_TOKEN"), {
-      target: { value: "xoxb-abc" },
-    });
-    fireEvent.change(screen.getByTestId("mcp-install-field-SLACK_TEAM_ID"), {
-      target: { value: "T01" },
+    fireEvent.change(screen.getByTestId("mcp-install-field-TAVILY_API_KEY"), {
+      target: { value: "tvly-secret" },
     });
     fireEvent.click(screen.getByTestId("mcp-install-submit"));
 
@@ -682,7 +671,7 @@ describe("InstallServerModal", () => {
         />,
       );
 
-      await screen.findByTestId("mcp-install-field-SLACK_BOT_TOKEN");
+      await screen.findByTestId("mcp-install-field-api_key");
       expect(
         screen.queryByTestId("mcp-install-options"),
       ).not.toBeInTheDocument();
@@ -1100,12 +1089,9 @@ describe("InstallServerModal", () => {
     );
     await screen.findByTestId("mcp-install-modal");
 
-    // Act: fill the required fields and install.
-    fireEvent.change(screen.getByTestId("mcp-install-field-SLACK_BOT_TOKEN"), {
-      target: { value: "xoxb-invalid" },
-    });
-    fireEvent.change(screen.getByTestId("mcp-install-field-SLACK_TEAM_ID"), {
-      target: { value: "T-INVALID" },
+    // Act: fill the required field and install.
+    fireEvent.change(screen.getByTestId("mcp-install-field-api_key"), {
+      target: { value: "xoxp-invalid" },
     });
     fireEvent.click(screen.getByTestId("mcp-install-submit"));
 
