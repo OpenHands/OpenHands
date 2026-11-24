@@ -21,6 +21,7 @@ import { hr } from "./horizontal-rule";
 import { remarkGithubAlerts } from "./remark-github-alerts";
 import { advanceStableMarkdownBoundary } from "#/utils/split-stable-markdown";
 import { RevealClock, rehypeFadeInWords } from "./rehype-fade-in-words";
+import { rehypeSearchHighlight } from "./rehype-search-highlight";
 
 // Build a sanitize schema that extends rehype-sanitize's defaults with a
 // few markdown-friendly additions. The defaults strip `<script>`, event
@@ -137,6 +138,11 @@ interface MarkdownRendererProps {
    * words fade in.
    */
   streaming?: boolean;
+  /**
+   * Search words to mark inside the rendered content (content-search jump).
+   * Undefined renders without markers.
+   */
+  searchHighlightTerms?: string[];
 }
 
 const remarkPlugins: PluggableList = [
@@ -167,6 +173,7 @@ function MarkdownBlockComponent({
   rehypePlugins,
   clock,
   blockStart,
+  searchHighlightTerms,
 }: {
   source: string;
   components: Components;
@@ -174,6 +181,8 @@ function MarkdownBlockComponent({
   /** Set while streaming: fade in words as they are revealed. */
   clock: RevealClock | undefined;
   blockStart: number;
+  /** Search words to mark inside this block (content-search jump). */
+  searchHighlightTerms?: string[];
 }) {
   return (
     <Markdown
@@ -186,7 +195,12 @@ function MarkdownBlockComponent({
               ...(rehypePlugins ?? []),
               [rehypeFadeInWords, { clock, blockStart }],
             ]
-          : rehypePlugins
+          : searchHighlightTerms && searchHighlightTerms.length > 0
+            ? [
+                ...(rehypePlugins ?? []),
+                [rehypeSearchHighlight, { terms: searchHighlightTerms }],
+              ]
+            : rehypePlugins
       }
     >
       {source}
@@ -254,6 +268,7 @@ function MarkdownRendererComponent({
   includeHeadings = false,
   allowHtml = true,
   streaming = false,
+  searchHighlightTerms,
 }: MarkdownRendererProps) {
   // Build the components object with defaults and optional additions.
   // Memoized so streamed blocks that did not change skip re-rendering.
@@ -310,6 +325,7 @@ function MarkdownRendererComponent({
             rehypePlugins={rehypePlugins}
             clock={clock}
             blockStart={start}
+            searchHighlightTerms={searchHighlightTerms}
           />
         </React.Fragment>
       ))}

@@ -23,11 +23,14 @@ export function UserMessageBody({
   isHovering,
   isExpanded,
   onTruncatableChange,
+  searchHighlightTerms,
 }: {
   message: string;
   isHovering: boolean;
   isExpanded: boolean;
   onTruncatableChange: (truncatable: boolean) => void;
+  /** Search words to mark inside the message (content-search jump). */
+  searchHighlightTerms?: string[];
 }) {
   const { t } = useTranslation("openhands");
   const contentRef = React.useRef<HTMLDivElement>(null);
@@ -87,6 +90,7 @@ export function UserMessageBody({
           includeHeadings
           allowHtml={false}
           components={chatBubbleMarkdownComponents}
+          searchHighlightTerms={searchHighlightTerms}
         >
           {message}
         </MarkdownRenderer>

@@ -7,6 +7,7 @@ const EXCLUDED_SEGMENTS = new Set(["mocks", "routeTree.gen.ts"]);
 const ALLOWED_AD_HOC_HTTP_FILES = new Set([
   "api/automation-service/automation-service.api.ts",
   "api/cloud/proxy.ts",
+  "api/conversation-service/content-search.api.ts",
   "api/main-app-auth.ts",
 ]);
 
