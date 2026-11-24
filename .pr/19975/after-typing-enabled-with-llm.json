@@ -1,0 +1,9 @@
+{
+  "ok": true,
+  "value": {
+    "text": "Reply exactly OK. Do not run any tools.",
+    "activeRole": "textbox",
+    "activeLabel": "What do you want to build?",
+    "sendDisabled": false
+  }
+}

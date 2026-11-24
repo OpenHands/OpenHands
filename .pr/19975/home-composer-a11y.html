@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Issue 19975 home composer accessibility evidence</title>
+<style>
+  :root { color-scheme: dark; font-family: Inter, ui-sans-serif, system-ui, sans-serif; background: #111; color: #f4f4f5; }
+  body { margin: 0; padding: 32px; }
+  main { max-width: 1180px; margin: 0 auto; }
+  h1, h2 { line-height: 1.2; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 24px; }
+  figure { margin: 0; padding: 16px; border: 1px solid #3f3f46; border-radius: 16px; background: #18181b; }
+  img { display: block; width: 100%; height: auto; border-radius: 10px; border: 1px solid #27272a; }
+  figcaption { margin-top: 12px; color: #d4d4d8; }
+  pre { white-space: pre-wrap; overflow-wrap: anywhere; padding: 16px; border: 1px solid #3f3f46; border-radius: 12px; background: #09090b; color: #e4e4e7; }
+  code { color: #bae6fd; }
+  .pass { color: #86efac; }
+  .fail { color: #fca5a5; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Home composer textbox semantics evidence</h1>
+  <p>Issue #19975: the same home-page workflow was captured on current main before the fix and on this branch after the fix. No customer data or secrets are shown.</p>
+
+  <h2>Visual captures</h2>
+  <div class="grid">
+    <figure>
+      <img src="assets/before-home.png" alt="Before fix: OpenHands home page with the prompt composer visible." />
+      <figcaption>Before: visual prompt is present, but it is not exposed as a textbox in the accessibility tree.</figcaption>
+    </figure>
+    <figure>
+      <img src="assets/after-home.png" alt="After fix: OpenHands home page with the same prompt composer visible." />
+      <figcaption>After: same visual state, now with textbox semantics and the same placeholder.</figcaption>
+    </figure>
+  </div>
+
+  <h2>Accessibility tree excerpts</h2>
+  <div class="grid">
+    <section>
+      <h3 class="fail">Before</h3>
+      <pre>- text: What do you want to build?
+- button &quot;More actions&quot; [disabled]
+- &#x27;button &quot;Switch agent profile: default&quot;&#x27;: default
+- button &quot;Start dictation&quot;
+- button &quot;Send message&quot; [disabled]</pre>
+    </section>
+    <section>
+      <h3 class="pass">After</h3>
+      <pre>- textbox &quot;What do you want to build?&quot;
+- button &quot;More actions&quot; [disabled]
+- &#x27;button &quot;Switch agent profile: default&quot;&#x27;: default
+- button &quot;Start dictation&quot;
+- button &quot;Send message&quot; [disabled]</pre>
+    </section>
+  </div>
+
+  <h2>DOM semantic evidence</h2>
+  <div class="grid">
+    <section>
+      <h3 class="fail">Before DOM</h3>
+      <pre>{
+  &quot;found&quot;: true,
+  &quot;tag&quot;: &quot;DIV&quot;,
+  &quot;contenteditable&quot;: &quot;true&quot;,
+  &quot;role&quot;: null,
+  &quot;ariaLabel&quot;: null,
+  &quot;ariaLabelledBy&quot;: null,
+  &quot;tabIndexAttribute&quot;: null,
+  &quot;tabIndexProperty&quot;: -1,
+  &quot;dataPlaceholder&quot;: &quot;What do you want to build?&quot;,
+  &quot;activeBefore&quot;: true
+}</pre>
+    </section>
+    <section>
+      <h3 class="pass">After DOM</h3>
+      <pre>{
+  &quot;found&quot;: true,
+  &quot;tag&quot;: &quot;DIV&quot;,
+  &quot;contenteditable&quot;: &quot;true&quot;,
+  &quot;role&quot;: &quot;textbox&quot;,
+  &quot;ariaLabel&quot;: &quot;What do you want to build?&quot;,
+  &quot;ariaMultiline&quot;: &quot;true&quot;,
+  &quot;ariaDisabled&quot;: null,
+  &quot;tabIndexAttribute&quot;: &quot;0&quot;,
+  &quot;tabIndexProperty&quot;: 0,
+  &quot;dataPlaceholder&quot;: &quot;What do you want to build?&quot;,
+  &quot;activeBefore&quot;: true
+}</pre>
+    </section>
+  </div>
+
+  <h2>Editor and submission smoke</h2>
+  <p>The fixed composer was located by <code>role=textbox[name="What do you want to build?"]</code>, accepted typed text, enabled the send button, and Enter submission opened a conversation.</p>
+  <pre>{
+  &quot;text&quot;: &quot;Reply exactly OK. Do not run any tools.&quot;,
+  &quot;activeRole&quot;: &quot;textbox&quot;,
+  &quot;activeLabel&quot;: &quot;What do you want to build?&quot;,
+  &quot;sendDisabled&quot;: false
+}</pre>
+  <figure>
+    <img src="assets/after-enter-submitted.png" alt="After fix: a submitted smoke prompt opened a conversation in OpenHands." />
+    <figcaption>After: Enter submission from the accessible textbox navigated to a conversation and rendered the submitted message.</figcaption>
+  </figure>
+</main>
+</body>
+</html>
