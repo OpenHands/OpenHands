@@ -16577,6 +16577,24 @@
     "ca": "Encara no hi ha commits",
     "id": "Belum ada commit"
   },
+  "DIFF_VIEWER$COMMITS_UNAVAILABLE": {
+    "en": "Couldn’t load commit history",
+    "ja": "コミット履歴を読み込めませんでした",
+    "zh-CN": "无法加载提交历史",
+    "zh-TW": "無法載入提交紀錄",
+    "ko-KR": "커밋 기록을 불러오지 못했습니다",
+    "no": "Kunne ikke laste inn commit-historikken",
+    "it": "Impossibile caricare la cronologia dei commit",
+    "pt": "Não foi possível carregar o histórico de commits",
+    "es": "No se pudo cargar el historial de commits",
+    "ar": "تعذّر تحميل سجل الإيداعات",
+    "fr": "Impossible de charger l’historique des commits",
+    "tr": "Commit geçmişi yüklenemedi",
+    "de": "Der Commit-Verlauf konnte nicht geladen werden",
+    "uk": "Не вдалося завантажити історію комітів",
+    "ca": "No s’ha pogut carregar l’historial de commits",
+    "id": "Gagal memuat riwayat commit"
+  },
   "DIFF_VIEWER$COMMITS_CAP": {
     "en": "Showing the latest {{count}} commits",
     "ja": "最新の{{count}}件のコミットを表示しています",

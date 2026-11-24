@@ -6,10 +6,9 @@ import { useUnifiedGitCommits } from "#/hooks/query/use-unified-git-commits";
 import { useUnifiedGetGitChanges } from "#/hooks/query/use-unified-get-git-changes";
 import { useConversationId } from "#/hooks/use-conversation-id";
 import { I18nKey } from "#/i18n/declaration";
-import { RUNTIME_INACTIVE_STATES } from "#/types/agent-state";
-import { useAgentState } from "#/hooks/use-agent-state";
 import { RuntimeWaitingState } from "#/components/features/conversation-panel/runtime-waiting-state";
 import { ConversationTabEmptyState } from "#/components/features/conversation/conversation-tab-empty-state";
+import { BrandButton } from "#/components/features/settings/brand-button";
 import { useConversationStore } from "#/stores/conversation-store";
 
 /**
@@ -21,8 +20,15 @@ import { useConversationStore } from "#/stores/conversation-store";
 function GitCommits() {
   const { t } = useTranslation("openhands");
   const { conversationId } = useConversationId();
-  const { commits, hasMore, isUnsupported, isLoading, isSuccess } =
-    useUnifiedGitCommits();
+  const {
+    commits,
+    hasMore,
+    isWaitingForResume,
+    isWaitingForRuntime,
+    isUnavailable,
+    isLoading,
+    refetch,
+  } = useUnifiedGitCommits();
   const {
     data: uncommittedChanges,
     isSuccess: uncommittedSuccess,
@@ -39,53 +45,68 @@ function GitCommits() {
     [setCommitsAutoExpandSection],
   );
 
-  const { curAgentState } = useAgentState();
-  const runtimeIsActive = !RUNTIME_INACTIVE_STATES.includes(curAgentState);
-
-  const hasCommits = isSuccess && !isUnsupported && commits.length > 0;
   const hasUncommitted =
     uncommittedSuccess && (uncommittedChanges?.length ?? 0) > 0;
-  const showList = hasCommits || hasUncommitted;
-  const isListLoading = isLoading || (runtimeIsActive && uncommittedLoading);
+  const showList = commits.length > 0 || hasUncommitted;
+  const showStatus = isUnavailable || isWaitingForResume || !showList;
+  const isWaiting =
+    !isUnavailable &&
+    !isWaitingForResume &&
+    (isWaitingForRuntime || isLoading || uncommittedLoading);
 
   return (
-    <main className="h-full w-full flex flex-col items-stretch">
-      {showList ? (
-        <div className="h-full overflow-y-auto flex flex-col items-stretch custom-scrollbar-always">
-          {/* Keyed by conversation so switching conversations collapses any
-              expanded commit. */}
-          <CommitList
-            key={conversationId}
-            commits={hasCommits ? commits : []}
-            hasMore={hasCommits ? hasMore : false}
-            uncommittedChanges={
-              uncommittedSuccess ? (uncommittedChanges ?? []).slice(0, 100) : []
-            }
-            autoExpandUncommitted={commitsAutoExpandSection === "uncommitted"}
-            onAutoExpandHandled={handleAutoExpandHandled}
-          />
-        </div>
-      ) : (
-        <div className="flex-1 flex items-center justify-center">
-          {!runtimeIsActive && (
-            <RuntimeWaitingState
-              testId="commits-tab-status"
-              messageKey={I18nKey.DIFF_VIEWER$WAITING_FOR_RUNTIME}
-            />
-          )}
-          {runtimeIsActive && isListLoading && (
-            <RuntimeWaitingState
-              testId="commits-tab-status"
-              messageKey={I18nKey.DIFF_VIEWER$LOADING}
-            />
-          )}
-          {runtimeIsActive && !isListLoading && (
-            <ConversationTabEmptyState icon={<DiffDrawerIcon />}>
-              {t(I18nKey.DIFF_VIEWER$NO_COMMITS)}
-            </ConversationTabEmptyState>
-          )}
-        </div>
+    <main className="h-full w-full overflow-y-auto custom-scrollbar-always">
+      {showList && (
+        <CommitList
+          key={conversationId}
+          commits={commits}
+          hasMore={hasMore}
+          uncommittedChanges={
+            uncommittedSuccess ? (uncommittedChanges ?? []).slice(0, 100) : []
+          }
+          autoExpandUncommitted={commitsAutoExpandSection === "uncommitted"}
+          onAutoExpandHandled={handleAutoExpandHandled}
+        />
       )}
+      {showStatus &&
+        (isWaiting ? (
+          <RuntimeWaitingState
+            testId="commits-tab-status"
+            messageKey={
+              isWaitingForRuntime
+                ? I18nKey.DIFF_VIEWER$WAITING_FOR_RUNTIME
+                : I18nKey.DIFF_VIEWER$LOADING
+            }
+          />
+        ) : (
+          <ConversationTabEmptyState
+            icon={<DiffDrawerIcon />}
+            className={showList ? "h-auto" : undefined}
+            action={
+              isUnavailable && (
+                <BrandButton
+                  type="button"
+                  variant="secondary"
+                  onClick={() => void refetch()}
+                >
+                  {t(I18nKey.AUTOMATIONS$ERROR_RETRY)}
+                </BrandButton>
+              )
+            }
+          >
+            {isUnavailable ? (
+              <span role="alert">
+                {t(I18nKey.DIFF_VIEWER$COMMITS_UNAVAILABLE)}
+              </span>
+            ) : (
+              t(
+                isWaitingForResume
+                  ? I18nKey.COMMON$PAUSED
+                  : I18nKey.DIFF_VIEWER$NO_COMMITS,
+              )
+            )}
+          </ConversationTabEmptyState>
+        ))}
     </main>
   );
 }
