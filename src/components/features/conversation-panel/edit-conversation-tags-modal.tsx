@@ -10,8 +10,10 @@ import { ModalBody } from "#/components/shared/modals/modal-body";
 import { BrandButton } from "../settings/brand-button";
 import { I18nKey } from "#/i18n/declaration";
 import {
-  getDisplayConversationTags,
+  getEditableConversationTags,
+  PROJECT_BOARD_TAG_KEYS,
   RESERVED_CONVERSATION_TAG_KEYS,
+  SERVER_OWNED_PROJECT_TAG_KEYS,
 } from "#/api/agent-server-adapter";
 
 /** Backend rule for tag keys (see `ConversationInfo.tags` in the SDK). */
@@ -28,7 +30,8 @@ interface TagRow {
  * Merges the user's edited display tags with every entry the display helper
  * drops from the current map (reserved/internal keys, whitespace-only or
  * non-string values), so the replace-all PATCH never silently discards
- * internal tags. Bare tags (empty-string values) are user-manageable and
+ * internal tags. The Projects tags the server owns are left out: the server
+ * keeps them as it has them. Bare tags (empty-string values) are user-manageable and
  * come through `editedUserTags` like any valued tag.
  */
 export function mergeConversationTagEdits(
@@ -36,15 +39,15 @@ export function mergeConversationTagEdits(
   editedUserTags: readonly (readonly [string, string])[],
 ): Record<string, string> {
   const merged: Record<string, string> = {};
+  const editableKeys = new Set(
+    getEditableConversationTags(currentTags).map(([key]) => key),
+  );
   for (const [key, value] of Object.entries(currentTags ?? {})) {
-    // Preserve what the editor does not surface: reserved keys, non-string
-    // values, and whitespace-only values (raw-write junk the display drops).
-    // Empty-string values are bare tags — the editor manages them, so they
-    // must NOT be preserved here or a removed bare tag would resurrect.
+    // Preserve exactly what the editor does not surface. Visible bare tags
+    // remain removable.
     if (
-      RESERVED_CONVERSATION_TAG_KEYS.has(key.trim().toLowerCase()) ||
-      typeof value !== "string" ||
-      (value !== "" && value.trim().length === 0)
+      !editableKeys.has(key) &&
+      !SERVER_OWNED_PROJECT_TAG_KEYS.has(key.trim().toLowerCase())
     ) {
       merged[key] = value;
     }
@@ -70,7 +73,7 @@ export function EditConversationTagsModal({
 }: EditConversationTagsModalProps) {
   const { t } = useTranslation("openhands");
   const [rows, setRows] = React.useState<TagRow[]>(() =>
-    getDisplayConversationTags(tags).map(([key, value]) => ({ key, value })),
+    getEditableConversationTags(tags).map(([key, value]) => ({ key, value })),
   );
   const [newKey, setNewKey] = React.useState("");
   const [newValue, setNewValue] = React.useState("");
@@ -88,7 +91,10 @@ export function EditConversationTagsModal({
     if (!CONVERSATION_TAG_KEY_PATTERN.test(key)) {
       return { errorKey: I18nKey.CONVERSATION$TAG_KEY_INVALID };
     }
-    if (RESERVED_CONVERSATION_TAG_KEYS.has(key)) {
+    if (
+      RESERVED_CONVERSATION_TAG_KEYS.has(key) ||
+      PROJECT_BOARD_TAG_KEYS.has(key)
+    ) {
       return { errorKey: I18nKey.CONVERSATION$TAG_KEY_RESERVED };
     }
     if (rows.some((row) => row.key === key)) {

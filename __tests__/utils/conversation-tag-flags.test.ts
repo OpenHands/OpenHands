@@ -4,6 +4,7 @@ import {
   conversationTagFlagPatch,
   getConversationResolution,
   hasConversationTagFlag,
+  parseAutoResolveNote,
   PINNED_CONVERSATION_TAG_KEY,
   RESOLVED_CONVERSATION_TAG_KEY,
   withConversationTagFlags,
@@ -104,5 +105,25 @@ describe("getConversationResolution", () => {
     expect(
       conversationTagFlagPatch({ [RESOLVED_CONVERSATION_TAG_KEY]: false }),
     ).toEqual({ resolved: null });
+  });
+
+  it("reads the server's auto-resolve note", () => {
+    expect(parseAutoResolveNote("0.93 nothing")).toEqual({
+      percent: 93,
+      source: "judge",
+    });
+    expect(parseAutoResolveNote("1.00 nothing")).toEqual({
+      percent: 100,
+      source: "judge",
+    });
+    expect(parseAutoResolveNote("0.95 critic")).toEqual({
+      percent: 95,
+      source: "critic",
+    });
+    // resolve_conversation: the agent resolved its own conversation.
+    expect(parseAutoResolveNote("agent")).toEqual({ source: "agent" });
+    for (const bad of [null, undefined, "", "sure", "1.5 nothing", "0.9"]) {
+      expect(parseAutoResolveNote(bad)).toBeNull();
+    }
   });
 });

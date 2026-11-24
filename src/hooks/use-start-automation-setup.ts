@@ -13,6 +13,7 @@ import {
 import { markAutomationSetupHandoff } from "#/api/automation-setup-handoff-store";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import { useNavigation } from "#/context/navigation-context";
+import { withFactoryContext } from "#/constants/factories";
 import { useCreateAutomationSetupConversation } from "#/hooks/use-create-automation-setup-conversation";
 import { useTracking } from "#/hooks/use-tracking";
 import {
@@ -27,7 +28,12 @@ import {
  * The form now opens with the conversation drawer hidden, and a conversation
  * starts only after the user sends a prompt.
  */
-export function useStartAutomationSetup() {
+export function useStartAutomationSetup({
+  factoryId,
+}: {
+  /** Create the new automation in this factory. */
+  factoryId?: string;
+} = {}) {
   const { t } = useTranslation("openhands");
   const active = useActiveBackend();
   const { navigate } = useNavigation();
@@ -38,8 +44,15 @@ export function useStartAutomationSetup() {
   const startSetup = useCallback(() => {
     trackAutomationCreatedButton({ backendKind: active.backend.kind });
     clearAutomationFormSession(PENDING_AUTOMATION_SETUP_ID);
-    navigate?.("/automations/setup");
-  }, [active.backend.kind, navigate, trackAutomationCreatedButton]);
+    if (factoryId) {
+      initializeAutomationFormSession(PENDING_AUTOMATION_SETUP_ID, {
+        prompt: "",
+        kind: "prompt",
+        factoryId,
+      });
+    }
+    navigate?.(withFactoryContext("/automations/setup", factoryId));
+  }, [active.backend.kind, factoryId, navigate, trackAutomationCreatedButton]);
 
   const startConversationFromPrompt = useCallback(
     (prompt: string) => {

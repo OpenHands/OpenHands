@@ -672,7 +672,7 @@ test.describe("UI regressions", () => {
             .includes(
               `/api/conversations/${VIRTUALIZED_CONVERSATION_ID}/events/search`,
             ) &&
-          new URL(req.url()).searchParams.has("timestamp__lt"),
+          new URL(req.url()).searchParams.has("page_id"),
       );
 
     await page.goto(`/conversations/${VIRTUALIZED_CONVERSATION_ID}`, {
@@ -769,7 +769,7 @@ test.describe("UI regressions", () => {
             .includes(
               `/api/conversations/${VIRTUALIZED_CONVERSATION_ID}/events/search`,
             ) &&
-          new URL(req.url()).searchParams.has("timestamp__lt"),
+          new URL(req.url()).searchParams.has("page_id"),
       );
 
     await page.goto(`/conversations/${VIRTUALIZED_CONVERSATION_ID}`, {
@@ -994,6 +994,47 @@ test.describe("UI regressions", () => {
     expect(selection.anchorNumber).toBe(start.number);
     // Re-entering near the bottom must not restart the range at message 1.
     expect(selection.minNumber).toBeGreaterThan(1);
+  });
+
+  // ── #19993: workspace picker footer keyboard access ──────────────
+
+  test("workspace picker Add Workspace is reachable and activatable by keyboard", async ({
+    page,
+  }) => {
+    await routeSessionApiKey(page);
+
+    await page.route("**/api/workspaces**", async (route, req) => {
+      if (req.method() !== "GET") {
+        await route.fallback();
+        return;
+      }
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ workspaces: [], workspaceParents: [] }),
+      });
+    });
+
+    await page.goto("/conversations", { waitUntil: "domcontentloaded" });
+
+    await page.getByTestId("open-workspace-button").click();
+    await expect(page.getByTestId("open-workspace-dialog-body")).toBeVisible();
+
+    const dropdown = page.getByTestId("workspace-dropdown");
+    await dropdown.focus();
+    await dropdown.press("ArrowDown");
+
+    const addWorkspacesButton = page.getByTestId("add-workspaces-button");
+    await expect(addWorkspacesButton).toBeVisible();
+
+    await page.keyboard.press("Tab");
+    await expect(addWorkspacesButton).toBeFocused();
+    await expect(page.getByTestId("workspace-dropdown-menu")).toBeVisible();
+
+    await page.keyboard.press("Enter");
+    await expect(page.getByTestId("folder-browser-modal")).toBeVisible({
+      timeout: 10_000,
+    });
   });
 
   // ── #1076: workspace selection persistence ───────────────────────

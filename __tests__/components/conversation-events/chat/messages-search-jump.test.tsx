@@ -2,7 +2,11 @@ import React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, screen } from "@testing-library/react";
 import { Messages } from "#/components/conversation-events/chat/messages";
-import { createUserMessageEvent, renderWithProviders } from "test-utils";
+import {
+  createUserMessageEvent,
+  mirrorRectToClientMetrics,
+  renderWithProviders,
+} from "test-utils";
 import type { OpenHandsEvent } from "#/types/agent-server/core";
 import { useSearchJumpStore } from "#/stores/search-jump-store";
 
@@ -38,6 +42,11 @@ beforeEach(() => {
       } as DOMRect;
     },
   );
+  // @tanstack/virtual-core reads `clientHeight`/`clientWidth` (not the
+  // bounding rect) for the viewport, and jsdom reports 0 for both — no rows
+  // mount. Mirror the stubbed rect onto the client metrics, as the
+  // performance tests do.
+  mirrorRectToClientMetrics();
   // jsdom implements neither scrollIntoView nor element.scrollTo; the setup
   // file stubs both as no-ops. Replace scrollTo with a functional stub that
   // does what a browser does — move the offset and fire the scroll event the
@@ -59,12 +68,15 @@ beforeEach(() => {
   });
   // TanStack clamps scrollToIndex to scrollHeight - viewport; jsdom computes
   // scrollHeight as 0, so without this every virtualized jump would clamp to
-  // offset 0. With 80px rows the 400-row shell is 35.2k tall, so 40k spans
-  // the whole list without clamping row 350's ~30.5k offset.
+  // offset 0. In the jsdom environment the row measurements from the rect
+  // stub do not reach the virtualizer (it never gets the ResizeObserver
+  // churn that applies them), so it keeps the 128px row estimate: row 350
+  // sits at ~44.8k of a ~51.2k shell. 60k spans the whole list, keeping the
+  // center-aligned target unclamped so the window lands on the target row.
   Object.defineProperty(HTMLElement.prototype, "scrollHeight", {
     configurable: true,
     get() {
-      return 40000;
+      return 60000;
     },
   });
   useSearchJumpStore.getState().clearJump();

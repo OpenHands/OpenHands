@@ -16,6 +16,7 @@ import {
 import {
   createUserMessageEvent,
   createPlanningObservationEvent,
+  mirrorRectToClientMetrics,
   renderWithProviders,
 } from "test-utils";
 import {
@@ -139,6 +140,7 @@ describe("Messages virtualization", () => {
       y: 0,
       toJSON: () => ({}),
     } as DOMRect);
+    mirrorRectToClientMetrics();
   });
 
   it("renders every row in the plain list below the virtualization threshold", () => {

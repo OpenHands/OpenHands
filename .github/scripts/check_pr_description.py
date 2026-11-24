@@ -3,6 +3,7 @@
 Required template fields: Why, Summary, and How to Test.
 
 Additional checks:
+- Draft PRs may leave the human note empty until they are ready for review.
 - If the "A human has tested these changes" checkbox is present, it must be
   checked.
 - If frontend code was touched, the description must include a screenshot or
@@ -368,14 +369,15 @@ def validate_linked_issue_ready(
     return errors
 
 
-def validate_pr_body(body: str, files: list[str] | None = None) -> list[str]:
+def validate_pr_body(
+    body: str, files: list[str] | None = None, *, draft: bool = False
+) -> list[str]:
     errors: list[str] = []
 
     if first_visible_line(body) != "HUMAN:":
         errors.append("The first visible line of the PR description must be `HUMAN:`.")
 
-    human_note = extract_human_note(body)
-    if len(human_note) < MIN_HUMAN_NOTE_CHARS:
+    if not draft and len(extract_human_note(body)) < MIN_HUMAN_NOTE_CHARS:
         errors.append("Add a short human-written note between `HUMAN:` and `AGENT:`.")
 
     if AGENT_HEADING_RE.search(without_fenced_code_blocks(body)) is None:
@@ -394,13 +396,13 @@ def validate_pr_body(body: str, files: list[str] | None = None) -> list[str]:
     return errors
 
 
-def body_from_event(event_path: Path) -> str:
+def body_and_draft_from_event(event_path: Path) -> tuple[str, bool]:
     payload = json.loads(event_path.read_text())
     pull_request = payload.get("pull_request")
     if not isinstance(pull_request, dict):
         raise ValueError("GitHub event payload does not contain a pull_request object")
     body = pull_request.get("body")
-    return body if isinstance(body, str) else ""
+    return body if isinstance(body, str) else "", pull_request.get("draft") is True
 
 
 def pr_number_from_event(event_path: Path) -> int | None:
@@ -477,11 +479,12 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = parse_args()
+    draft = False
     if args.body_file is not None:
         body = args.body_file.read_text()
         files: list[str] = []
     elif args.event_path is not None:
-        body = body_from_event(args.event_path)
+        body, draft = body_and_draft_from_event(args.event_path)
     else:
         raise SystemExit("Pass --body-file or set GITHUB_EVENT_PATH.")
 
@@ -496,7 +499,7 @@ def main() -> int:
     else:
         files = []
 
-    errors = validate_pr_body(body, files)
+    errors = validate_pr_body(body, files, draft=draft)
 
     repo = None
     token = os.environ.get("GITHUB_TOKEN")

@@ -58,6 +58,7 @@ import { SkillInstallRestartBanner } from "./skill-install-restart-banner";
 import { ResolvedConversationBanner } from "./resolved-conversation-banner";
 import { LlmNotConfiguredBanner } from "#/components/features/home/llm-not-configured-banner";
 import { useLlmConfigured } from "#/hooks/use-llm-configured";
+import { useBudgetLimitError } from "#/hooks/use-budget-limit-error";
 import {
   Messages,
   type MessagesHandle,
@@ -128,6 +129,7 @@ export function ChatInterface({
     removeErrorMessage,
     setErrorMessage,
   } = useErrorMessageStore();
+  const budgetLimitError = useBudgetLimitError(errorMessage);
   const navigate = useNavigate();
   const { isTask, taskStatus, taskDetail } = useTaskPolling();
   // Hide empty-state chrome for the entire `/conversations/task-{uuid}` route,
@@ -979,7 +981,8 @@ export function ChatInterface({
               )}
             {errorMessage && !hideConnectionError && (
               <ErrorMessageBanner
-                message={errorMessage}
+                message={budgetLimitError?.message ?? errorMessage}
+                link={budgetLimitError?.link}
                 code={errorCode}
                 classification={errorClassification}
                 onDismiss={removeErrorMessage}

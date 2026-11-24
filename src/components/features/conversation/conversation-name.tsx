@@ -16,6 +16,7 @@ import { HooksModal } from "../conversation-panel/hooks-modal";
 import { ConfirmDeleteModal } from "../conversation-panel/confirm-delete-modal";
 import { ConfirmStopModal } from "../conversation-panel/confirm-stop-modal";
 import { TranscriptExportModal } from "./transcript-export-modal";
+import { ProjectBadge } from "./project-badge";
 
 export function ConversationName() {
   const { t } = useTranslation("openhands");
@@ -34,6 +35,8 @@ export function ConversationName() {
     React.useState(false);
   const inputRef = React.useRef<HTMLInputElement>(null);
   const ellipsisAnchorRef = React.useRef<HTMLButtonElement>(null);
+  const cancelTitleBlurRef = React.useRef(false);
+  const focusEllipsisAfterCancelRef = React.useRef(false);
 
   // Use the custom hook for context menu handlers
   const {
@@ -73,11 +76,22 @@ export function ConversationName() {
     onContextMenuToggle: setContextMenuOpen,
   });
 
-  const handleDoubleClick = () => {
+  const startEditingTitle = () => {
+    cancelTitleBlurRef.current = false;
+    focusEllipsisAfterCancelRef.current = false;
     setTitleMode("edit");
   };
 
+  const handleDoubleClick = () => {
+    startEditingTitle();
+  };
+
   const handleBlur = () => {
+    if (cancelTitleBlurRef.current) {
+      cancelTitleBlurRef.current = false;
+      return;
+    }
+
     if (inputRef.current?.value && conversationId) {
       const trimmed = inputRef.current.value.trim();
       if (trimmed !== displayTitle) {
@@ -95,6 +109,21 @@ export function ConversationName() {
       inputRef.current.value = displayTitle;
     }
 
+    setTitleMode("view");
+  };
+
+  const handleKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
+    if (event.nativeEvent.isComposing || event.key !== "Escape") {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+    cancelTitleBlurRef.current = true;
+    focusEllipsisAfterCancelRef.current = true;
+    const input = event.currentTarget;
+    input.value = displayTitle;
+    setContextMenuOpen(false);
     setTitleMode("view");
   };
 
@@ -124,7 +153,7 @@ export function ConversationName() {
   const handleRename = (event: React.MouseEvent<HTMLButtonElement>) => {
     event.preventDefault();
     event.stopPropagation();
-    setTitleMode("edit");
+    startEditingTitle();
     setContextMenuOpen(false);
   };
 
@@ -140,6 +169,12 @@ export function ConversationName() {
   React.useEffect(() => {
     if (titleMode === "edit") {
       inputRef.current?.focus();
+      return;
+    }
+
+    if (focusEllipsisAfterCancelRef.current) {
+      focusEllipsisAfterCancelRef.current = false;
+      ellipsisAnchorRef.current?.focus();
     }
   }, [titleMode]);
 
@@ -160,12 +195,14 @@ export function ConversationName() {
         className="flex items-center gap-2 h-5.5 text-base font-normal text-left pl-0 lg:pl-1 min-w-0"
         data-testid="conversation-name"
       >
+        <ProjectBadge tags={conversation.tags} />
         {titleMode === "edit" ? (
           <input
             ref={inputRef}
             data-testid="conversation-name-input"
             onClick={handleInputClick}
             onBlur={handleBlur}
+            onKeyDown={handleKeyDown}
             onKeyUp={handleKeyUp}
             type="text"
             defaultValue={displayTitle}

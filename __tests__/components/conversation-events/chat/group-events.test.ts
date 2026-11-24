@@ -920,6 +920,87 @@ it("places an unanchored resume after UTC history without timezone suffixes", ()
   }
 });
 
+describe("groupEvents - reactions", () => {
+  const reactAction = (thought: TextContent[]): ActionEvent =>
+    ({
+      ...makeBashAction("react-1", thought),
+      action: { kind: "ReactAction", emoji: "eyes", message_id: null },
+      tool_name: "react",
+    }) as unknown as ActionEvent;
+  const reactResult = (actionId: string): ObservationEvent =>
+    ({
+      ...makeBashObservation("react-obs-1", actionId),
+      tool_name: "react",
+      observation: {
+        kind: "ReactionObservation",
+        content: [{ type: "text", text: "Reacted :eyes:" }],
+        is_error: false,
+        target_event_id: "msg-1",
+        emoji: "eyes",
+        removed: false,
+      },
+    }) as unknown as ObservationEvent;
+
+  it("keeps the agent's narration on a reaction and drops its card", () => {
+    const action = reactAction([{ type: "text", text: "On it, looking now." }]);
+    const result_ = reactResult(action.id);
+
+    const result = groupEvents([result_], undefined, [action, result_]);
+
+    expect(result).toEqual([{ kind: "thought", action, index: 0 }]);
+  });
+
+  it("renders nothing for a reaction without narration", () => {
+    const action = reactAction([]);
+    const result_ = reactResult(action.id);
+
+    expect(groupEvents([result_], undefined, [action, result_])).toEqual([]);
+  });
+});
+
+describe("groupEvents - message edits", () => {
+  const editAction = (thought: TextContent[]): ActionEvent =>
+    ({
+      ...makeBashAction("edit-1", thought),
+      action: {
+        kind: "EditMessageAction",
+        old_str: "Port?",
+        new_str: "~~Port?~~ [Edit: 8080.]",
+      },
+      tool_name: "edit_message",
+    }) as unknown as ActionEvent;
+  const editResult = (actionId: string): ObservationEvent =>
+    ({
+      ...makeBashObservation("edit-obs-1", actionId),
+      tool_name: "edit_message",
+      observation: {
+        kind: "EditMessageObservation",
+        content: [{ type: "text", text: "Edited." }],
+        is_error: false,
+        target_event_id: "msg-1",
+        edited_text: "~~Port?~~ [Edit: 8080.]",
+      },
+    }) as unknown as ObservationEvent;
+
+  it("keeps the agent's narration on an edit and drops its card", () => {
+    const action = editAction([
+      { type: "text", text: "Striking my question." },
+    ]);
+    const result_ = editResult(action.id);
+
+    const result = groupEvents([result_], undefined, [action, result_]);
+
+    expect(result).toEqual([{ kind: "thought", action, index: 0 }]);
+  });
+
+  it("renders nothing for an edit without narration", () => {
+    const action = editAction([]);
+    const result_ = editResult(action.id);
+
+    expect(groupEvents([result_], undefined, [action, result_])).toEqual([]);
+  });
+});
+
 describe("isToolRowItem", () => {
   const single = (event: OpenHandsEvent) =>
     ({ kind: "single", event, index: 0 }) as const;
