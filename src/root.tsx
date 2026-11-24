@@ -245,6 +245,19 @@ function LocalFirstRunOnboardingSequence({
   onClose: () => void;
 }) {
   const settings = useSettings();
+  // Probe the local backend health alongside the settings load. When the
+  // Agent Server is unreachable, useSettings retries every non-404 error
+  // indefinitely and isLoading stays true forever, leaving the user on a
+  // bare spinner with no way to reach the backend-check step. Tracking
+  // health here lets us detect that case early: once the probe fails (or the
+  // backend is already marked disabled from a previous session), we skip the
+  // spinner and render the onboarding screen so its backend-check step is
+  // visible. probeDisabledOnce re-probes a stale disabled entry on mount so a
+  // recovered backend clears that state without the user clearing site data.
+  const backendsHealth = useBackendsHealth([backend], {
+    probeDisabledOnce: true,
+  });
+  const backendHealth = backendsHealth[backend.id];
   const [hasAnsweredTelemetry, setHasAnsweredTelemetry] = React.useState(false);
 
   React.useEffect(() => {
@@ -267,7 +280,14 @@ function LocalFirstRunOnboardingSequence({
     );
   }
 
-  if (settings.isLoading) {
+  // If the health probe has not yet returned (isConnected === null), the
+  // backend is not yet known to be unreachable; keep the spinner while both
+  // settings and health are still pending. Once the probe decides either way,
+  // we can make the right call.
+  const backendUnreachable =
+    backendHealth?.isConnected === false || backendHealth?.disabled === true;
+
+  if (settings.isLoading && !backendUnreachable) {
     return <AgentServerBootstrapLoading />;
   }
 

@@ -25,6 +25,7 @@ import {
 import { CLOUD_BACKEND_LOGGED_OUT_ERROR } from "#/hooks/query/use-backends-health";
 import { ActiveBackendProvider } from "#/contexts/active-backend-context";
 import { ONBOARDING_COMPLETED_STORAGE_KEY } from "#/components/features/onboarding/use-onboarding-completion";
+import SettingsService from "#/api/settings-service/settings-service.api";
 
 const rootMocks = vi.hoisted(() => ({
   settings: {
@@ -249,6 +250,7 @@ describe("App root agent-server availability guard", () => {
   });
 
   afterEach(() => {
+    vi.restoreAllMocks();
     Object.defineProperty(window, "location", {
       configurable: true,
       value: ORIGINAL_LOCATION,
@@ -343,6 +345,49 @@ describe("App root agent-server availability guard", () => {
       screen.queryByTestId("telemetry-consent-form"),
     ).not.toBeInTheDocument();
     expect(screen.getAllByRole("dialog")).toHaveLength(1);
+  });
+
+  it("bypasses the loading spinner and shows the onboarding backend-check step when the agent server is unreachable", async () => {
+    // useSettings has retry: (_, error) => getErrorStatus(error) !== 404, which
+    // means it retries forever for connection errors and isLoading stays true.
+    // Use mockImplementationOnce (not vi.spyOn) so vi.restoreAllMocks() in the
+    // describe-level afterEach does not clear the underlying vi.fn's default
+    // implementation; this prevents an undefined-return from leaking into the
+    // tests that follow and triggering their own infinite-retry spinner.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let resolveSettings!: (value: any) => void;
+    vi.mocked(SettingsService.getSettings).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveSettings = resolve;
+        }),
+    );
+
+    // Also fail the backend health probe so the component knows the server is
+    // down and can bypass the spinner gate.
+    server.use(
+      http.get("*/api/settings", () => HttpResponse.error()),
+      http.get("*/server_info", () => HttpResponse.error()),
+    );
+
+    await renderApp(["/"]);
+
+    // Once the probe fails, backendUnreachable becomes true and the spinner is
+    // bypassed. The onboarding backend-check step must appear.
+    expect(
+      await screen.findByTestId("onboarding-modal", {}, { timeout: 3000 }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByTestId("onboarding-step-check-backend"),
+    ).toBeInTheDocument();
+
+    // Resolve the pending settings query so React Query can settle cleanly
+    // before the test runner calls cleanup(); this prevents the unresolved
+    // promise from lingering and affecting the tests that follow.
+    resolveSettings(rootMocks.settings.data);
+    await act(async () => {
+      await Promise.resolve();
+    });
   });
 
   it("lets root-level onboarding navigate to the launched conversation before closing", async () => {
