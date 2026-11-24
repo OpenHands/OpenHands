@@ -275,8 +275,9 @@ export function FileDiffViewer({
   const {
     data: diff,
     isLoading,
-    isSuccess,
+    isError,
     isRefetching,
+    refetch,
   } = useUnifiedGitDiff({
     filePath,
     type,
@@ -499,8 +500,29 @@ export function FileDiffViewer({
           >
             {t(I18nKey.DIFF_VIEWER$FILE_DELETED)}
           </div>
+        ) : diff !== undefined ? (
+          // Keep the last good diff visible when a background refresh fails.
+          renderContent()
         ) : (
-          isSuccess && renderContent()
+          isError && (
+            <div
+              role="alert"
+              data-testid="file-diff-load-error"
+              className="w-full flex items-center gap-3 border-b border-border p-4 bg-canvas-base text-sm"
+            >
+              <span className="flex-1 text-text-dim">
+                {t(I18nKey.DIFF_VIEWER$LOAD_FAILED)}
+              </span>
+              <button
+                type="button"
+                disabled={isRefetching}
+                onClick={() => refetch()}
+                className="shrink-0 rounded-md border border-border px-3 py-1 text-contrast hover:bg-interactive-hover disabled:opacity-50 cursor-pointer disabled:cursor-default"
+              >
+                {t(I18nKey.DIFF_VIEWER$RETRY)}
+              </button>
+            </div>
+          )
         )}
       </AccordionPanel>
     </div>
