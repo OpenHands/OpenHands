@@ -160,6 +160,9 @@ export function SettingsDropdownInput({
         <ComboBox.InputGroup
           className={cn(
             formControlSettingsFieldClassName,
+            // The trigger below sits in flow at the inner border edge, where
+            // HeroUI's absolute ``end-0`` trigger used to be.
+            "pe-0",
             "focus-within:border-contrast/40 dark:focus-within:border-contrast/40 focus-within:ring-1 focus-within:ring-contrast/20",
             inputWrapperClassName,
             inputClassName,
@@ -169,7 +172,8 @@ export function SettingsDropdownInput({
           <OpenOnClickInput
             testId={testId}
             name={name}
-            className="border-0 bg-transparent shadow-none outline-none focus:ring-0 focus-visible:ring-0 data-[focused=true]:ring-0"
+            // ``pe-3`` drops HeroUI's ``pe-7`` reserve for an absolute trigger.
+            className="border-0 bg-transparent pe-3 shadow-none outline-none focus:ring-0 focus-visible:ring-0 data-[focused=true]:ring-0"
             placeholder={isLoading ? t(I18nKey.HOME$LOADING) : placeholder}
             ariaLabel={ariaLabel}
           />
@@ -179,8 +183,15 @@ export function SettingsDropdownInput({
             isLoading={isLoading}
             clearLabel={t(I18nKey.COMMON$CLEAR_SELECTION)}
           />
+          {/* HeroUI positions the trigger ``absolute end-0`` and reserves room
+              for it only on an input directly before it, so the clear button
+              ended up underneath the chevron. Keep the trigger in flow so the
+              clear button and the chevron each get their own box. */}
           <ComboBox.Trigger
-            className={heroUiAutocompleteSelectorButtonClassName}
+            className={cn(
+              heroUiAutocompleteSelectorButtonClassName,
+              "static translate-y-0",
+            )}
           />
         </ComboBox.InputGroup>
         <ComboBox.Popover className="rounded-xl">
