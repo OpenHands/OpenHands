@@ -18,7 +18,10 @@ import {
   type ConnectionRecoveryState,
 } from "#/hooks/use-connection-error-grace-period";
 import { useEventStore } from "#/stores/use-event-store";
-import { useErrorMessageStore } from "#/stores/error-message-store";
+import {
+  type ErrorRole,
+  useErrorMessageStore,
+} from "#/stores/error-message-store";
 import { useOptimisticUserMessageStore } from "#/stores/optimistic-user-message-store";
 import { useConversationStateStore } from "#/stores/conversation-state-store";
 import { useBrowserStore } from "#/stores/browser-store";
@@ -130,7 +133,11 @@ interface ConversationWebSocketContextType {
   isLoadingHistory: boolean;
   /** True once the current main socket has finished its initial history replay. */
   isHistoryReady: boolean;
-  reconnect: () => void;
+  /**
+   * Reconnects one socket and clears only that role's error. Without a role,
+   * the socket for the current conversation mode is reconnected.
+   */
+  reconnect: (role?: ErrorRole) => void;
   /**
    * True once the main or planning socket has opened at least once for the
    * current conversation. Lets the UI say "Reconnecting" instead of the
@@ -248,14 +255,17 @@ const routeSessionFrame = (
       };
     case "transient":
       return { event: frame.event, isReplay: false, isTransient: true };
-    case "error":
+    case "error": {
       // The server answers a rejected inbound message with an ErrorFrame and
       // keeps the socket open ("not worth dropping over"), so there is no
       // reconnect and nothing else will ever surface this to the user.
-      useErrorMessageStore
-        .getState()
-        .setErrorMessage(frame.detail, "conversation", frame.code);
+      const errors = useErrorMessageStore.getState();
+      const setError = slotMeta.isFromPlanningAgent
+        ? errors.setPlannerError
+        : errors.setErrorMessage;
+      setError(frame.detail, "conversation", frame.code);
       return null;
+    }
     default:
       return null;
   }
@@ -294,8 +304,14 @@ export function ConversationWebSocketProvider({
   const clearEventsForConversation = useEventStore(
     (state) => state.clearEventsForConversation,
   );
-  const { setErrorMessage, removeErrorMessage, clearConnectionError } =
-    useErrorMessageStore();
+  const {
+    setErrorMessage,
+    removeErrorMessage,
+    clearConnectionError,
+    setPlannerError,
+    removePlannerError,
+    clearPlannerConnectionError,
+  } = useErrorMessageStore();
   const consumeMatchingPendingMessage = useOptimisticUserMessageStore(
     (state) => state.consumeMatchingPendingMessage,
   );
@@ -318,7 +334,7 @@ export function ConversationWebSocketProvider({
       useEventStore
         .getState()
         .appendStreamingDeltas(frames, { isFromPlanningAgent: true });
-      useErrorMessageStore.getState().clearConnectionError();
+      useErrorMessageStore.getState().clearPlannerConnectionError();
     });
   }
 
@@ -1159,14 +1175,14 @@ export function ConversationWebSocketProvider({
               },
               classification,
             });
-            setErrorMessage(
+            setPlannerError(
               errorEvent.detail,
               "conversation",
               errorEvent.code,
               classification,
             );
           } else {
-            handleNonErrorEvent();
+            clearPlannerConnectionError();
           }
 
           // LLM errors render inline in the chat (see ErrorEventMessage); track
@@ -1285,7 +1301,7 @@ export function ConversationWebSocketProvider({
       addEvent,
       isLoadingHistoryPlanning,
       expectedEventCountPlanning,
-      setErrorMessage,
+      setPlannerError,
       consumeMatchingPendingMessage,
       queryClient,
       subConversations,
@@ -1295,13 +1311,15 @@ export function ConversationWebSocketProvider({
       readConversationFile,
       setPlanContent,
       updateMetricsFromStats,
-      handleNonErrorEvent,
+      clearPlannerConnectionError,
     ],
   );
 
-  const mainConnectionError = useConnectionErrorGracePeriod(wsUrl);
-  const planningConnectionError =
-    useConnectionErrorGracePeriod(planningAgentWsUrl);
+  const mainConnectionError = useConnectionErrorGracePeriod(wsUrl, "main");
+  const planningConnectionError = useConnectionErrorGracePeriod(
+    planningAgentWsUrl,
+    "planner",
+  );
 
   // Separate WebSocket options for main connection
   const mainWebsocketOptions: WebSocketHookOptions = useMemo(() => {
@@ -1381,7 +1399,7 @@ export function ConversationWebSocketProvider({
         planningConnectionError.cancel();
         setPlanningConnectionState("OPEN");
         hasConnectedRefPlanning.current = true; // Mark that we've successfully connected
-        clearConnectionError(); // Clear a previous connection error; keep sticky conversation errors
+        clearPlannerConnectionError(); // Clear a previous connection error; keep sticky conversation errors
         // See the main socket: an open slot cannot survive the gap.
         planningDeltaBatcherRef.current?.reset();
         useEventStore.getState().clearStreamingSlots(true);
@@ -1423,7 +1441,7 @@ export function ConversationWebSocketProvider({
   }, [
     handlePlanningMessage,
     planningConnectionError,
-    clearConnectionError,
+    clearPlannerConnectionError,
     sessionApiKey,
     subConversations,
   ]);
@@ -1509,24 +1527,34 @@ export function ConversationWebSocketProvider({
     flushHeldMessages,
   ]);
 
-  const reconnect = useCallback(() => {
-    removeErrorMessage();
-    mainConnectionError.cancel();
-    planningConnectionError.cancel();
-    const currentMode = useConversationStore.getState().conversationMode;
-    if (currentMode === "plan" && planningAgentWsUrl) {
-      reconnectPlanning();
-      return;
-    }
-    reconnectMain();
-  }, [
-    planningAgentWsUrl,
-    reconnectMain,
-    reconnectPlanning,
-    removeErrorMessage,
-    mainConnectionError,
-    planningConnectionError,
-  ]);
+  const reconnect = useCallback(
+    (role?: ErrorRole) => {
+      const target =
+        role ??
+        (useConversationStore.getState().conversationMode === "plan" &&
+        planningAgentWsUrl
+          ? "planner"
+          : "main");
+      if (target === "planner" && planningAgentWsUrl) {
+        removePlannerError();
+        planningConnectionError.cancel();
+        reconnectPlanning();
+        return;
+      }
+      removeErrorMessage();
+      mainConnectionError.cancel();
+      reconnectMain();
+    },
+    [
+      planningAgentWsUrl,
+      reconnectMain,
+      reconnectPlanning,
+      removeErrorMessage,
+      removePlannerError,
+      mainConnectionError,
+      planningConnectionError,
+    ],
+  );
 
   // Mobile browsers freeze and discard backgrounded tabs, silently killing
   // the socket; this pre-empts that with a clean close on the way out and an
@@ -1547,6 +1575,7 @@ export function ConversationWebSocketProvider({
     // the connection-classified message, leaving any unrelated sticky error
     // (e.g. a misconfigured API key) untouched.
     clearConnectionError();
+    clearPlannerConnectionError();
     if (websocketUrl && mainConnectionState !== "OPEN") {
       reconnectMain();
     }
@@ -1561,6 +1590,7 @@ export function ConversationWebSocketProvider({
     reconnectMain,
     reconnectPlanning,
     clearConnectionError,
+    clearPlannerConnectionError,
   ]);
 
   usePageVisibilityReconnect({

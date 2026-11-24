@@ -2349,3 +2349,100 @@ describe("ChatInterface - Budget limit error", () => {
     ).toHaveTextContent("Contact #it-help");
   });
 });
+
+describe("ChatInterface - Planner errors", () => {
+  beforeEach(() => {
+    (useConfig as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
+      data: {},
+    });
+    (
+      useUnifiedUploadFiles as unknown as ReturnType<typeof vi.fn>
+    ).mockReturnValue({ mutateAsync: vi.fn(), isLoading: false });
+    vi.spyOn(ProfilesService, "listProfiles").mockResolvedValue({
+      profiles: [],
+      active_profile: null,
+    } as Awaited<ReturnType<typeof ProfilesService.listProfiles>>);
+    window.localStorage.clear();
+    __resetActiveStoreForTests();
+  });
+
+  afterEach(() => {
+    cleanup();
+    vi.restoreAllMocks();
+    useErrorMessageStore.getState().resetErrorMessages();
+    window.localStorage.clear();
+    __resetActiveStoreForTests();
+  });
+
+  const renderChat = () =>
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <ActiveBackendProvider>
+          <MemoryRouter initialEntries={["/test-conversation-id"]}>
+            <Routes>
+              <Route path=":conversationId" element={<ChatInterface />} />
+              <Route
+                path="/settings/agents"
+                element={<div data-testid="agent-settings-page" />}
+              />
+            </Routes>
+          </MemoryRouter>
+        </ActiveBackendProvider>
+      </QueryClientProvider>,
+    );
+
+  const banners = () => screen.queryAllByTestId("error-message-banner");
+
+  it("shows a labeled planner banner next to the main banner, each dismissed on its own", () => {
+    useErrorMessageStore.getState().setErrorMessage("Main agent failed");
+    useErrorMessageStore.getState().setPlannerError("Planner failed");
+
+    renderChat();
+
+    const [mainBanner, plannerBanner] = banners();
+    expect(mainBanner).toHaveTextContent("Main agent failed");
+    expect(
+      within(mainBanner).queryByTestId("error-message-banner-source"),
+    ).not.toBeInTheDocument();
+    expect(
+      within(plannerBanner).getByTestId("error-message-banner-source"),
+    ).toHaveTextContent(I18nKey.COMMON$PLANNER);
+    expect(plannerBanner).toHaveTextContent("Planner failed");
+
+    fireEvent.click(
+      within(plannerBanner).getByTestId("error-message-banner-dismiss"),
+    );
+    expect(banners()).toHaveLength(1);
+    expect(banners()[0]).toHaveTextContent("Main agent failed");
+
+    act(() => {
+      useErrorMessageStore.getState().setPlannerError("Planner failed again");
+    });
+    fireEvent.click(
+      within(banners()[0]).getByTestId("error-message-banner-dismiss"),
+    );
+    expect(banners()).toHaveLength(1);
+    expect(banners()[0]).toHaveTextContent("Planner failed again");
+  });
+
+  it("offers credential recovery on a planner ACP auth error", () => {
+    useErrorMessageStore
+      .getState()
+      .setPlannerError(
+        "401 invalid x-api-key",
+        "conversation",
+        "ACPAuthRequired",
+      );
+
+    renderChat();
+
+    const [plannerBanner] = banners();
+    expect(
+      within(plannerBanner).getByTestId("error-message-banner-header"),
+    ).toHaveTextContent(I18nKey.ERROR$ACP_AUTH_REQUIRED_TITLE);
+    fireEvent.click(
+      within(plannerBanner).getByTestId("error-message-banner-reauth"),
+    );
+    expect(screen.getByTestId("agent-settings-page")).toBeInTheDocument();
+  });
+});

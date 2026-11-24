@@ -86,8 +86,8 @@ function AppContent() {
   const setCurrentAgentState = useAgentStore(
     (state) => state.setCurrentAgentState,
   );
-  const removeErrorMessage = useErrorMessageStore(
-    (state) => state.removeErrorMessage,
+  const resetErrorMessages = useErrorMessageStore(
+    (state) => state.resetErrorMessages,
   );
 
   const recoverableDraft = usePendingTaskAttachmentsStore((state) =>
@@ -113,13 +113,13 @@ function AppContent() {
     resetConversationState();
     resetConversationRuntimeState();
     setCurrentAgentState(AgentState.LOADING);
-    removeErrorMessage();
+    resetErrorMessages();
   }, [
     conversationId,
     resetConversationState,
     resetConversationRuntimeState,
     setCurrentAgentState,
-    removeErrorMessage,
+    resetErrorMessages,
   ]);
 
   React.useEffect(() => {

@@ -10,6 +10,7 @@ describe("error message store", () => {
       errorType: null,
       errorCode: null,
       errorClassification: null,
+      plannerError: null,
     });
   });
 
@@ -55,7 +56,11 @@ describe("error message store", () => {
     getState().setErrorMessage("boom");
     expect(getState().errorCode).toBeNull();
 
-    getState().setErrorMessage("auth failed", "conversation", "ACPAuthRequired");
+    getState().setErrorMessage(
+      "auth failed",
+      "conversation",
+      "ACPAuthRequired",
+    );
     expect(getState().errorCode).toBe("ACPAuthRequired");
   });
 
@@ -79,7 +84,11 @@ describe("error message store", () => {
   });
 
   it("removeErrorMessage clears the error code too", () => {
-    getState().setErrorMessage("auth failed", "conversation", "ACPAuthRequired");
+    getState().setErrorMessage(
+      "auth failed",
+      "conversation",
+      "ACPAuthRequired",
+    );
     getState().removeErrorMessage();
     expect(getState().errorCode).toBeNull();
   });
@@ -88,5 +97,65 @@ describe("error message store", () => {
     getState().setErrorMessage("offline", "connection", "SomeCode");
     getState().clearConnectionError();
     expect(getState().errorCode).toBeNull();
+  });
+
+  describe("planner errors", () => {
+    it("keeps main and planner errors apart in either order", () => {
+      getState().setErrorMessage("main failed", "conversation", "MainCode");
+      getState().setPlannerError("planner failed", "conversation", "PlanCode");
+      getState().setErrorMessage("main failed again");
+
+      expect(getState().errorMessage).toBe("main failed again");
+      expect(getState().plannerError).toEqual({
+        message: "planner failed",
+        type: "conversation",
+        code: "PlanCode",
+        classification: null,
+      });
+    });
+
+    it("removes one role's error without touching the other", () => {
+      getState().setErrorMessage("main failed");
+      getState().setPlannerError("planner failed");
+
+      getState().removePlannerError();
+      expect(getState().plannerError).toBeNull();
+      expect(getState().errorMessage).toBe("main failed");
+
+      getState().setPlannerError("planner failed");
+      getState().removeErrorMessage();
+      expect(getState().errorMessage).toBeNull();
+      expect(getState().plannerError?.message).toBe("planner failed");
+    });
+
+    it("clears connection errors per role", () => {
+      getState().setErrorMessage("main offline", "connection");
+      getState().setPlannerError("planner offline", "connection");
+
+      getState().clearPlannerConnectionError();
+      expect(getState().plannerError).toBeNull();
+      expect(getState().errorMessage).toBe("main offline");
+
+      getState().setPlannerError("planner offline", "connection");
+      getState().clearConnectionError();
+      expect(getState().errorMessage).toBeNull();
+      expect(getState().plannerError?.message).toBe("planner offline");
+    });
+
+    it("clearPlannerConnectionError preserves a sticky planner error", () => {
+      getState().setPlannerError("bad api key");
+      getState().clearPlannerConnectionError();
+      expect(getState().plannerError?.message).toBe("bad api key");
+    });
+
+    it("resetErrorMessages clears both roles", () => {
+      getState().setErrorMessage("main failed");
+      getState().setPlannerError("planner failed");
+
+      getState().resetErrorMessages();
+
+      expect(getState().errorMessage).toBeNull();
+      expect(getState().plannerError).toBeNull();
+    });
   });
 });

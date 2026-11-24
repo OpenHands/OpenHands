@@ -12,7 +12,7 @@ afterEach(() => vi.useRealTimers());
 describe("connection recovery feedback", () => {
   it("stays quiet, then offers progress and a retry without declaring an agent failure", () => {
     const { result } = renderHook(() =>
-      useConnectionErrorGracePeriod("runtime"),
+      useConnectionErrorGracePeriod("runtime", "main"),
     );
     act(() => result.current.report());
     act(() => vi.advanceTimersByTime(29999));
@@ -27,7 +27,7 @@ describe("connection recovery feedback", () => {
 
   it("clears an existing connection warning when a paused sandbox loses its URL", () => {
     const view = renderHook(
-      ({ url }: { url: string | null }) => useConnectionErrorGracePeriod(url),
+      ({ url }: { url: string | null }) => useConnectionErrorGracePeriod(url, "main"),
       {
         initialProps: { url: "runtime" as string | null },
       },
@@ -48,7 +48,7 @@ describe("connection recovery feedback", () => {
 
   it("cancels delayed feedback on recovery and leaves actionable errors intact", () => {
     const { result } = renderHook(() =>
-      useConnectionErrorGracePeriod("runtime"),
+      useConnectionErrorGracePeriod("runtime", "main"),
     );
     act(() => result.current.report());
     act(() => vi.advanceTimersByTime(2000));

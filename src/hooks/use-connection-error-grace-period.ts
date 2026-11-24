@@ -1,11 +1,23 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useErrorMessageStore } from "#/stores/error-message-store";
+import {
+  type ErrorRole,
+  useErrorMessageStore,
+} from "#/stores/error-message-store";
 
 const RECOVERY_PROGRESS_DELAY_MS = 30_000;
 const RECOVERY_RETRY_DELAY_MS = 60_000;
 export type ConnectionRecoveryState = "idle" | "reconnecting" | "retryable";
 
-export function useConnectionErrorGracePeriod(identity: string | null) {
+function clearRoleConnectionError(role: ErrorRole) {
+  const errors = useErrorMessageStore.getState();
+  if (role === "planner") errors.clearPlannerConnectionError();
+  else errors.clearConnectionError();
+}
+
+export function useConnectionErrorGracePeriod(
+  identity: string | null,
+  role: ErrorRole,
+) {
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
   const [feedback, setFeedback] = useState<{
     identity: string | null;
@@ -15,8 +27,8 @@ export function useConnectionErrorGracePeriod(identity: string | null) {
     timers.current.forEach(clearTimeout);
     timers.current = [];
     setFeedback({ identity, state: "idle" });
-    useErrorMessageStore.getState().clearConnectionError();
-  }, [identity]);
+    clearRoleConnectionError(role);
+  }, [identity, role]);
 
   const report = useCallback(() => {
     if (
@@ -25,7 +37,7 @@ export function useConnectionErrorGracePeriod(identity: string | null) {
       document.visibilityState === "hidden"
     )
       return;
-    useErrorMessageStore.getState().clearConnectionError();
+    clearRoleConnectionError(role);
     // Lost transport is not evidence that the agent failed. Keep retrying.
     timers.current = [
       setTimeout(
@@ -37,7 +49,7 @@ export function useConnectionErrorGracePeriod(identity: string | null) {
         RECOVERY_RETRY_DELAY_MS,
       ),
     ];
-  }, [identity]);
+  }, [identity, role]);
 
   useEffect(() => {
     cancel();

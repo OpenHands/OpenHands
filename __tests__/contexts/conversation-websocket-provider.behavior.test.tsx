@@ -1359,23 +1359,36 @@ describe("Conversation websocket behavior", () => {
     expect(useErrorMessageStore.getState().errorMessage).toBeNull();
   });
 
-  it("dismisses the error and reconnects the socket for the active mode", () => {
+  it("reconnects the socket for the active mode and dismisses only its error", () => {
     const { unmount } = renderProvider({
       subConversations: [makeSubConversation()],
     });
-    useErrorMessageStore.getState().setErrorMessage("retry me", "connection");
+    useErrorMessageStore.getState().setErrorMessage("main failed");
+    useErrorMessageStore.getState().setPlannerError("retry me", "connection");
     useConversationStore.setState({ conversationMode: "plan" });
 
     act(() => contextCapture.current?.reconnect());
 
-    expect(useErrorMessageStore.getState().errorMessage).toBeNull();
+    expect(useErrorMessageStore.getState().plannerError).toBeNull();
+    expect(useErrorMessageStore.getState().errorMessage).toBe("main failed");
     expect(socketCapture.reconnectPlanning).toHaveBeenCalledOnce();
     expect(socketCapture.reconnectMain).not.toHaveBeenCalled();
 
+    useErrorMessageStore.getState().setPlannerError("planner failed");
     useConversationStore.setState({ conversationMode: "code" });
     act(() => contextCapture.current?.reconnect());
+    expect(useErrorMessageStore.getState().errorMessage).toBeNull();
+    expect(useErrorMessageStore.getState().plannerError?.message).toBe(
+      "planner failed",
+    );
     expect(socketCapture.reconnectMain).toHaveBeenCalledOnce();
     expect(socketCapture.reconnectPlanning).toHaveBeenCalledOnce();
+
+    useConversationStore.setState({ conversationMode: "plan" });
+    act(() => contextCapture.current?.reconnect("main"));
+    expect(socketCapture.reconnectMain).toHaveBeenCalledTimes(2);
+    expect(socketCapture.reconnectPlanning).toHaveBeenCalledOnce();
+    socketCapture.reconnectMain.mockClear();
 
     unmount();
     socketCapture.callIndex = 0;
@@ -2310,10 +2323,11 @@ describe("Conversation websocket behavior", () => {
     act(() => planningOptions().onError?.(new Event("error")));
 
     expect(useErrorMessageStore.getState().errorMessage).toBeNull();
+    expect(useErrorMessageStore.getState().plannerError).toBeNull();
   });
 
   it.each(["main", "planning"])(
-    "flushes %s streaming deltas on the next frame and clears connection errors",
+    "flushes %s streaming deltas on the next frame and clears only its connection error",
     (source) => {
       let frame: FrameRequestCallback | undefined;
       vi.spyOn(window, "requestAnimationFrame").mockImplementation(
@@ -2326,6 +2340,9 @@ describe("Conversation websocket behavior", () => {
       useErrorMessageStore
         .getState()
         .setErrorMessage("disconnected", "connection");
+      useErrorMessageStore
+        .getState()
+        .setPlannerError("planner disconnected", "connection");
       const dispatch =
         source === "main" ? dispatchMainFrame : dispatchPlanningFrame;
       dispatch({ type: "item_started", item_id: "delta", attempt: 1 });
@@ -2349,7 +2366,14 @@ describe("Conversation websocket behavior", () => {
           ...(source === "planning" ? { isFromPlanningAgent: true } : {}),
         }),
       ]);
-      expect(useErrorMessageStore.getState().errorMessage).toBeNull();
+      const { errorMessage, plannerError } = useErrorMessageStore.getState();
+      if (source === "main") {
+        expect(errorMessage).toBeNull();
+        expect(plannerError?.message).toBe("planner disconnected");
+      } else {
+        expect(errorMessage).toBe("disconnected");
+        expect(plannerError).toBeNull();
+      }
     },
   );
 
@@ -2405,9 +2429,13 @@ describe("Conversation websocket behavior", () => {
       content: "Planning",
       isFromPlanningAgent: true,
     });
-    expect(useErrorMessageStore.getState().errorClassification).toEqual(
+    expect(useErrorMessageStore.getState().plannerError).toEqual({
+      message: "Credentials rejected",
+      type: "conversation",
+      code: "Auth",
       classification,
-    );
+    });
+    expect(useErrorMessageStore.getState().errorMessage).toBeNull();
     expect(socketCapture.trackError).toHaveBeenCalledWith(
       expect.objectContaining({
         classification,
@@ -2416,6 +2444,41 @@ describe("Conversation websocket behavior", () => {
     );
     dispatchPlanning(error);
     expect(socketCapture.trackError).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps planner and main errors apart in either order", () => {
+    renderProvider({ subConversations: [makeSubConversation()] });
+    const errorEvent = (id: string, code: string, detail: string) => ({
+      ...baseEvent(id),
+      kind: "ConversationErrorEvent",
+      code,
+      detail,
+    });
+
+    dispatchPlanning(errorEvent("plan-err", "PlanCode", "Planner failed"));
+    dispatchMain(errorEvent("main-err", "MainCode", "Main failed"));
+    expect(useErrorMessageStore.getState()).toMatchObject({
+      errorMessage: "Main failed",
+      errorCode: "MainCode",
+      plannerError: { message: "Planner failed", code: "PlanCode" },
+    });
+
+    dispatchPlanningFrame({
+      type: "error",
+      code: "PlanFrame",
+      detail: "Planner rejected",
+    });
+    expect(useErrorMessageStore.getState()).toMatchObject({
+      errorMessage: "Main failed",
+      plannerError: { message: "Planner rejected", code: "PlanFrame" },
+    });
+
+    dispatchMainFrame({ type: "error", code: "MainFrame", detail: "Rejected" });
+    expect(useErrorMessageStore.getState()).toMatchObject({
+      errorMessage: "Rejected",
+      errorCode: "MainFrame",
+      plannerError: { message: "Planner rejected" },
+    });
   });
 
   it("forwards the child-launch action with the parent and tool-call IDs", () => {
@@ -2574,12 +2637,19 @@ describe("Conversation websocket behavior", () => {
     const invalidateQueries = vi.spyOn(queryClient, "invalidateQueries");
 
     useErrorMessageStore.getState().setErrorMessage("temporary", "connection");
+    useErrorMessageStore
+      .getState()
+      .setPlannerError("planner temporary", "connection");
     dispatchPlanning(makeMessageEvent("37-normal", "assistant", ["ready"]));
-    expect(useErrorMessageStore.getState().errorMessage).toBeNull();
+    expect(useErrorMessageStore.getState().plannerError).toBeNull();
+    expect(useErrorMessageStore.getState().errorMessage).toBe("temporary");
     expect(consumeMatchingPendingMessage).not.toHaveBeenCalled();
     expect(socketCapture.trackError).not.toHaveBeenCalled();
     expect(warn).not.toHaveBeenCalled();
 
+    useErrorMessageStore
+      .getState()
+      .setErrorMessage("Main failed", "conversation", "MainCode");
     dispatchPlanning({
       ...baseEvent("38"),
       kind: "ServerErrorEvent",
@@ -2587,9 +2657,13 @@ describe("Conversation websocket behavior", () => {
       detail: "Planner failed",
     });
     expect(useErrorMessageStore.getState()).toMatchObject({
-      errorMessage: "Planner failed",
-      errorType: "conversation",
-      errorCode: "PlannerUnavailable",
+      errorMessage: "Main failed",
+      errorCode: "MainCode",
+      plannerError: {
+        message: "Planner failed",
+        type: "conversation",
+        code: "PlannerUnavailable",
+      },
     });
     expect(socketCapture.trackError).toHaveBeenCalledWith(
       expect.objectContaining({
