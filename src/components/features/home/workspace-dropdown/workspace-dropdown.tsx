@@ -67,6 +67,8 @@ export function WorkspaceDropdown({
   const { t } = useTranslation("openhands");
   const [inputValue, setInputValue] = useState(value?.name ?? "");
   const menuRef = useRef<HTMLUListElement>(null);
+  const addButtonRef = useRef<HTMLButtonElement>(null);
+  const keepOpenForFooterFocusRef = useRef(false);
 
   const filteredWorkspaces = useMemo(() => {
     const trimmed = inputValue.trim().toLowerCase();
@@ -191,12 +193,42 @@ export function WorkspaceDropdown({
         setInputValue(currentSelectedItem?.name ?? "");
       }
     },
-    stateReducer: (state, actionAndChanges) =>
-      actionAndChanges.type === useCombobox.stateChangeTypes.InputClick &&
-      state.isOpen
-        ? { ...actionAndChanges.changes, isOpen: true }
-        : actionAndChanges.changes,
+    stateReducer: (state, actionAndChanges) => {
+      if (
+        actionAndChanges.type === useCombobox.stateChangeTypes.InputClick &&
+        state.isOpen
+      ) {
+        return { ...actionAndChanges.changes, isOpen: true };
+      }
+
+      if (
+        actionAndChanges.type === useCombobox.stateChangeTypes.InputBlur &&
+        keepOpenForFooterFocusRef.current
+      ) {
+        return { ...actionAndChanges.changes, isOpen: true };
+      }
+
+      return actionAndChanges.changes;
+    },
   });
+
+  const handleInputKeyDown = useCallback(
+    (event: React.KeyboardEvent<HTMLInputElement>) => {
+      if (event.key !== "Tab" || event.shiftKey || !isOpen) return;
+
+      const addButton = addButtonRef.current;
+      if (!addButton) return;
+
+      event.preventDefault();
+      const nativeEvent = event.nativeEvent as KeyboardEvent & {
+        preventDownshiftDefault?: boolean;
+      };
+      nativeEvent.preventDownshiftDefault = true;
+      keepOpenForFooterFocusRef.current = true;
+      addButton.focus();
+    },
+    [isOpen],
+  );
 
   const renderItem = (
     item: LocalWorkspace,
@@ -278,6 +310,7 @@ export function WorkspaceDropdown({
     () => (
       <div className={dropdownMenuListClassName}>
         <button
+          ref={addButtonRef}
           type="button"
           data-testid="add-workspaces-button"
           className={cn(dropdownFooterActionClassName, "cursor-pointer")}
@@ -285,6 +318,9 @@ export function WorkspaceDropdown({
           onTouchStart={preventDropdownMenuClose}
           onTouchEnd={handleAddTouchEnd}
           onClick={handleAddClick}
+          onBlur={() => {
+            keepOpenForFooterFocusRef.current = false;
+          }}
         >
           {t(I18nKey.HOME$ADD_WORKSPACES)}
         </button>
@@ -337,6 +373,7 @@ export function WorkspaceDropdown({
             onChange: (e: React.ChangeEvent<HTMLInputElement>) => {
               setInputValue(e.target.value);
             },
+            onKeyDownCapture: handleInputKeyDown,
           })}
           data-testid="workspace-dropdown"
         />

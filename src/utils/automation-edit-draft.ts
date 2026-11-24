@@ -157,6 +157,10 @@ export function setupDraftFromAutomation(
     ...(Object.keys(existingEventTrigger).length > 0
       ? { existingEventTrigger }
       : {}),
+    // Only an automation that runs as a person has a visibility to choose.
+    ...(automation.visibility && automation.run_as_kind !== "service"
+      ? { existingVisibility: automation.visibility }
+      : {}),
     ...(kind === "custom" && automation.tarball_path
       ? { existingCustomTarballPath: automation.tarball_path }
       : {}),

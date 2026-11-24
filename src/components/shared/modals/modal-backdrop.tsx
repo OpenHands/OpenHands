@@ -10,9 +10,7 @@ interface ModalBackdropProps {
   closeOnEscape?: boolean;
   /** When false, clicking the backdrop does not close the modal. Defaults to true. */
   closeOnBackdropClick?: boolean;
-  /** When true, renders above the default modal layer so it stacks over other
-   *  modals (used by the telemetry consent banner over the onboarding modal).
-   *  Defaults to false. */
+  /** When true, renders above the default modal layer. Defaults to false. */
   elevated?: boolean;
   "aria-label"?: string;
 }

@@ -6,6 +6,7 @@ import { TabContentArea } from "./tab-content-area";
 import { ConversationTabContentCrossfade } from "./conversation-tab-content-crossfade";
 import { useConversationStore } from "#/stores/conversation-store";
 import { useConversationId } from "#/hooks/use-conversation-id";
+import { useConversationProjectId } from "#/hooks/query/use-conversation-project";
 import { CONVERSATION_TAB_LABEL_KEYS } from "../conversation-tab-ids";
 
 // Lazy load all tab components, including the terminal — xterm + addon-fit +
@@ -17,6 +18,7 @@ const BrowserTab = lazy(() => import("#/routes/browser-tab"));
 const PlannerTab = lazy(() => import("#/routes/planner-tab"));
 const TaskListTab = lazy(() => import("#/routes/task-list-tab"));
 const UsageTab = lazy(() => import("#/routes/usage-tab"));
+const ProjectTab = lazy(() => import("#/routes/project-tab"));
 const Terminal = lazy(() => import("#/components/features/terminal/terminal"));
 
 const TAB_CONFIG = {
@@ -27,12 +29,18 @@ const TAB_CONFIG = {
   terminal: { component: Terminal },
   planner: { component: PlannerTab },
   usage: { component: UsageTab },
+  project: { component: ProjectTab },
 };
 
 export function ConversationTabContent() {
   const { t } = useTranslation("openhands");
-  const { selectedTab, shouldShownAgentLoading } = useConversationStore();
+  const { selectedTab: storedTab, shouldShownAgentLoading } =
+    useConversationStore();
   const { conversationId } = useConversationId();
+  // The Project tab exists only while the conversation is in a project.
+  const projectId = useConversationProjectId();
+  const selectedTab =
+    storedTab === "project" && !projectId ? "files" : storedTab;
 
   const activeTab = useMemo(
     () =>

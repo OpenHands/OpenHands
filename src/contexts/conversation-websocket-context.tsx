@@ -585,6 +585,15 @@ export function ConversationWebSocketProvider({
           clearConfirmedConversationDraft(conversationId, confirmed);
         }
       }
+
+      // A start-task message this page did not echo lies in the older,
+      // unloaded history, where nothing can confirm it any more. Settle it
+      // here rather than let its watchdog report a delivered message as failed.
+      if (visibleHistory.hasMore) {
+        useOptimisticUserMessageStore
+          .getState()
+          .removeStartTaskMessages(conversationId);
+      }
     }
   }, [
     visibleHistory,
