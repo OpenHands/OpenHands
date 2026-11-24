@@ -1412,7 +1412,9 @@ export function ConversationPanel({
                   .map((t) => t.trim())
                   .filter((t) => t.length >= 3)
                   .slice(0, 8);
-                useSearchJumpStore.getState().startJump(hit.event_id, terms);
+                useSearchJumpStore
+                  .getState()
+                  .startJump(hit.event_id, terms, hit.conversation_id);
               }
               navigate(`/conversations/${hit.conversation_id}`);
             }}

@@ -212,6 +212,27 @@ export const Messages: React.FC<MessagesProps> = React.memo(
     ref,
   }) => {
     const { conversationId } = useOptionalConversationId();
+    // Narrow store selectors (not the whole store): the render below reads the
+    // highlight terms for the target event, and the jump effect reads the
+    // target ids and jump counter. The store is global, so a jump armed in
+    // one conversation must be scoped by `targetConversationId` (see the
+    // reset effect on conversationId).
+    const searchJumpTargetEventId = useSearchJumpStore((s) => s.targetEventId);
+    const searchJumpTargetConversationId = useSearchJumpStore(
+      (s) => s.targetConversationId,
+    );
+    const searchJumpHighlightTerms = useSearchJumpStore(
+      (s) => s.highlightTerms,
+    );
+    const searchJumpJumpId = useSearchJumpStore((s) => s.jumpId);
+    // Only an event in the jumped-to conversation is the highlight target; a
+    // foreign jump (armed in another conversation) must not light up here.
+    const isJumpTarget = React.useCallback(
+      (eventId: string) =>
+        searchJumpTargetEventId === eventId &&
+        searchJumpTargetConversationId === conversationId,
+      [searchJumpTargetEventId, searchJumpTargetConversationId, conversationId],
+    );
     const { key: sessionKey, sessions } = useSessionActivities(conversationId);
     const visibleSessions = React.useMemo(
       () =>
@@ -237,31 +258,30 @@ export const Messages: React.FC<MessagesProps> = React.memo(
     const [openRows, setOpenRows] = React.useState<
       ReadonlyMap<string, boolean>
     >(() => new Map());
-    React.useEffect(() => setOpenRows(new Map()), [conversationId]);
+    // Reset per conversation. This also retires a jump armed for a different
+    // conversation: the store is global and survives the arm-then-navigate
+    // flow (arming happens before the route change, so the store update alone
+    // must not re-run this effect — it reads the store non-reactively and
+    // depends only on the conversation), and a jump landing in its own
+    // conversation is a match, so it survives the mount of its target.
+    React.useEffect(() => {
+      setOpenRows(new Map());
+      const jump = useSearchJumpStore.getState();
+      if (
+        jump.targetEventId !== null &&
+        jump.targetConversationId !== conversationId
+      ) {
+        jump.clearJump();
+      }
+    }, [conversationId]);
+
     const setRowOpen = React.useCallback((key: string, open: boolean) => {
       setOpenRows((prev) => new Map(prev).set(key, open));
     }, []);
 
-    // Content-search jump: when a target event id is pending and the matching
-    // anchor has rendered, scroll it into view once. The anchor may appear
-    // later (history still loading), so the effect runs on every messages
-    // change until it finds it. The target stays set for the pulse duration
-    // so the ring animation and word highlights are actually seen.
-    const searchJump = useSearchJumpStore();
-    React.useEffect(() => {
-      const target = searchJump.targetEventId;
-      if (!target) return;
-      const anchor = document.querySelector<HTMLElement>(
-        `[data-event-id="${target}"]`,
-      );
-      if (!anchor) return;
-      anchor.scrollIntoView({ behavior: "smooth", block: "center" });
-      const timer = window.setTimeout(
-        () => searchJump.clearJump(),
-        SEARCH_JUMP_HIGHLIGHT_MS,
-      );
-      return () => window.clearTimeout(timer);
-    }, [messages, searchJump.targetEventId, searchJump]);
+    // Content-search jump landing lives below the virtualizer setup (it needs
+    // renderedItems + rowVirtualizer); the store subscriptions it reads are
+    // declared near the top of the component.
 
     // EventMessage used to receive the complete allEvents array and the plan
     // Set, so every append changed every historical item's shallow props.
@@ -466,6 +486,7 @@ export const Messages: React.FC<MessagesProps> = React.memo(
       detailsOnly = false,
     ) => {
       const stepKey = getStepKey(event);
+      const jumpTarget = event.id !== undefined && isJumpTarget(event.id);
       return (
         <StepDisclosureProvider
           key={stepKey}
@@ -484,21 +505,15 @@ export const Messages: React.FC<MessagesProps> = React.memo(
                 with negative margins so the message doesn't shift. */}
             <div
               data-event-id={event.id}
-              data-search-jump-target={
-                searchJump.targetEventId === event.id ? "true" : undefined
-              }
+              data-search-jump-target={jumpTarget ? "true" : undefined}
               className={
-                searchJump.targetEventId === event.id
-                  ? "-mx-1 -my-1 rounded-lg px-1 py-1"
-                  : "contents"
+                jumpTarget ? "-mx-1 -my-1 rounded-lg px-1 py-1" : "contents"
               }
             >
               <EventMessage
                 event={event}
                 searchHighlightTerms={
-                  searchJump.targetEventId === event.id
-                    ? searchJump.highlightTerms
-                    : undefined
+                  jumpTarget ? searchJumpHighlightTerms : undefined
                 }
                 correspondingAction={
                   (isObservationEvent(event) ||
@@ -540,9 +555,29 @@ export const Messages: React.FC<MessagesProps> = React.memo(
       }
 
       if (item.kind === "thought") {
+        const thoughtJumpTarget =
+          item.action.id !== undefined && isJumpTarget(item.action.id);
         return (
           <React.Fragment key={`thought-${item.action.id}`}>
-            <ThoughtEventMessage event={item.action} />
+            {/* Same jump-aware anchor wrapper as renderEventMessage: a
+                thought renders no EventMessage of its own, so without this
+                the landing has no anchor, pulse, or term highlights. */}
+            <div
+              data-event-id={item.action.id}
+              data-search-jump-target={thoughtJumpTarget ? "true" : undefined}
+              className={
+                thoughtJumpTarget
+                  ? "-mx-1 -my-1 rounded-lg px-1 py-1"
+                  : "contents"
+              }
+            >
+              <ThoughtEventMessage
+                event={item.action}
+                searchHighlightTerms={
+                  thoughtJumpTarget ? searchJumpHighlightTerms : undefined
+                }
+              />
+            </div>
             {maybeRenderModelMessages(item.action.id)}
           </React.Fragment>
         );
@@ -1143,6 +1178,13 @@ export const Messages: React.FC<MessagesProps> = React.memo(
           cancelAnimationFrame(scrollCorrectionFrameRef.current);
           scrollCorrectionFrameRef.current = null;
         }
+        // The pulse timer outlives the effect run (it is cleared and re-set
+        // only by the next jump), so unmount must clear it explicitly or it
+        // fires clearJump on a store that may already serve another view.
+        if (jumpTimerRef.current !== null) {
+          window.clearTimeout(jumpTimerRef.current);
+          jumpTimerRef.current = null;
+        }
       },
       [],
     );
@@ -1167,6 +1209,149 @@ export const Messages: React.FC<MessagesProps> = React.memo(
     // once the shared shell mounts. Without a container (shared/read-only
     // views) component state is stable, so the Provider is omitted.
     const persistExpansion = scrollParent !== undefined;
+
+    // Content-search jump landing. A jump is armed before navigating (see the
+    // panel's onSelect), so the target event may not be in the loaded window
+    // yet, and on a virtualized list its row may be outside the mounted
+    // window even once loaded. Landing therefore runs in stages:
+    //
+    //   1. target rendered -> scroll once and schedule clearJump;
+    //   2. row is a collapsed group -> open it (and scroll to it), so its
+    //      child anchors mount;
+    //   3. row known to the virtualizer but not mounted -> scrollToIndex;
+    //   4. event not in `messages` yet -> wait (history pages in).
+    //
+    // `jumpId` keys the once-guard: exactly one scroll per jump even when
+    // streaming arrivals re-run this effect, and a repeat click on the same
+    // result still re-jumps. A jump can only land in the conversation the
+    // search result belongs to (the guard below; the reset effect above
+    // retires mismatches on conversation switch).
+    const rowIndexByEventId = React.useMemo(() => {
+      const map = new Map<string, number>();
+      renderedItems.forEach((item, index) => {
+        if (item.kind === "single") {
+          if (item.event.id) map.set(item.event.id, index);
+        } else if (item.kind === "thought") {
+          if (item.action.id) map.set(item.action.id, index);
+        } else {
+          for (const event of item.events) {
+            if (event.id) map.set(event.id, index);
+          }
+        }
+      });
+      return map;
+    }, [renderedItems]);
+    const jumpedForJumpIdRef = React.useRef<number | null>(null);
+    // The pulse timer lives in a ref, not the effect cleanup: the effect
+    // re-runs on every streaming arrival, and a cleanup-based timer would
+    // cancel-and-reschedule each time — in a conversation that streams for
+    // longer than the pulse, the highlight would never end. One timer per
+    // jump, cleared only by the next jump or unmount.
+    const jumpTimerRef = React.useRef<number | null>(null);
+    React.useEffect(() => {
+      if (searchJumpTargetEventId === null) {
+        jumpedForJumpIdRef.current = null;
+        return;
+      }
+      // A jump can only land in the conversation its result belongs to.
+      if (searchJumpTargetConversationId !== conversationId) return;
+      const target = searchJumpTargetEventId;
+      const anchor = document.querySelector<HTMLElement>(
+        `[data-event-id="${target}"]`,
+      );
+      // A thought's event renders no anchor of its own (its `single` row is
+      // suppressed; the hoisted thought item renders plain text), so fall back
+      // to the row wrapper. Row keys are shared by both list shapes.
+      const rowKey =
+        anchor === null && rowIndexByEventId.has(target)
+          ? renderedItemKey(renderedItems[rowIndexByEventId.get(target)!])
+          : null;
+      const element =
+        anchor ??
+        (rowKey === null
+          ? null
+          : document.querySelector<HTMLElement>(`[data-row-key="${rowKey}"]`));
+      if (element !== null) {
+        // Stage 1. Exactly one scroll per jump: the pulse and word highlights
+        // stay until clearJump regardless of how many events arrive, and the
+        // timer is scheduled once (not re-armed per arrival), so streaming
+        // cannot starve it.
+        if (jumpedForJumpIdRef.current !== searchJumpJumpId) {
+          jumpedForJumpIdRef.current = searchJumpJumpId;
+          if (jumpTimerRef.current !== null) {
+            window.clearTimeout(jumpTimerRef.current);
+          }
+          // On a virtualized list the row may sit outside the mounted
+          // window; bring it in before the DOM-level scroll. The plain list
+          // needs only the element scroll — a virtualizer scrollToIndex
+          // there would compete with it.
+          if (shouldVirtualize) {
+            rowVirtualizer.scrollToIndex(rowIndexByEventId.get(target) ?? 0, {
+              align: "center",
+            });
+          }
+          element.scrollIntoView({ behavior: "smooth", block: "center" });
+          // A correction buffered from earlier row measurements would shift
+          // the container on the next frame, undoing the landing; the jump
+          // scroll is authoritative.
+          scrollCorrectionBufferRef.current.clear();
+          jumpTimerRef.current = window.setTimeout(() => {
+            jumpTimerRef.current = null;
+            useSearchJumpStore.getState().clearJump();
+          }, SEARCH_JUMP_HIGHLIGHT_MS);
+        }
+        return;
+      }
+      const rowIndex = rowIndexByEventId.get(target);
+      if (rowIndex === undefined) {
+        // Stage 4: the event is not loaded yet; history pages in over time,
+        // and the store keeps the target until it does.
+        return;
+      }
+      if (shouldVirtualize) {
+        // Stages 2+3 in one step: scroll to the row whether or not it is a
+        // collapsed group, and open a group too so its anchors mount. Opening
+        // alone cannot re-run this effect's dependencies when the row is
+        // outside the virtual window, and `setRowOpen` always yields a fresh
+        // `openRows` identity — so the scroll must happen in the same pass to
+        // converge.
+        rowVirtualizer.scrollToIndex(rowIndex, { align: "center" });
+        scrollCorrectionBufferRef.current.clear();
+        const row = renderedItems[rowIndex];
+        if (row.kind === "group") {
+          setRowOpen(`group:${getGroupKey(row)}`, true);
+        }
+        return;
+      }
+      // Plain list, row rendered: a collapsed group hides the anchor. Open it;
+      // the `openRows` dep re-runs this effect and lands via stage 1.
+      const row = renderedItems[rowIndex];
+      if (row.kind === "group") {
+        setRowOpen(`group:${getGroupKey(row)}`, true);
+      }
+    }, [
+      searchJumpTargetEventId,
+      searchJumpTargetConversationId,
+      searchJumpJumpId,
+      conversationId,
+      rowIndexByEventId,
+      renderedItems,
+      rowVirtualizer,
+      shouldVirtualize,
+      setRowOpen,
+      // `setRowOpen` writes a fresh `openRows` identity, which is what
+      // re-runs this effect after opening a collapsed group in the plain
+      // list (no virtual items change there).
+      openRows,
+      // Stable signature of the mounted virtual window: after a scrollToIndex
+      // the target row mounts without `renderedItems` changing, so this is
+      // what re-runs the effect to land via stage 1. A joined-key string
+      // stays identical across measurement churn that does not move rows.
+      rowVirtualizer
+        .getVirtualItems()
+        .map((item) => item.key)
+        .join(","),
+    ]);
 
     // Rendered after both list shapes, so they stay in the scroll column's
     // normal flow rather than inside an absolutely positioned virtual row.

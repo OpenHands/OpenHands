@@ -10,12 +10,14 @@ interface ThoughtEventMessageProps {
     tooltip?: string;
   }>;
   isFromPlanningAgent?: boolean;
+  searchHighlightTerms?: string[];
 }
 
 export function ThoughtEventMessage({
   event,
   actions,
   isFromPlanningAgent = false,
+  searchHighlightTerms,
 }: ThoughtEventMessageProps) {
   // Extract thought content from the action event
   const thoughtContent = event.thought
@@ -35,6 +37,7 @@ export function ThoughtEventMessage({
       actions={actions}
       isFromPlanningAgent={isFromPlanningAgent}
       timestamp={event.timestamp}
+      searchHighlightTerms={searchHighlightTerms}
     />
   );
 }

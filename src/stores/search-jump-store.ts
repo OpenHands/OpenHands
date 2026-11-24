@@ -9,10 +9,18 @@ import { create } from "zustand";
 interface SearchJumpState {
   /** Event id to scroll to; null when no jump is pending. */
   targetEventId: string | null;
+  /** Conversation the target event belongs to. */
+  targetConversationId: string | null;
   /** Words to highlight inside the target message (the search query). */
   highlightTerms: string[];
+  /** Increments on every startJump, so a repeat click re-runs the jump. */
+  jumpId: number;
   /** Fire a jump; the chat clears it once handled. */
-  startJump: (eventId: string, highlightTerms: string[]) => void;
+  startJump: (
+    eventId: string,
+    highlightTerms: string[],
+    conversationId: string,
+  ) => void;
   /** Clear the pending jump (handled, cancelled, or stale). */
   clearJump: () => void;
 }
@@ -27,11 +35,20 @@ export const SEARCH_JUMP_HIGHLIGHT_MS = 2400;
 
 export const useSearchJumpStore = create<SearchJumpState>((set) => ({
   targetEventId: null,
+  targetConversationId: null,
   highlightTerms: [],
-  startJump: (eventId, highlightTerms) =>
-    set({
+  jumpId: 0,
+  startJump: (eventId, highlightTerms, conversationId) =>
+    set((state) => ({
       targetEventId: eventId,
+      targetConversationId: conversationId,
       highlightTerms: highlightTerms.slice(0, MAX_HIGHLIGHT_TERMS),
+      jumpId: state.jumpId + 1,
+    })),
+  clearJump: () =>
+    set({
+      targetEventId: null,
+      targetConversationId: null,
+      highlightTerms: [],
     }),
-  clearJump: () => set({ targetEventId: null, highlightTerms: [] }),
 }));

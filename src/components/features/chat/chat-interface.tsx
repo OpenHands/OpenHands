@@ -50,6 +50,7 @@ import { ChatMessagesSkeleton } from "./chat-messages-skeleton";
 import { displayErrorToast } from "#/utils/custom-toast-handlers";
 import { useErrorMessageStore } from "#/stores/error-message-store";
 import { useOptimisticUserMessageStore } from "#/stores/optimistic-user-message-store";
+import { useSearchJumpStore } from "#/stores/search-jump-store";
 import { SERVER_CONNECTION_ERROR_MESSAGE } from "#/constants/server-connection-error";
 import { ErrorMessageBanner } from "./error-message-banner";
 import { ConnectionRecoveryNotice } from "./connection-recovery-notice";
@@ -281,6 +282,59 @@ export function ChatInterface({
     hasMore: hasMoreOlderEvents,
     loadOlder,
   } = useLoadOlderEvents(conversationId);
+
+  // A content-search jump may target an event older than the initial history
+  // page. While a jump for this conversation is armed and its target has not
+  // loaded yet, backfill older pages until it does (or the history is
+  // exhausted — then Messages' landing effect simply stays in stage 4).
+  const jumpTargetEventId = useSearchJumpStore((s) => s.targetEventId);
+  const jumpTargetConversationId = useSearchJumpStore(
+    (s) => s.targetConversationId,
+  );
+  const jumpPendingForThisConversation =
+    jumpTargetEventId !== null && jumpTargetConversationId === conversationId;
+  const jumpTargetLoaded = React.useMemo(
+    () =>
+      jumpTargetEventId !== null &&
+      allConversationEvents.some((event) => event.id === jumpTargetEventId),
+    [jumpTargetEventId, allConversationEvents],
+  );
+  // Stop backfilling for a target whose history pages keep erroring; the
+  // aborted target id is reset when the store clears or a new target arms.
+  const backfillAbortedForRef = React.useRef<string | null>(null);
+  React.useEffect(() => {
+    if (jumpTargetEventId === null) backfillAbortedForRef.current = null;
+  }, [jumpTargetEventId]);
+  React.useEffect(() => {
+    if (
+      !jumpPendingForThisConversation ||
+      jumpTargetLoaded ||
+      isProvisioningTask ||
+      isLoadingOlderEvents ||
+      !hasMoreOlderEvents ||
+      backfillAbortedForRef.current === jumpTargetEventId
+    ) {
+      return;
+    }
+    loadOlder().catch((error) => {
+      backfillAbortedForRef.current = jumpTargetEventId;
+      const message =
+        error instanceof Error && error.message
+          ? error.message
+          : t(I18nKey.ERROR$GENERIC);
+      setErrorMessage(message);
+    });
+  }, [
+    jumpPendingForThisConversation,
+    jumpTargetLoaded,
+    jumpTargetEventId,
+    isProvisioningTask,
+    isLoadingOlderEvents,
+    hasMoreOlderEvents,
+    loadOlder,
+    setErrorMessage,
+    t,
+  ]);
 
   // Trigger `loadOlder` and preserve the visual scroll position once the
   // older page is merged in (otherwise prepending events would jump the
@@ -667,7 +721,9 @@ export function ChatInterface({
       return;
     }
 
-    if (autoScroll) {
+    // A content-search jump is scrolling to its target (Messages' landing
+    // effect); yanking to the bottom here would race that scroll and win.
+    if (autoScroll && !jumpPendingForThisConversation) {
       scrollDomToBottom();
     }
     // Note: We intentionally exclude autoScroll from deps because we only want
@@ -677,6 +733,7 @@ export function ChatInterface({
     hasPendingUserMessages,
     activeGoalScrollKey,
     scrollDomToBottom,
+    jumpPendingForThisConversation,
   ]);
 
   // Second pass for the "load older" restore above. The height delta it applies
