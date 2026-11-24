@@ -20,16 +20,15 @@ interface OpenModal {
   elevated: React.RefObject<boolean>;
 }
 
-// Every mounted ModalBackdrop, in mount order. Only the topmost one owns focus.
+// Mounted modal focus traps in mount order.
 const openModals: OpenModal[] = [];
 
-function topmostModalRoot(): HTMLElement | null {
-  // Elevated modals (the telemetry consent banner) paint above every default
-  // modal regardless of mount order, so they own focus the same way.
-  const topmost =
+export function getTopmostModal(): OpenModal | undefined {
+  // Among equally elevated modals, the most recently opened one paints on top.
+  return (
     [...openModals].reverse().find((modal) => modal.elevated.current) ??
-    openModals.at(-1);
-  return topmost?.root ?? null;
+    openModals.at(-1)
+  );
 }
 
 function isVisible(element: HTMLElement): boolean {
@@ -105,7 +104,10 @@ export function useModalFocus<T extends HTMLElement = HTMLDivElement>({
     const modal: OpenModal = { root, elevated: elevatedRef };
     openModals.push(modal);
 
-    if (topmostModalRoot() === root && !root.contains(document.activeElement)) {
+    if (
+      getTopmostModal()?.root === root &&
+      !root.contains(document.activeElement)
+    ) {
       focusFirstTabbable(root);
     }
 
@@ -113,7 +115,7 @@ export function useModalFocus<T extends HTMLElement = HTMLDivElement>({
     // onFocus, so an unmarked event means focus landed outside the dialog.
     const handleFocusIn = (event: FocusEvent) => {
       // A closing dialog is already detached here; let the new focus stand.
-      if (!root.isConnected || topmostModalRoot() !== root) return;
+      if (!root.isConnected || getTopmostModal()?.root !== root) return;
       if (focusEventsFromDialogTree.current.has(event)) return;
       focusFirstTabbable(root);
     };
@@ -141,7 +143,7 @@ export function useModalFocus<T extends HTMLElement = HTMLDivElement>({
         opener.focus();
         return;
       }
-      const below = topmostModalRoot();
+      const below = getTopmostModal()?.root;
       if (below?.isConnected) focusFirstTabbable(below);
     };
   }, []);
@@ -159,7 +161,7 @@ export function useModalFocus<T extends HTMLElement = HTMLDivElement>({
       event.ctrlKey ||
       event.metaKey ||
       !root ||
-      topmostModalRoot() !== root ||
+      getTopmostModal()?.root !== root ||
       !root.contains(event.target as Node)
     ) {
       return;
@@ -170,7 +172,7 @@ export function useModalFocus<T extends HTMLElement = HTMLDivElement>({
     const active = document.activeElement;
     const pullEscapedFocusBack = () => {
       window.setTimeout(() => {
-        if (!root.isConnected || topmostModalRoot() !== root) return;
+        if (!root.isConnected || getTopmostModal()?.root !== root) return;
         if (root.contains(document.activeElement)) return;
         (event.shiftKey ? last : first)?.focus();
       }, 0);

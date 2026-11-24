@@ -1,6 +1,7 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { CommandMenu } from "#/components/features/command-menu/command-menu";
 import { TelemetryConsentBanner } from "#/components/features/analytics/telemetry-consent-banner";
 
 const useActiveBackendMock = vi.fn();
@@ -72,6 +73,26 @@ describe("TelemetryConsentBanner", () => {
       data: { user_consents_to_analytics: null },
       isSuccess: true,
     });
+  });
+
+  it("keeps the command shortcut in the consent dialog until a choice is confirmed", async () => {
+    const user = userEvent.setup();
+    render(
+      <>
+        <CommandMenu />
+        <TelemetryConsentBanner />
+      </>,
+    );
+    const checkbox = await screen.findByRole("checkbox");
+
+    await user.keyboard("{Meta>}k{/Meta}");
+
+    expect(screen.queryByTestId("command-menu")).not.toBeInTheDocument();
+    expect(checkbox).toHaveFocus();
+    await user.click(screen.getByTestId("confirm-telemetry-preferences"));
+    await user.keyboard("{Meta>}k{/Meta}");
+    await waitFor(() => expect(screen.getByRole("combobox")).toHaveFocus());
+    await user.keyboard("{Escape}");
   });
 
   it("renders in local mode when agent-server consent is null", async () => {

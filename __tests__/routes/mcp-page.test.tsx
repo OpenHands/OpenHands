@@ -7,7 +7,9 @@ import {
   waitFor,
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
+import { CommandMenu } from "#/components/features/command-menu/command-menu";
 import MCPPage from "#/routes/mcp";
 import SettingsService from "#/api/settings-service/settings-service.api";
 import McpService from "#/api/mcp-service/mcp-service.api";
@@ -34,8 +36,8 @@ function buildSettings(overrides: Partial<Settings> = {}): Settings {
   };
 }
 
-function renderPage() {
-  return render(<MCPPage />, {
+function renderPage(ui = <MCPPage />) {
+  return render(ui, {
     wrapper: ({ children }) => (
       <QueryClientProvider
         client={
@@ -56,6 +58,35 @@ describe("MCPPage", () => {
       ok: true,
       tools: [],
     });
+  });
+
+  it("keeps the custom server draft when Escape closes a focused command option", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(buildSettings());
+    renderPage(
+      <>
+        <MCPPage />
+        <CommandMenu />
+      </>,
+    );
+    await user.click(await screen.findByTestId("mcp-add-custom-server"));
+    const name = screen.getByPlaceholderText("my_search_server");
+    await user.type(name, "unsaved-server");
+
+    await user.keyboard("{Control>}k{/Control}");
+    const menu = await screen.findByTestId("command-menu");
+    await waitFor(() =>
+      expect(within(menu).getByRole("combobox")).toHaveFocus(),
+    );
+    await user.tab();
+    expect(document.activeElement).toHaveAttribute("role", "option");
+    await user.keyboard("{Escape}");
+
+    expect(menu).not.toBeInTheDocument();
+    expect(name).toHaveFocus();
+    expect(name).toHaveValue("unsaved-server");
+    await user.keyboard("{Escape}");
+    expect(screen.queryByTestId("mcp-custom-editor")).not.toBeInTheDocument();
   });
 
   it("renders the empty installed state and the marketplace", async () => {

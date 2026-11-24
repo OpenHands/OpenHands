@@ -1,6 +1,9 @@
 import React from "react";
 import { AppearancePortal } from "#/components/shared/appearance-portal";
-import { useModalFocus } from "#/components/shared/modals/use-modal-focus";
+import {
+  getTopmostModal,
+  useModalFocus,
+} from "#/components/shared/modals/use-modal-focus";
 import { Search, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { I18nKey } from "#/i18n/declaration";
@@ -392,7 +395,8 @@ export function CommandMenu() {
         event.key.toLocaleLowerCase() === COMMAND_MENU_SHORTCUT_KEY
       ) {
         event.preventDefault();
-        open();
+        // An elevated dialog, such as telemetry consent, owns the keyboard.
+        if (!getTopmostModal()?.elevated.current) open();
       }
     };
 

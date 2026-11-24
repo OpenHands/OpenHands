@@ -1,7 +1,7 @@
 import React from "react";
 import { AppearancePortal } from "#/components/shared/appearance-portal";
 import { useEscapeBoundary } from "#/hooks/use-close-on-escape";
-import { useModalFocus } from "./use-modal-focus";
+import { getTopmostModal, useModalFocus } from "./use-modal-focus";
 
 interface ModalBackdropProps {
   children: React.ReactNode;
@@ -23,7 +23,7 @@ export function ModalBackdrop({
   elevated = false,
   "aria-label": ariaLabel,
 }: ModalBackdropProps) {
-  const focus = useModalFocus({ elevated });
+  const { rootRef, onFocus, onKeyDown } = useModalFocus({ elevated });
   // The dialog is on top: menus and drawers opened before it never take its
   // Escape, whether or not it closes on Escape itself.
   useEscapeBoundary(true);
@@ -42,27 +42,28 @@ export function ModalBackdrop({
     // would always read the already-closed state); the close itself must run
     // on bubble so content that handles Escape with `stopPropagation` (e.g.
     // custom popovers) keeps shielding the dialog as before.
-    let comboboxExpandedAtKeypress = false;
-    const recordComboboxState = (e: KeyboardEvent) => {
+    // The top dialog may be gone by the time this key reaches window.
+    let shouldClose = false;
+    const recordEscapeTarget = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return;
       const target = e.target instanceof Element ? e.target : null;
-      comboboxExpandedAtKeypress =
+      const comboboxExpanded =
         target?.getAttribute("role") === "combobox" &&
         target.getAttribute("aria-expanded") === "true";
+      shouldClose =
+        getTopmostModal()?.root === rootRef.current && !comboboxExpanded;
     };
     const handleEscape = (e: KeyboardEvent) => {
-      if (e.key !== "Escape") return;
-      if (comboboxExpandedAtKeypress) return;
-      onClose?.();
+      if (e.key === "Escape" && shouldClose) onClose?.();
     };
 
-    window.addEventListener("keydown", recordComboboxState, true);
+    window.addEventListener("keydown", recordEscapeTarget, true);
     window.addEventListener("keydown", handleEscape);
     return () => {
-      window.removeEventListener("keydown", recordComboboxState, true);
+      window.removeEventListener("keydown", recordEscapeTarget, true);
       window.removeEventListener("keydown", handleEscape);
     };
-  }, [closeOnEscape, onClose]);
+  }, [closeOnEscape, onClose, rootRef]);
 
   const handleClick = (e: React.MouseEvent<HTMLDivElement>) => {
     if (!closeOnBackdropClick) return;
@@ -82,13 +83,13 @@ export function ModalBackdrop({
           bubble through the React tree; see useModalFocus. */}
       {/* eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions */}
       <div
-        ref={focus.rootRef}
+        ref={rootRef}
         role="dialog"
         aria-modal="true"
         aria-label={ariaLabel}
         tabIndex={-1}
-        onFocus={focus.onFocus}
-        onKeyDown={focus.onKeyDown}
+        onFocus={onFocus}
+        onKeyDown={onKeyDown}
         className={`fixed inset-0 flex items-center justify-center outline-none ${
           elevated ? "z-70" : "z-60"
         }`}
