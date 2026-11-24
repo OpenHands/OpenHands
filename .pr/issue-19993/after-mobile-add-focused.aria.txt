@@ -1,8 +1,0 @@
-http://127.0.0.1:18800/
-- img
-- combobox "Select a workspace" [expanded]
-- button "Toggle menu" [expanded]
-- listbox:
-  - listitem: No workspaces yet
-- button "+ Add Workspace"
-- button "Confirm" [disabled]

@@ -1,9 +1,0 @@
-http://127.0.0.1:18810/
-- main:
-  - img
-- dialog "Help improve OpenHands":
-  - text: Help improve OpenHands We collect anonymous usage data to improve the product. No personal information is collected. You can change this setting anytime.
-  - paragraph: This preference is saved for the local backend “Local” at http://127.0.0.1:18810.
-  - checkbox "Send anonymous usage data" [checked]
-  - text: Send anonymous usage data
-  - button "Confirm preferences"

@@ -1,7 +1,0 @@
-context: before mobile baseline
-run: /tmp/openhands-verify/2026-11-23T0042-f5ca5b
-sha: c5e47c4b4dab1d14724e74675c06254957ccbf47
-date: 2026-11-23T00:45:41+00:00
-route: / after onboarding skipped
-viewport: phone 390x844
-commands: click open workspace, focus workspace dropdown, ArrowDown, then ArrowDown/Enter/Space/Tab/Shift+Tab
