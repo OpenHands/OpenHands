@@ -409,6 +409,63 @@ export const CONVERSATION_HANDLERS = [
     HttpResponse.json({ ok: true }),
   ),
 
+  http.post(
+    "*/api/conversations/:conversationId/secrets",
+    async ({ params, request }) => {
+      if (!CONVERSATIONS.has(params.conversationId as string)) {
+        return HttpResponse.json(
+          { detail: "Conversation not found" },
+          { status: 404 },
+        );
+      }
+      const body = (await request.json()) as {
+        secrets?: Record<string, string>;
+      };
+      if (!body.secrets || Object.keys(body.secrets).length === 0) {
+        return HttpResponse.json(
+          { detail: "Secret required" },
+          { status: 400 },
+        );
+      }
+      return HttpResponse.json({ success: true });
+    },
+  ),
+
+  http.post(
+    "*/api/conversations/:conversationId/mcp",
+    async ({ params, request }) => {
+      if (!CONVERSATIONS.has(params.conversationId as string)) {
+        return HttpResponse.json(
+          { detail: "Conversation not found" },
+          { status: 404 },
+        );
+      }
+      const body = (await request.json()) as {
+        mcp_servers?: Record<string, unknown>;
+      };
+      if (!body.mcp_servers || Object.keys(body.mcp_servers).length === 0) {
+        return HttpResponse.json(
+          { detail: "MCP server required" },
+          { status: 400 },
+        );
+      }
+      return HttpResponse.json({ success: true });
+    },
+  ),
+
+  http.post(
+    "*/api/conversations/:conversationId/switch_llm",
+    async ({ params }) => {
+      if (!CONVERSATIONS.has(params.conversationId as string)) {
+        return HttpResponse.json(
+          { detail: "Conversation not found" },
+          { status: 404 },
+        );
+      }
+      return HttpResponse.json({ success: true });
+    },
+  ),
+
   // The generated-canvas fixture behaves like a real workspace artifact:
   // after the chat chip opens the Files drawer, its static-session URL serves
   // the same Markdown bytes carried by the file-editor observation.

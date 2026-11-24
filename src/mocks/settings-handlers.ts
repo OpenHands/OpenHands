@@ -748,6 +748,10 @@ export const SETTINGS_HANDLERS = [
       uptime: 0,
       idle_time: 0,
       version: MOCK_AGENT_SERVER_VERSION,
+      capabilities: [
+        "conversation_configuration_additions_v1",
+        "conversation_mcp_install_v1",
+      ],
       usable_tools: [
         "terminal",
         "file_editor",
@@ -921,6 +925,10 @@ export const SETTINGS_HANDLERS = [
       buildProfileDetail(profile, request.headers.get("X-Expose-Secrets")),
     );
   }),
+
+  http.post("*/api/profiles/:name/validate", async () =>
+    HttpResponse.json({ valid: true }),
+  ),
 
   http.post("*/api/profiles/:name", async ({ params, request }) => {
     const name = getProfileNameParam(params.name);
