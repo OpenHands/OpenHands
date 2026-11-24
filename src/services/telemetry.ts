@@ -119,6 +119,12 @@ let initializationPromise: Promise<PostHog | null> | null = null;
 let pendingBootstrap: BootstrapConfig | undefined;
 let telemetryConfig: TelemetryConfig = {};
 let telemetryDisabled = false;
+let cachedFeedbackSurvey: {
+  host: string;
+  apiKey: string;
+  surveyId: string;
+  question: { id: string; question: string };
+} | null = null;
 
 function removeStorageKeysWithPrefix(storage: Storage, prefix: string): void {
   const keysToRemove: string[] = [];
@@ -282,6 +288,7 @@ function propertiesEqual(
  * Passing false disables telemetry and install tracking for embedded hosts.
  */
 export function configureTelemetry(config: TelemetryConfiguration): void {
+  cachedFeedbackSurvey = null;
   if (config === false) {
     if (telemetryDisabled) return;
     telemetryDisabled = true;
@@ -902,6 +909,48 @@ export async function trackEvent(
   posthog.capture(eventName, properties);
 }
 
+async function getFeedbackSurveyQuestion(
+  host: string,
+  apiKey: string,
+  surveyId: string,
+): Promise<{ id: string; question: string }> {
+  if (
+    cachedFeedbackSurvey?.host === host &&
+    cachedFeedbackSurvey.apiKey === apiKey &&
+    cachedFeedbackSurvey.surveyId === surveyId
+  ) {
+    return cachedFeedbackSurvey.question;
+  }
+
+  // This is PostHog's public survey endpoint, not an Agent Server API.
+  // eslint-disable-next-line local/no-direct-agent-server-fetch
+  const surveyResponse = await fetch(
+    `${host}/api/surveys/?token=${encodeURIComponent(apiKey)}`,
+    { credentials: "omit", referrerPolicy: "no-referrer" },
+  );
+  if (!surveyResponse.ok) throw new Error("Feedback survey unavailable");
+  const data = (await surveyResponse.json()) as {
+    surveys?: Array<{
+      id: string;
+      questions?: Array<{ id?: string; question?: string }>;
+    }>;
+  };
+  const survey = data.surveys?.find((item) => item.id === surveyId);
+  const question = survey?.questions?.[0];
+  if (survey?.questions?.length !== 1 || !question?.id || !question.question) {
+    throw new Error("Feedback survey unavailable");
+  }
+
+  const validatedQuestion = { id: question.id, question: question.question };
+  cachedFeedbackSurvey = {
+    host,
+    apiKey,
+    surveyId,
+    question: validatedQuestion,
+  };
+  return validatedQuestion;
+}
+
 /** Submit only the feedback and optional contact email the user explicitly chose to send. */
 export async function submitPrivateFeedback(
   message: string,
@@ -919,29 +968,8 @@ export async function submitPrivateFeedback(
   const apiKey = telemetryConfig.apiKey || DEFAULT_POSTHOG_API_KEY;
   const apiHost = telemetryConfig.apiHost || DEFAULT_POSTHOG_HOST;
   const host = apiHost.replace(/\/+$/, "");
-  // This is PostHog's public survey endpoint, not an Agent Server API.
-  // eslint-disable-next-line local/no-direct-agent-server-fetch
-  const surveyResponse = await fetch(
-    `${host}/api/surveys/?token=${encodeURIComponent(apiKey)}`,
-    { credentials: "omit", referrerPolicy: "no-referrer" },
-  );
-  if (!surveyResponse.ok) throw new Error("Feedback survey unavailable");
-  const data = (await surveyResponse.json()) as {
-    surveys?: Array<{
-      id: string;
-      questions?: Array<{ id?: string; question?: string }>;
-    }>;
-  };
-  const survey = data.surveys?.find((item) => item.id === surveyId);
-  const question = survey?.questions?.[0];
-  if (
-    survey?.questions?.length !== 1 ||
-    !question?.id ||
-    !question.question ||
-    isTelemetryHardDisabled()
-  ) {
-    throw new Error("Feedback survey unavailable");
-  }
+  const question = await getFeedbackSurveyQuestion(host, apiKey, surveyId);
+  if (isTelemetryHardDisabled()) throw new Error("Feedback unavailable");
 
   const contactEmail = email?.trim();
   const response = await fetch(`${host}/capture/`, {
@@ -966,11 +994,7 @@ export async function submitPrivateFeedback(
     }),
   });
   if (!response.ok) throw new Error("Feedback submission failed");
-  const result = (await response.json()) as {
-    status?: string;
-    quota_limited?: string[];
-  } | null;
-  if (result?.quota_limited?.length) throw new Error("Feedback quota exceeded");
+  const result = (await response.json()) as { status?: string } | null;
   if (result?.status !== "Ok") throw new Error("Feedback submission failed");
 }
 

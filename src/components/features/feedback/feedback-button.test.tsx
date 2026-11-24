@@ -144,24 +144,26 @@ describe("FeedbackButton", () => {
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
   });
 
-  it("preserves the message after a failed submission", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi
-        .fn()
-        .mockResolvedValueOnce({
-          ok: true,
-          json: async () => ({
-            surveys: [
-              {
-                id: "01a19e14-c300-0000-d661-ad6bb5304fbe",
-                questions: [{ id: "question-1", question: "Your feedback?" }],
-              },
-            ],
-          }),
-        })
-        .mockRejectedValueOnce(new Error("offline")),
-    );
+  it("preserves the draft and reuses the survey on a capture retry", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          surveys: [
+            {
+              id: "01a19e14-c300-0000-d661-ad6bb5304fbe",
+              questions: [{ id: "question-1", question: "Your feedback?" }],
+            },
+          ],
+        }),
+      })
+      .mockRejectedValueOnce(new Error("offline"))
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ status: "Ok" }),
+      });
+    vi.stubGlobal("fetch", fetchMock);
     render(<FeedbackButton />);
     fireEvent.click(screen.getByRole("button", { name: "FEEDBACK$TITLE" }));
     const input = screen.getByLabelText("FEEDBACK$QUESTION");
@@ -172,6 +174,49 @@ describe("FeedbackButton", () => {
     await waitFor(() => expect(screen.getByRole("alert")).toBeInTheDocument());
     expect(input).toHaveValue("A draft");
     expect(email).toHaveValue("person@example.com");
+
+    fireEvent.click(screen.getByRole("button", { name: "FEEDBACK$SEND" }));
+    expect(await screen.findByRole("status")).toHaveTextContent(
+      "FEEDBACK$SUCCESS",
+    );
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(fetchMock.mock.calls[1][0]).toBe(fetchMock.mock.calls[2][0]);
+  });
+
+  it("retries a failed survey lookup rather than caching its failure", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("offline"))
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          surveys: [
+            {
+              id: "01a19e14-c300-0000-d661-ad6bb5304fbe",
+              questions: [{ id: "question-1", question: "Your feedback?" }],
+            },
+          ],
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ status: "Ok" }),
+      });
+    vi.stubGlobal("fetch", fetchMock);
+    render(<FeedbackButton />);
+    fireEvent.click(screen.getByRole("button", { name: "FEEDBACK$TITLE" }));
+    fireEvent.change(screen.getByLabelText("FEEDBACK$QUESTION"), {
+      target: { value: "Try again" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "FEEDBACK$SEND" }));
+    expect(await screen.findByRole("alert")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "FEEDBACK$SEND" }));
+    expect(await screen.findByRole("status")).toHaveTextContent(
+      "FEEDBACK$SUCCESS",
+    );
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(fetchMock.mock.calls[0][0]).toBe(fetchMock.mock.calls[1][0]);
   });
 
   it("does not send to a project that does not contain the survey", async () => {
