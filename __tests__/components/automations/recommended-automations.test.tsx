@@ -281,9 +281,11 @@ describe("recommended automations", () => {
       "github-delivery-watchdog",
       "github-issue-triage",
       "upstream-fork-sync",
+      "gitlab-mr-reviewer",
       "incident-retrospective-drafter",
       "github-stale-ci-pr-closer",
       "github-comment-cleanup",
+      "gitlab-prd-refiner",
     ]);
   });
 
@@ -310,7 +312,7 @@ describe("recommended automations", () => {
     expect(moreHeading).toHaveTextContent(
       I18nKey.RECOMMENDED_AUTOMATIONS$MORE_TITLE,
     );
-    expect(within(moreHeading).getByText("20")).toBeInTheDocument();
+    expect(within(moreHeading).getByText("22")).toBeInTheDocument();
 
     const moreSection = screen.getByTestId(
       "recommended-automations-beta-section",
