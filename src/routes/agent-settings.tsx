@@ -1153,6 +1153,7 @@ export function AgentSettingsScreen({
     >
       <SettingsDropdownInput
         testId="agent-type-selector"
+        isClearable={false}
         name="agent-type"
         label={t(I18nKey.SETTINGS$NAV_AGENT)}
         items={[
@@ -1196,6 +1197,7 @@ export function AgentSettingsScreen({
           </Typography.Text>
           <SettingsDropdownInput
             testId="agent-settings-system-prompt-mode"
+            isClearable={false}
             name="agent-system-prompt-mode"
             label=""
             items={[
@@ -1274,6 +1276,7 @@ export function AgentSettingsScreen({
           </Typography.Text>
           <SettingsDropdownInput
             testId="agent-settings-router-select"
+            isClearable={false}
             name="agent-router"
             label=""
             ariaLabel={t(I18nKey.SETTINGS$NAV_META_LLM)}
@@ -1332,6 +1335,7 @@ export function AgentSettingsScreen({
           </Typography.Text>
           <SettingsDropdownInput
             testId="agent-settings-tools-mode"
+            isClearable={false}
             name="agent-tools-mode"
             label=""
             ariaLabel={t(I18nKey.SETTINGS$AGENT_PROFILE_TOOLS)}
@@ -1412,6 +1416,7 @@ export function AgentSettingsScreen({
         </Typography.Text>
         <SettingsDropdownInput
           testId="agent-settings-mcp-mode"
+          isClearable={false}
           name="agent-mcp-mode"
           label=""
           ariaLabel={t(I18nKey.SETTINGS$AGENT_PROFILE_MCP)}
@@ -1539,6 +1544,7 @@ export function AgentSettingsScreen({
           </Typography.Text>
           <SettingsDropdownInput
             testId="agent-settings-secrets-mode"
+            isClearable={false}
             name="agent-secrets-mode"
             label=""
             ariaLabel={t(I18nKey.SETTINGS$AGENT_PROFILE_SECRETS)}
@@ -1671,6 +1677,7 @@ export function AgentSettingsScreen({
         <>
           <SettingsDropdownInput
             testId="agent-preset-selector"
+            isClearable={false}
             name="agent-preset"
             label={t(I18nKey.SETTINGS$AGENT_PRESET)}
             items={[
@@ -1766,6 +1773,7 @@ export function AgentSettingsScreen({
           {showModelSelector && (
             <SettingsDropdownInput
               testId="agent-model-selector"
+              isClearable={false}
               name="agent-model"
               label={t(I18nKey.SETTINGS$AGENT_MODEL)}
               items={[
@@ -1816,6 +1824,7 @@ export function AgentSettingsScreen({
           {effortChoices.length > 0 && (
             <SettingsDropdownInput
               testId="agent-effort-selector"
+              isClearable={false}
               name="agent-effort"
               label={t(I18nKey.SCHEMA$LLM$REASONING_EFFORT$LABEL)}
               items={[

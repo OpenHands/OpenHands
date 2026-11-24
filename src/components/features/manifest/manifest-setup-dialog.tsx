@@ -666,6 +666,7 @@ export function SetupDialog({ entry, onClose }: SetupDialogProps) {
                 <div className="flex w-full flex-col gap-2.5">
                   <SettingsDropdownInput
                     testId="setup-action-kind"
+                    isClearable={false}
                     name="actionKind"
                     label={t(I18nKey.SETUP$ACTION_LABEL)}
                     items={actionOptions.map((kind) => {
@@ -700,6 +701,7 @@ export function SetupDialog({ entry, onClose }: SetupDialogProps) {
                 <div className="flex w-full flex-col gap-2.5">
                   <SettingsDropdownInput
                     testId="setup-trigger-kind"
+                    isClearable={false}
                     name="triggerKind"
                     label={t(I18nKey.SETUP$TRIGGER_LABEL)}
                     items={triggerOptions.map((kind) => ({

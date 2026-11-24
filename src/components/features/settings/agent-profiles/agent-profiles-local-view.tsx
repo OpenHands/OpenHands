@@ -426,6 +426,7 @@ export function AgentProfilesLocalView() {
       <div className="flex flex-col gap-2">
         <SettingsDropdownInput
           testId="agent-profile-llm-selector"
+          isClearable={false}
           name="agent-profile-llm"
           label={t(I18nKey.SETTINGS$AGENT_PROFILE_LLM_LABEL)}
           items={llmProfiles.map((p) => ({

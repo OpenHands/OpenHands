@@ -366,6 +366,18 @@ describe("AgentProfilesLocalView save mapping", () => {
     ).toHaveTextContent("SETTINGS$AGENT_PROFILE_SAVE_HINT");
   });
 
+  it("offers no clear button on the required LLM profile picker", async () => {
+    renderView();
+    await openCreateAndName("my-oh");
+
+    expect(screen.getByTestId("agent-profile-llm-selector")).toHaveValue(
+      "default (gpt-5)",
+    );
+    expect(
+      screen.queryByRole("button", { name: "COMMON$CLEAR_SELECTION" }),
+    ).not.toBeInTheDocument();
+  });
+
   it("saves an OpenHands profile with the selected llm_profile_ref", async () => {
     emitControl = {
       agentType: "openhands",

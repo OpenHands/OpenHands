@@ -1,6 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { AUTOMATION_CATALOG } from "@openhands/extensions/automations";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import AutomationService from "#/api/automation-service/automation-service.api";
@@ -477,6 +477,36 @@ describe("SetupDialog", () => {
       ).not.toBeInTheDocument();
       expect(screen.getByTestId("setup-field-model")).toBeInTheDocument();
     });
+  });
+
+  it("offers no clear button on the required action select, only on the profile", async () => {
+    mocks.capabilities.mockReturnValue({
+      capabilities: ACTION_CAPABILITIES,
+      supported: true,
+      unmet: [],
+      isLoading: false,
+    });
+    const { user } = renderDialog(CUSTOM_AUTOMATION_ENTRY);
+    const clear = { name: "COMMON$CLEAR_SELECTION" };
+
+    const action = await screen.findByTestId("setup-action-kind");
+    expect(
+      within(action.closest("label") as HTMLElement).queryByRole(
+        "button",
+        clear,
+      ),
+    ).not.toBeInTheDocument();
+
+    // The profile select keeps its clear button: clearing it means Default.
+    await user.click(action);
+    await user.click(await screen.findByText("Upload tarball"));
+    const profile = await screen.findByTestId("automation-agent-profile");
+    expect(
+      within(profile.closest("label") as HTMLElement).getByRole(
+        "button",
+        clear,
+      ),
+    ).toBeInTheDocument();
   });
 
   it("shows Default after a pass through Prompt and back to Upload tarball", async () => {

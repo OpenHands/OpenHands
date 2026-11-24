@@ -1923,6 +1923,23 @@ describe("AgentSettingsScreen — Model Router", () => {
     });
   });
 
+  it("offers no clear button on selects that have no empty value", async () => {
+    // Clearing would blank the field while the stored router stays put: the
+    // select has no empty state, only Off.
+    renderAgentSettingsScreen({ agentSettingsOverride: WITH_ROUTER });
+    await waitFor(() =>
+      expect(screen.getByTestId("agent-settings-router-select")).toHaveValue(
+        "fast-router",
+      ),
+    );
+
+    expect(screen.getByTestId("agent-type-selector")).toBeInTheDocument();
+    expect(screen.getByTestId("agent-settings-mcp-mode")).toBeInTheDocument();
+    expect(
+      screen.queryAllByRole("button", { name: "COMMON$CLEAR_SELECTION" }),
+    ).toHaveLength(0);
+  });
+
   it("leaves the stored router alone when saving other changes", async () => {
     const { control } = renderAgentSettingsScreen({
       agentSettingsOverride: WITH_ROUTER,
