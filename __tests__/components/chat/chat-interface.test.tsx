@@ -2434,6 +2434,44 @@ describe("ChatInterface - ACP authentication error recovery", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("omits the org from the Cloud link when no org is selected", () => {
+    vi.stubEnv("VITE_LOCK_TO_CLOUD", "https://cloud.example.com");
+    setActiveSelection({ backendId: "cloud", orgId: null });
+
+    renderWithError("ACPAuthRequired");
+
+    expect(screen.getByTestId("error-message-banner-link")).toHaveAttribute(
+      "href",
+      "https://cloud.example.com/settings/agent",
+    );
+  });
+
+  it("names the Cloud agent settings page when no Cloud backend is active", () => {
+    vi.stubEnv("VITE_LOCK_TO_CLOUD", "https://cloud.example.com");
+    setRegisteredBackends([
+      {
+        id: "local",
+        name: "Local",
+        host: "http://localhost:3001",
+        apiKey: "local-key",
+        kind: "local",
+      },
+    ]);
+    setActiveSelection({ backendId: "local" });
+
+    renderWithError("ACPAuthRequired");
+
+    expect(screen.getByTestId("error-message-banner")).toHaveTextContent(
+      I18nKey.ERROR$ACP_UPDATE_CREDENTIALS_CLOUD_HINT,
+    );
+    expect(
+      screen.queryByTestId("error-message-banner-link"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("error-message-banner-reauth"),
+    ).not.toBeInTheDocument();
+  });
+
   it.each([false, true])(
     "offers no credential action for a non-ACP error (locked: %s)",
     (locked) => {

@@ -922,7 +922,12 @@ export function ChatInterface({
               )}
             {errorMessage && !hideConnectionError && (
               <ErrorMessageBanner
-                message={budgetLimitError?.message ?? errorMessage}
+                message={
+                  budgetLimitError?.message ??
+                  (acpReauth.hint
+                    ? `${errorMessage}\n${acpReauth.hint}`
+                    : errorMessage)
+                }
                 link={budgetLimitError?.link ?? acpReauth.link}
                 code={errorCode}
                 classification={errorClassification}

@@ -13,6 +13,8 @@ const CLOUD_AGENT_SETTINGS_PATH = "/settings/agent";
 export interface AcpReauthAction {
   onReauth?: () => void;
   link?: { href: string; label: string; openInNewTab: boolean };
+  /** Shown under the error when no link can be built. */
+  hint?: string;
 }
 
 /**
@@ -26,10 +28,17 @@ export function useAcpReauthAction(errorCode: string | null): AcpReauthAction {
   const { backend, orgId } = useActiveBackend();
 
   if (!isAcpAuthErrorCode(errorCode)) return {};
-  if (getLockedCloudHost() === null) {
+  const lockedCloudHost = getLockedCloudHost();
+  if (lockedCloudHost === null) {
     return { onReauth: () => navigate("/settings/agents") };
   }
-  if (backend.kind !== "cloud") return {};
+  if (backend.kind !== "cloud") {
+    return {
+      hint: t(I18nKey.ERROR$ACP_UPDATE_CREDENTIALS_CLOUD_HINT, {
+        host: lockedCloudHost,
+      }),
+    };
+  }
   return {
     link: {
       href: cloudSettingsUrl(backend, CLOUD_AGENT_SETTINGS_PATH, orgId),
