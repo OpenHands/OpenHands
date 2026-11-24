@@ -35,6 +35,10 @@ import {
   getEffectiveLocalBackend,
   isNoBackend,
 } from "#/api/backend-registry/active-store";
+import {
+  getHealthSnapshot,
+  subscribeBackendHealth,
+} from "#/api/backend-registry/health-store";
 import type { Backend } from "#/api/backend-registry/types";
 import { useActiveBackendContext } from "#/contexts/active-backend-context";
 import {
@@ -245,6 +249,26 @@ function LocalFirstRunOnboardingSequence({
   onClose: () => void;
 }) {
   const settings = useSettings();
+  // The telemetry banner renders only for a connected backend. A health entry
+  // disabled by an earlier outage never polls again, so re-probe it once here;
+  // otherwise consent would stay hidden after the backend comes back.
+  const health = useBackendsHealth([backend], { probeDisabledOnce: true })[
+    backend.id
+  ];
+  const healthEntry = React.useSyncExternalStore(
+    subscribeBackendHealth,
+    getHealthSnapshot,
+    getHealthSnapshot,
+  )[backend.id];
+  // A disabled entry reads as disconnected until that re-probe records a new
+  // outcome, which replaces (or clears) the entry.
+  const [disabledEntryAtMount] = React.useState(() => {
+    const entry = getHealthSnapshot()[backend.id];
+    return entry?.disabled ? entry : null;
+  });
+  const isHealthPending =
+    health?.isConnected == null ||
+    (disabledEntryAtMount !== null && healthEntry === disabledEntryAtMount);
   const [hasAnsweredTelemetry, setHasAnsweredTelemetry] = React.useState(false);
 
   React.useEffect(() => {
@@ -256,7 +280,7 @@ function LocalFirstRunOnboardingSequence({
     settings.data?.user_consents_to_analytics === null &&
     !hasAnsweredTelemetry;
 
-  if (needsTelemetryChoice) {
+  if (needsTelemetryChoice && health?.isConnected === true) {
     return (
       <>
         <AgentServerBootstrapLoading />
@@ -267,7 +291,11 @@ function LocalFirstRunOnboardingSequence({
     );
   }
 
-  if (settings.isLoading) {
+  // Wait for the health verdict that decides whether consent comes first.
+  // Local settings fall back to defaults when the backend is down, so a
+  // disconnected backend goes straight to onboarding, whose backend step
+  // explains the problem.
+  if (settings.isLoading || (needsTelemetryChoice && isHealthPending)) {
     return <AgentServerBootstrapLoading />;
   }
 

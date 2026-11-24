@@ -16,7 +16,10 @@ import App, { Layout, links } from "#/root";
 import { AgentServerUIRoot } from "#/components/providers/agent-server-ui-root";
 import { server } from "#/mocks/node";
 import { __resetActiveStoreForTests } from "#/api/backend-registry/active-store";
-import { LOCKED_CLOUD_BACKEND_ID } from "#/api/backend-registry/default-backend";
+import {
+  LOCKED_CLOUD_BACKEND_ID,
+  SEEDED_DEFAULT_BACKEND_ID,
+} from "#/api/backend-registry/default-backend";
 import { __resetHealthStoreForTests } from "#/api/backend-registry/health-store";
 import {
   BACKEND_HEALTH_STORAGE_KEY,
@@ -46,6 +49,10 @@ vi.mock(
   "#/components/features/analytics/telemetry-consent-banner",
   async () => {
     const React = await import("react");
+    const { useActiveBackend } =
+      await import("#/contexts/active-backend-context");
+    const { useBackendsHealth } =
+      await import("#/hooks/query/use-backends-health");
 
     return {
       TelemetryConsentBanner: ({
@@ -53,7 +60,11 @@ vi.mock(
       }: {
         onChoice?: (granted: boolean) => void;
       }) => {
-        if (!rootMocks.showTelemetryBanner) return null;
+        // Like the real banner, render only for a connected backend.
+        const { backend } = useActiveBackend();
+        const isConnected =
+          useBackendsHealth([backend])[backend.id]?.isConnected === true;
+        if (!rootMocks.showTelemetryBanner || !isConnected) return null;
 
         return React.createElement(
           "div",
@@ -342,6 +353,91 @@ describe("App root agent-server availability guard", () => {
     expect(
       screen.queryByTestId("telemetry-consent-form"),
     ).not.toBeInTheDocument();
+    expect(screen.getAllByRole("dialog")).toHaveLength(1);
+  });
+
+  const seedDisabledLocalBackendHealth = () => {
+    window.localStorage.setItem(
+      BACKEND_HEALTH_STORAGE_KEY,
+      JSON.stringify({
+        [SEEDED_DEFAULT_BACKEND_ID]: {
+          consecutiveFailures: MAX_CONSECUTIVE_FAILURES,
+          lastError: "HTTP request failed (502 Bad Gateway)",
+          lastFailureAt: 1,
+          disabled: true,
+        },
+      }),
+    );
+    __resetHealthStoreForTests();
+  };
+
+  it.each([
+    { healthDisabled: false, when: "on a first run" },
+    { healthDisabled: true, when: "after an outage disabled its health" },
+  ])(
+    "shows first-run onboarding, not a spinner, while the local backend is unreachable $when",
+    async ({ healthDisabled }) => {
+      // Arrange: the Agent Server is stopped. Local settings then fall back
+      // to defaults, so telemetry consent reads as unanswered.
+      if (healthDisabled) seedDisabledLocalBackendHealth();
+      rootMocks.settings = {
+        data: { user_consents_to_analytics: null },
+        isLoading: false,
+        isSuccess: true,
+      };
+      rootMocks.showTelemetryBanner = true;
+      server.use(
+        http.get(
+          "*/api/settings",
+          () => new HttpResponse(null, { status: 502 }),
+        ),
+        http.get(
+          "*/server_info",
+          () => new HttpResponse(null, { status: 502 }),
+        ),
+      );
+
+      // Act
+      await renderApp(["/"]);
+
+      // Assert: onboarding (with its backend step) replaces the spinner.
+      expect(await screen.findByTestId("onboarding-modal")).toBeInTheDocument();
+      expect(screen.queryByTestId("loading-spinner")).not.toBeInTheDocument();
+      expect(
+        screen.queryByTestId("telemetry-consent-form"),
+      ).not.toBeInTheDocument();
+    },
+  );
+
+  it("collects first-run consent before onboarding once a backend disabled by an outage is reachable again", async () => {
+    // Arrange: a long earlier outage left the backend marked disabled, and
+    // the Agent Server is reachable again (a reload after it came back).
+    seedDisabledLocalBackendHealth();
+    rootMocks.settings = {
+      data: { user_consents_to_analytics: null },
+      isLoading: false,
+      isSuccess: true,
+    };
+    rootMocks.showTelemetryBanner = true;
+    server.use(
+      http.get("*/server_info", () =>
+        HttpResponse.json({ uptime: 0, idle_time: 0, version: "1.63.1" }),
+      ),
+    );
+
+    // Act
+    await renderApp(["/"]);
+
+    // Assert: consent alone, then onboarding alone.
+    expect(
+      await screen.findByTestId("telemetry-consent-form"),
+    ).toBeInTheDocument();
+    expect(screen.getAllByRole("dialog")).toHaveLength(1);
+    expect(screen.queryByTestId("onboarding-modal")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId("confirm-telemetry-preferences"));
+
+    expect(await screen.findByTestId("onboarding-modal")).toBeInTheDocument();
     expect(screen.getAllByRole("dialog")).toHaveLength(1);
   });
 
