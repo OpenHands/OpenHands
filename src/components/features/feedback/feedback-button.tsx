@@ -97,7 +97,13 @@ export function FeedbackButton() {
                   htmlFor="feedback-message"
                   className="text-sm text-contrast"
                 >
-                  {t(I18nKey.FEEDBACK$QUESTION)}
+                  {t(I18nKey.FEEDBACK$QUESTION)}{" "}
+                  <span
+                    className="text-danger text-sm leading-none"
+                    aria-hidden
+                  >
+                    *
+                  </span>
                 </label>
                 <textarea
                   id="feedback-message"
@@ -111,7 +117,13 @@ export function FeedbackButton() {
                   htmlFor="feedback-email"
                   className="text-sm text-contrast"
                 >
-                  {t(I18nKey.FEEDBACK$EMAIL)}
+                  {t(I18nKey.FEEDBACK$EMAIL)}{" "}
+                  <span
+                    className="text-danger text-sm leading-none"
+                    aria-hidden
+                  >
+                    *
+                  </span>
                 </label>
                 <input
                   id="feedback-email"

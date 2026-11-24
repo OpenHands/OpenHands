@@ -33,12 +33,25 @@ describe("FeedbackButton", () => {
       "FEEDBACK$CONSENT",
     );
     expect(screen.queryByRole("link")).not.toBeInTheDocument();
-    const email = screen.getByLabelText("FEEDBACK$EMAIL");
+    const email = screen.getByRole("textbox", { name: "FEEDBACK$EMAIL" });
     const send = screen.getByRole("button", { name: "FEEDBACK$SEND" });
+    expect(
+      screen.getByRole("textbox", { name: "FEEDBACK$QUESTION" }),
+    ).toBeRequired();
     expect(email).toBeRequired();
-    fireEvent.change(screen.getByLabelText("FEEDBACK$QUESTION"), {
-      target: { value: "Make this easier" },
-    });
+    for (const id of ["feedback-message", "feedback-email"]) {
+      const marker = document.querySelector(
+        `label[for="${id}"] span[aria-hidden="true"]`,
+      );
+      expect(marker).toHaveTextContent("*");
+      expect(marker).toHaveClass("text-danger");
+    }
+    fireEvent.change(
+      screen.getByRole("textbox", { name: "FEEDBACK$QUESTION" }),
+      {
+        target: { value: "Make this easier" },
+      },
+    );
     expect(send).toBeDisabled();
     fireEvent.change(email, { target: { value: "   " } });
     expect(send).toBeDisabled();
@@ -80,10 +93,13 @@ describe("FeedbackButton", () => {
     vi.stubGlobal("fetch", fetchMock);
     render(<FeedbackButton />);
     fireEvent.click(screen.getByRole("button", { name: "FEEDBACK$TITLE" }));
-    fireEvent.change(screen.getByLabelText("FEEDBACK$QUESTION"), {
-      target: { value: "Please follow up" },
-    });
-    fireEvent.change(screen.getByLabelText("FEEDBACK$EMAIL"), {
+    fireEvent.change(
+      screen.getByRole("textbox", { name: "FEEDBACK$QUESTION" }),
+      {
+        target: { value: "Please follow up" },
+      },
+    );
+    fireEvent.change(screen.getByRole("textbox", { name: "FEEDBACK$EMAIL" }), {
       target: { value: "person@example.com" },
     });
     fireEvent.click(screen.getByRole("button", { name: "FEEDBACK$SEND" }));
@@ -108,7 +124,9 @@ describe("FeedbackButton", () => {
     expect(localStorage.getItem("openhands-telemetry-consent")).toBe("denied");
     fireEvent.click(screen.getByRole("button", { name: "BUTTON$CLOSE" }));
     fireEvent.click(screen.getByRole("button", { name: "FEEDBACK$TITLE" }));
-    expect(screen.getByLabelText("FEEDBACK$EMAIL")).toHaveValue("");
+    expect(screen.getByRole("textbox", { name: "FEEDBACK$EMAIL" })).toHaveValue(
+      "",
+    );
   });
 
   it("rejects a successful HTTP response without a capture acknowledgment", async () => {
@@ -131,9 +149,9 @@ describe("FeedbackButton", () => {
     );
     render(<FeedbackButton />);
     fireEvent.click(screen.getByRole("button", { name: "FEEDBACK$TITLE" }));
-    const input = screen.getByLabelText("FEEDBACK$QUESTION");
+    const input = screen.getByRole("textbox", { name: "FEEDBACK$QUESTION" });
     fireEvent.change(input, { target: { value: "A draft" } });
-    fireEvent.change(screen.getByLabelText("FEEDBACK$EMAIL"), {
+    fireEvent.change(screen.getByRole("textbox", { name: "FEEDBACK$EMAIL" }), {
       target: { value: "person@example.com" },
     });
     fireEvent.click(screen.getByRole("button", { name: "FEEDBACK$SEND" }));
@@ -164,8 +182,8 @@ describe("FeedbackButton", () => {
     vi.stubGlobal("fetch", fetchMock);
     render(<FeedbackButton />);
     fireEvent.click(screen.getByRole("button", { name: "FEEDBACK$TITLE" }));
-    const input = screen.getByLabelText("FEEDBACK$QUESTION");
-    const email = screen.getByLabelText("FEEDBACK$EMAIL");
+    const input = screen.getByRole("textbox", { name: "FEEDBACK$QUESTION" });
+    const email = screen.getByRole("textbox", { name: "FEEDBACK$EMAIL" });
     fireEvent.change(input, { target: { value: "A draft" } });
     fireEvent.change(email, { target: { value: "person@example.com" } });
     fireEvent.click(screen.getByRole("button", { name: "FEEDBACK$SEND" }));
@@ -203,10 +221,13 @@ describe("FeedbackButton", () => {
     vi.stubGlobal("fetch", fetchMock);
     render(<FeedbackButton />);
     fireEvent.click(screen.getByRole("button", { name: "FEEDBACK$TITLE" }));
-    fireEvent.change(screen.getByLabelText("FEEDBACK$QUESTION"), {
-      target: { value: "Try again" },
-    });
-    fireEvent.change(screen.getByLabelText("FEEDBACK$EMAIL"), {
+    fireEvent.change(
+      screen.getByRole("textbox", { name: "FEEDBACK$QUESTION" }),
+      {
+        target: { value: "Try again" },
+      },
+    );
+    fireEvent.change(screen.getByRole("textbox", { name: "FEEDBACK$EMAIL" }), {
       target: { value: "person@example.com" },
     });
     fireEvent.click(screen.getByRole("button", { name: "FEEDBACK$SEND" }));
@@ -227,9 +248,9 @@ describe("FeedbackButton", () => {
     vi.stubGlobal("fetch", fetchMock);
     render(<FeedbackButton />);
     fireEvent.click(screen.getByRole("button", { name: "FEEDBACK$TITLE" }));
-    const input = screen.getByLabelText("FEEDBACK$QUESTION");
+    const input = screen.getByRole("textbox", { name: "FEEDBACK$QUESTION" });
     fireEvent.change(input, { target: { value: "A draft" } });
-    fireEvent.change(screen.getByLabelText("FEEDBACK$EMAIL"), {
+    fireEvent.change(screen.getByRole("textbox", { name: "FEEDBACK$EMAIL" }), {
       target: { value: "person@example.com" },
     });
     fireEvent.click(screen.getByRole("button", { name: "FEEDBACK$SEND" }));
@@ -244,10 +265,13 @@ describe("FeedbackButton", () => {
     vi.stubGlobal("fetch", fetchMock);
     render(<FeedbackButton />);
     fireEvent.click(screen.getByRole("button", { name: "FEEDBACK$TITLE" }));
-    fireEvent.change(screen.getByLabelText("FEEDBACK$QUESTION"), {
-      target: { value: "A draft" },
-    });
-    fireEvent.change(screen.getByLabelText("FEEDBACK$EMAIL"), {
+    fireEvent.change(
+      screen.getByRole("textbox", { name: "FEEDBACK$QUESTION" }),
+      {
+        target: { value: "A draft" },
+      },
+    );
+    fireEvent.change(screen.getByRole("textbox", { name: "FEEDBACK$EMAIL" }), {
       target: { value: "person@example.com" },
     });
     fireEvent.click(screen.getByRole("button", { name: "FEEDBACK$SEND" }));
@@ -261,10 +285,13 @@ describe("FeedbackButton", () => {
     configureTelemetry(false);
     render(<FeedbackButton />);
     fireEvent.click(screen.getByRole("button", { name: "FEEDBACK$TITLE" }));
-    fireEvent.change(screen.getByLabelText("FEEDBACK$QUESTION"), {
-      target: { value: "A draft" },
-    });
-    fireEvent.change(screen.getByLabelText("FEEDBACK$EMAIL"), {
+    fireEvent.change(
+      screen.getByRole("textbox", { name: "FEEDBACK$QUESTION" }),
+      {
+        target: { value: "A draft" },
+      },
+    );
+    fireEvent.change(screen.getByRole("textbox", { name: "FEEDBACK$EMAIL" }), {
       target: { value: "person@example.com" },
     });
     fireEvent.click(screen.getByRole("button", { name: "FEEDBACK$SEND" }));
