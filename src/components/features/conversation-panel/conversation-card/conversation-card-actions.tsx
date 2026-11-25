@@ -24,6 +24,8 @@ interface ConversationCardActionsProps {
   onEditTags?: (event: React.MouseEvent<HTMLButtonElement>) => void;
   onDownloadViaVSCode?: (event: React.MouseEvent<HTMLButtonElement>) => void;
   onDownloadConversation?: (event: React.MouseEvent<HTMLButtonElement>) => void;
+  isShared?: boolean;
+  onToggleShared?: (event: React.MouseEvent<HTMLButtonElement>) => void;
   executionStatus?: ExecutionStatus | null;
   sandboxStatus?: SandboxStatus | null;
   conversationId?: string;
@@ -42,6 +44,8 @@ export function ConversationCardActions({
   onEditTags,
   onDownloadViaVSCode,
   onDownloadConversation,
+  isShared,
+  onToggleShared,
   executionStatus,
   sandboxStatus,
   conversationId,
@@ -141,6 +145,8 @@ export function ConversationCardActions({
             onDownloadConversation={
               conversationId ? onDownloadConversation : undefined
             }
+            isShared={isShared}
+            onToggleShared={onToggleShared}
             position="bottom"
           />
         </AppearancePortal>

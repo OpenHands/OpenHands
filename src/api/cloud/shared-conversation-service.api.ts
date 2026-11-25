@@ -9,6 +9,11 @@ export interface SharedEventPage {
   next_page_id: string | null;
 }
 
+export interface SharedConversationPage {
+  items: SharedConversation[];
+  next_page_id: string | null;
+}
+
 function getActiveCloudBackend(): Backend {
   const active = getActiveBackend().backend;
   if (active.kind !== "cloud") {
@@ -35,6 +40,30 @@ export async function getCloudSharedConversation(
     path: `/api/shared-conversations?${params.toString()}`,
   });
   return data?.[0] ?? null;
+}
+
+/**
+ * Page through the conversations shared with the active org via
+ * `GET /api/shared-conversations/search`, most recently updated first. The
+ * endpoint only lists the conversations of a team org that their owners
+ * shared with it, and only to authenticated members of that org.
+ */
+export async function searchCloudSharedConversations(options: {
+  limit?: number;
+  pageId?: string;
+}): Promise<SharedConversationPage> {
+  const backend = getActiveCloudBackend();
+  const params = new URLSearchParams({ limit: String(options.limit ?? 20) });
+  if (options.pageId) params.set("page_id", options.pageId);
+  const data = await callCloudProxy<SharedConversationPage>({
+    backend,
+    method: "GET",
+    path: `/api/shared-conversations/search?${params.toString()}`,
+  });
+  return {
+    items: data?.items ?? [],
+    next_page_id: data?.next_page_id ?? null,
+  };
 }
 
 /**
