@@ -36,6 +36,10 @@ RUN npm ci
 # Copy everything needed for the build
 COPY . .
 
+# Temporary: patch @openhands/extensions until the fix ships upstream (see the
+# script for what it changes). Fails the build if the expected code is missing.
+RUN node scripts/patch-extensions.mjs
+
 # Build the static frontend.
 # VITE_POSTHOG_API_KEY is a public client key baked into the bundle. CI passes
 # production for tagged releases and staging for PR/main images.
