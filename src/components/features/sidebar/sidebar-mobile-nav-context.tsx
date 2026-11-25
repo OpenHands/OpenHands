@@ -5,6 +5,7 @@ interface SidebarMobileNavContextValue {
   open: () => void;
   close: () => void;
   toggle: () => void;
+  toggleButtonRef: React.RefObject<HTMLButtonElement | null>;
 }
 
 const SidebarMobileNavContext =
@@ -16,6 +17,7 @@ export function SidebarMobileNavProvider({
   children: React.ReactNode;
 }) {
   const [isOpen, setIsOpen] = React.useState(false);
+  const toggleButtonRef = React.useRef<HTMLButtonElement>(null);
 
   const open = React.useCallback(() => setIsOpen(true), []);
   const close = React.useCallback(() => setIsOpen(false), []);
@@ -27,6 +29,7 @@ export function SidebarMobileNavProvider({
       open,
       close,
       toggle,
+      toggleButtonRef,
     }),
     [isOpen, open, close, toggle],
   );

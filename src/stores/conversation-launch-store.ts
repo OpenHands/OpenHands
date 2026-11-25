@@ -5,6 +5,7 @@ import {
 import type { PendingTaskAttachments } from "./pending-task-attachments-store";
 import { create } from "zustand";
 import type { AutomationSetupDraft } from "#/api/automation-setup-types";
+import { randomUUID } from "#/utils/random-uuid";
 
 export const CONVERSATION_LAUNCH_PREFIX = "launch-";
 
@@ -42,7 +43,7 @@ interface LaunchState {
 export const useConversationLaunchStore = create<LaunchState>((set, get) => ({
   launches: {},
   begin: (launch) => {
-    const id = `${CONVERSATION_LAUNCH_PREFIX}${crypto.randomUUID()}`;
+    const id = `${CONVERSATION_LAUNCH_PREFIX}${randomUUID()}`;
     useSessionActivityStore
       .getState()
       .begin(

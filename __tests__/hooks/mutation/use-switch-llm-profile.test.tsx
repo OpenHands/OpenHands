@@ -20,7 +20,10 @@ import {
   BACKEND_REQUEST_TIMEOUT_MESSAGE,
   CORS_OR_NETWORK_ERROR_MESSAGE,
 } from "#/utils/user-facing-error";
-import { useModelStore } from "#/stores/model-store";
+import {
+  clearPendingHomeModelPick,
+  hasPendingHomeModelPick,
+} from "#/hooks/use-chat-input-llm-profile-state";
 
 vi.mock("#/utils/custom-toast-handlers");
 
@@ -82,7 +85,7 @@ describe("useSwitchLlmProfile", () => {
     vi.clearAllMocks();
     window.localStorage.clear();
     SettingsService.invalidateCache();
-    useModelStore.getState().setHomeManualModelPick(false);
+    clearPendingHomeModelPick("local", null);
   });
 
   it("invalidates the settings cache on the home-page activate path (conversationId === null)", async () => {
@@ -412,10 +415,10 @@ describe("useSwitchLlmProfile", () => {
   });
 
   it("does not set the home-pick flag (the UI handler does that, not the hook)", async () => {
-    // The flag moved to the UI pick handlers (selectProfile /
-    // handleSelectAcpModel) — the single chokepoint covering every pick path
-    // (member held pick, agent-profile-owned LLM, global activate). The hook
-    // itself no longer touches it, so a home switch leaves the flag alone.
+    // The flag lives in selectProfile in useChatInputLlmProfileState — the
+    // single chokepoint covering every home LLM pick path (member held pick,
+    // agent-profile-owned LLM, global activate). The hook itself no longer
+    // touches it, so a home switch leaves the flag alone.
     vi.mocked(AgentServerConversationService.switchProfile).mockResolvedValue(
       undefined as never,
     );
@@ -424,7 +427,7 @@ describe("useSwitchLlmProfile", () => {
     result.current.mutate({ conversationId: null, profileName: "Smart" });
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(useModelStore.getState().homeManualModelPick).toBe(false);
+    expect(hasPendingHomeModelPick("local", null)).toBe(false);
   });
 
   it("does not mark a pick made inside an existing conversation", async () => {
@@ -436,6 +439,6 @@ describe("useSwitchLlmProfile", () => {
     result.current.mutate({ conversationId: "conv-1", profileName: "Smart" });
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(useModelStore.getState().homeManualModelPick).toBe(false);
+    expect(hasPendingHomeModelPick("local", null)).toBe(false);
   });
 });

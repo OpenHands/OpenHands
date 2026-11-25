@@ -204,6 +204,11 @@ class MockLLMHandler(BaseHTTPRequestHandler):
             return
 
         raw = response.raw_response.model_dump()
+        message = raw["choices"][0]["message"]
+        # Empty auxiliary fixture turns must not trigger SDK no-response retries
+        # and consume the next scripted agent/tool response.
+        if not message.get("content") and not message.get("tool_calls"):
+            message["content"] = "Mock auxiliary response"
 
         if body.get("stream"):
             stream_options = body.get("stream_options") or {}

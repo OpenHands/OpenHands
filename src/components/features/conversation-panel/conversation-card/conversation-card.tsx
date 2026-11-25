@@ -84,6 +84,10 @@ interface ConversationCardProps {
   onTogglePin?: () => void;
   /** When true and pinned, keep the pin icon visible without hovering. */
   alwaysShowPinIcon?: boolean;
+  /** Whether the conversation is shared with the org. */
+  isShared?: boolean;
+  /** Adds a "Share with Org users" switch to the menu; receives the new state. */
+  onToggleShared?: (isShared: boolean) => void;
 }
 
 export function ConversationCard({
@@ -122,6 +126,8 @@ export function ConversationCard({
   isPinned = false,
   onTogglePin,
   alwaysShowPinIcon = false,
+  isShared = false,
+  onToggleShared,
 }: ConversationCardProps) {
   const { t } = useTranslation("openhands");
   const { trackDownloadVsCodeButtonClicked } = useTracking();
@@ -238,6 +244,13 @@ export function ConversationCard({
     onContextMenuToggle?.(false);
   };
 
+  const handleToggleShared = (event: React.MouseEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    onToggleShared?.(!isShared);
+    onContextMenuToggle?.(false);
+  };
+
   const handleTogglePin = (event: React.MouseEvent<HTMLButtonElement>) => {
     event.preventDefault();
     event.stopPropagation();
@@ -277,6 +290,7 @@ export function ConversationCard({
     onUnarchive ||
     onChangeTitle ||
     onEditTags ||
+    onToggleShared ||
     showOptions
   );
   const hasHoverActions = hasContextMenu || !!onTogglePin;
@@ -327,7 +341,7 @@ export function ConversationCard({
             // coarse-pointer devices also keep the reserve so the ellipsis stays
             // clickable without a hover pass.
             showPersistentPinIcon
-              ? "min-w-[3.75rem]"
+              ? "min-w-15"
               : hasHoverActions && hoverRevealReserveClassName(contextMenuOpen),
           )}
         >
@@ -375,7 +389,10 @@ export function ConversationCard({
                       onEditTags={onEditTags && handleEditTags}
                       onDownloadViaVSCode={handleDownloadViaVSCode}
                       onDownloadConversation={handleDownloadConversation}
+                      isShared={isShared}
+                      onToggleShared={onToggleShared && handleToggleShared}
                       executionStatus={executionStatus}
+                      sandboxStatus={sandboxStatus}
                       conversationId={conversationId}
                       showOptions={showOptions}
                     />
@@ -409,7 +426,10 @@ export function ConversationCard({
                   onEditTags={onEditTags && handleEditTags}
                   onDownloadViaVSCode={handleDownloadViaVSCode}
                   onDownloadConversation={handleDownloadConversation}
+                  isShared={isShared}
+                  onToggleShared={onToggleShared && handleToggleShared}
                   executionStatus={executionStatus}
+                  sandboxStatus={sandboxStatus}
                   conversationId={conversationId}
                   showOptions={showOptions}
                 />

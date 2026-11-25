@@ -15,7 +15,12 @@ const mocks = vi.hoisted(() => ({
   conversationId: "conversation-1" as string | undefined,
   conversation: {
     execution_status: "running",
-  } as { execution_status?: ExecutionStatus | null } | undefined,
+  } as
+    | {
+        execution_status?: ExecutionStatus | null;
+        sandbox_status?: string | null;
+      }
+    | undefined,
   curAgentState: "running" as AgentState,
   isTask: false,
   taskStatus: null as string | null,
@@ -239,6 +244,23 @@ describe("conversation name status controls", () => {
     });
     expect(mocks.pauseConversation).not.toHaveBeenCalled();
     expect(onParentClick).not.toHaveBeenCalled();
+  });
+
+  it("offers Stop Runtime for a running cloud sandbox after the agent is interrupted", () => {
+    mocks.conversation = {
+      execution_status: ExecutionStatus.PAUSED,
+      sandbox_status: "RUNNING",
+    };
+    renderSubject();
+
+    openStatusMenu();
+    // The sandbox is already running, so there is nothing to start.
+    expect(screen.queryByTestId("start-server-button")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByTestId("stop-server-button"));
+
+    expect(mocks.pauseConversation).toHaveBeenCalledWith({
+      conversationId: "conversation-1",
+    });
   });
 
   it("dismisses the status menu when the child menu requests close", () => {

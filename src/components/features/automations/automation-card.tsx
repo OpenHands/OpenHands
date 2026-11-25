@@ -1,4 +1,4 @@
-import { Tooltip } from "@heroui/react";
+import { Tooltip } from "#/components/shared/tooltip";
 import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { I18nKey } from "#/i18n/declaration";
@@ -7,6 +7,8 @@ import { getAutomationRunDisplay } from "#/utils/automation-run-display";
 import { KebabMenu } from "./kebab-menu";
 import { useAutomationAccess } from "#/hooks/use-automation-access";
 import { useNavigation } from "#/context/navigation-context";
+import { withFactoryContext } from "#/constants/factories";
+import { useFactoryContext } from "#/hooks/use-factory-context";
 import PlayIcon from "#/icons/play.svg?react";
 import { SkillCardPillRow } from "#/components/features/skills/skill-card-pill-row";
 import { StyledTooltip } from "#/components/shared/buttons/styled-tooltip";
@@ -65,6 +67,7 @@ export function AutomationCard({
   insights,
 }: AutomationCardProps) {
   const { navigate } = useNavigation();
+  const factoryContext = useFactoryContext();
   const { t, i18n } = useTranslation("openhands");
   const { canManage, canEdit, canToggle } = useAutomationAccess(automation);
   const isDraft = isDraftAutomation(automation);
@@ -78,7 +81,9 @@ export function AutomationCard({
   );
 
   const handleView = () => {
-    navigate?.(`/automations/${automation.id}`);
+    navigate?.(
+      withFactoryContext(`/automations/${automation.id}`, factoryContext),
+    );
   };
 
   const menuItems = buildAutomationMenuItems({

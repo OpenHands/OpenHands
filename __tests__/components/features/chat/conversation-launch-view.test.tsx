@@ -30,13 +30,13 @@ vi.mock(
 );
 
 const navigate = vi.fn();
-function view(id: string) {
+function view(id: string, currentPath = `/conversations/${id}`) {
   return (
     <ActiveBackendProvider>
       <NavigationProvider
         value={{
           navigate,
-          currentPath: `/conversations/${id}`,
+          currentPath,
           conversationId: id,
           isNavigating: false,
         }}
@@ -128,6 +128,22 @@ describe("pending conversation navigation", () => {
     expect(screen.getByText("Read my notes")).toBeVisible();
     page.unmount();
     expect(useConversationLaunchStore.getState().launches[id]).toBeUndefined();
+  });
+
+  it("does not yank focus to the new conversation when the user has already navigated away", () => {
+    const id = begin();
+    const { rerender } = render(view(id));
+    // The user switches to another conversation in the sidebar while the
+    // launch is still resolving. In the route tree this unmounts the launch
+    // view; here we mirror that by repointing `currentPath` at the other
+    // conversation before `targetId` lands.
+    rerender(view(id, "/conversations/another-conversation"));
+    act(() =>
+      useConversationLaunchStore
+        .getState()
+        .update(id, { targetId: "task-123" }),
+    );
+    expect(navigate).not.toHaveBeenCalled();
   });
 
   it("restores the selected automation and unsaved form when editing a failed start", () => {

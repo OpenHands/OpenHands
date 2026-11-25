@@ -4,10 +4,13 @@ import { useConversationDisplayTitleState } from "#/hooks/use-conversation-displ
 import { usePendingTaskAttachmentsStore } from "#/stores/pending-task-attachments-store";
 import { useConversationLaunchStore } from "#/stores/conversation-launch-store";
 import React from "react";
+import { Link2, Lock } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { I18nKey } from "#/i18n/declaration";
 import { useNavigation } from "#/context/navigation-context";
 import { useActiveBackend } from "#/contexts/active-backend-context";
+import { useAutomationPermissions } from "#/hooks/use-automation-permissions";
+import { useSharedConversationDiscovery } from "#/hooks/query/use-shared-conversation-discovery";
 import { useBackendScopedPath } from "#/hooks/use-backend-scoped-path";
 import { usePaginatedConversations } from "#/hooks/query/use-paginated-conversations";
 import { useAgentProfiles } from "#/hooks/query/use-agent-profiles";
@@ -21,6 +24,10 @@ import { ConfirmStopModal } from "./confirm-stop-modal";
 import { NavigationLink } from "#/components/shared/navigation-link";
 import { ExitConversationModal } from "./exit-conversation-modal";
 import { useClickOutsideElement } from "#/hooks/use-click-outside-element";
+import {
+  SIDEBAR_RAIL_COLLAPSE_MAX_WIDTH,
+  useBreakpoint,
+} from "#/hooks/use-breakpoint";
 import { Provider } from "#/types/settings";
 import type { LocalWorkspace } from "#/types/workspace";
 import { useUpdateConversation } from "#/hooks/mutation/use-update-conversation";
@@ -46,6 +53,9 @@ import { ConversationActiveTagFilters } from "./conversation-active-tag-filters"
 import { ConversationPanelNewThreadPicker } from "./conversation-panel-new-thread-picker";
 import { ConversationGroupFolderList } from "./conversation-group-folder-list";
 import { ConversationPanelPinnedSection } from "./conversation-panel-pinned-section";
+import { SharedConversationList } from "./shared-conversation-list";
+import { SegmentedToggle } from "#/components/features/files-tab/segmented-toggle";
+import { ConversationSubConversationGroup } from "./conversation-sub-conversation-group";
 import {
   applyAutomationConversationFilter,
   applyGroupFolderOrder,
@@ -58,11 +68,13 @@ import {
   groupConversations,
   isOlderConversationCutoff,
   MAX_PAGES_PER_LOAD_MORE_CLICK,
+  nestSubConversations,
   OLDER_CONVERSATION_CUTOFF_MS,
   partitionByCutoff,
   resolvePinnedConversations,
   sortConversationsByField,
   type ConversationGroupLaunch,
+  type NestedConversationRow,
 } from "./conversation-panel-list-helpers";
 import { useArchivedConversationsStore } from "#/stores/archived-conversations-store";
 import { usePinnedConversationsStore } from "#/stores/pinned-conversations-store";
@@ -73,6 +85,7 @@ import {
   PINNED_CONVERSATION_TAG_KEY,
 } from "#/utils/conversation-tag-flags";
 import { uniqueById } from "#/utils/unique-by-id";
+import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
 import { isEffectivelyArchivedConversation } from "#/utils/conversation-archive-status";
 import type { SandboxStatus } from "#/api/conversation-service/agent-server-conversation-service.types";
 
@@ -97,6 +110,22 @@ export function ConversationPanel({
   const { t } = useTranslation("openhands");
   const { conversationId: currentConversationId, navigate } = useNavigation();
   const { backend: activeBackend, orgId } = useActiveBackend();
+  const { userId } = useAutomationPermissions();
+  const isSharedConversationDiscoveryEnabled = useSharedConversationDiscovery();
+  // Members share conversations with a cloud team workspace only: a personal
+  // one's org id is the user id, and it has no other members to list for.
+  // An Org Admin can also hide the list from the org's members.
+  const canShowSharedList =
+    !compact &&
+    activeBackend.kind === "cloud" &&
+    !!orgId &&
+    !!userId &&
+    orgId !== userId &&
+    isSharedConversationDiscoveryEnabled;
+  const [listScope, setListScope] = React.useState<"private" | "shared">(
+    "private",
+  );
+  const showSharedList = canShowSharedList && listScope === "shared";
   const backendScopedPath = useBackendScopedPath();
   const prefetchConversation = usePrefetchUserConversation();
   // Click-outside is only relevant in the legacy drawer mode where an
@@ -118,6 +147,19 @@ export function ConversationPanel({
   ] = React.useState(false);
   const [confirmDeleteAllVisible, setConfirmDeleteAllVisible] =
     React.useState(false);
+  const [deleteAllPreparation, setDeleteAllPreparation] = React.useState<
+    "loading" | "ready" | "error"
+  >("loading");
+  const [isDeletingAll, setIsDeletingAll] = React.useState(false);
+  const deleteAllRequest = React.useRef(0);
+
+  // A confirmation belongs to the backend/org whose pages were enumerated.
+  // External selection changes (including embedded hosts) cancel it rather
+  // than carrying a destructive action into the newly selected scope.
+  React.useEffect(() => {
+    deleteAllRequest.current += 1;
+    setConfirmDeleteAllVisible(false);
+  }, [activeBackend.id, orgId]);
   const showOlderConversations = useConversationPanelPreferencesStore(
     (state) => state.showOlderConversations,
   );
@@ -139,6 +181,11 @@ export function ConversationPanel({
   const showHoverMetadata = useConversationPanelPreferencesStore(
     (state) => state.showHoverMetadata,
   );
+  // Below the rail breakpoint the list only renders in the mobile drawer,
+  // which spans nearly the whole viewport, so a preview beside a card has no
+  // room and would run off screen. Open it below the card instead, where the
+  // overlay positioning keeps it inside the viewport.
+  const isInMobileDrawer = useBreakpoint(SIDEBAR_RAIL_COLLAPSE_MAX_WIDTH);
   const organizeMode = useConversationPanelPreferencesStore(
     (state) => state.organizeMode,
   );
@@ -183,6 +230,13 @@ export function ConversationPanel({
   const [expandedGroupPreviewIds, setExpandedGroupPreviewIds] = React.useState<
     ReadonlySet<string>
   >(() => new Set());
+  // Parent IDs whose linked child conversations are expanded. Kept local to
+  // the panel (like `collapsedGroupIds`) so a manual collapse is not persisted
+  // across sessions.
+  const [
+    expandedSubConversationParentIds,
+    setExpandedSubConversationParentIds,
+  ] = React.useState<ReadonlySet<string>>(() => new Set());
   const [expandedPinnedPreview, setExpandedPinnedPreview] =
     React.useState(false);
 
@@ -261,12 +315,32 @@ export function ConversationPanel({
     });
   }, []);
 
+  const toggleSubConversationParentExpanded = React.useCallback(
+    (parentId: string) => {
+      setExpandedSubConversationParentIds((prev) => {
+        const next = new Set(prev);
+        if (next.has(parentId)) {
+          next.delete(parentId);
+        } else {
+          next.add(parentId);
+        }
+        return next;
+      });
+    },
+    [],
+  );
+
   React.useEffect(() => {
     if (organizeMode !== "grouped") {
       setCollapsedGroupIds(new Set());
       setExpandedGroupPreviewIds(new Set());
     }
   }, [organizeMode]);
+
+  // Expansion state is scoped to the loaded catalog of one backend.
+  React.useEffect(() => {
+    setExpandedSubConversationParentIds(new Set());
+  }, [activeBackend.id]);
 
   const scrollContainerRef = React.useRef<HTMLDivElement>(null);
 
@@ -305,9 +379,8 @@ export function ConversationPanel({
     return names;
   }, [agentProfilesData]);
 
-  // Deduped, archive-unaware collection of every conversation currently loaded
-  // from the backend. Bulk actions like "Delete all" must use this list so
-  // hiding archived rows from the UI never shrinks what gets deleted.
+  // Archive-unaware collection of the loaded pages. Delete all first loads
+  // every remaining page so neither pagination nor hidden rows shrink its scope.
   const allLoadedConversations = React.useMemo(() => {
     const all = data?.pages.flatMap((page) => page.items) ?? [];
     // The 10s background refetch re-fetches every loaded page with the
@@ -363,6 +436,64 @@ export function ConversationPanel({
       (conversation) => !isRowArchived(conversation),
     );
   }, [allLoadedConversations, isRowArchived, showArchivedConversations]);
+
+  // Grouped mode renders a folder's top-level rows through a preview limit.
+  // If the active conversation is nested, the row the preview must keep
+  // visible is its root ancestor, not the child id (the child has been removed
+  // from the folder's top-level rows).
+  const activeRootConversationId = React.useMemo(() => {
+    if (!currentConversationId) {
+      return null;
+    }
+    const conversationsById = new Map(
+      conversations.map((conversation) => [conversation.id, conversation]),
+    );
+    let rootId = currentConversationId;
+    const seen = new Set([rootId]);
+    let parentId =
+      conversationsById.get(rootId)?.parent_conversation_id ?? null;
+    while (parentId && conversationsById.has(parentId) && !seen.has(parentId)) {
+      seen.add(parentId);
+      rootId = parentId;
+      parentId =
+        conversationsById.get(parentId)?.parent_conversation_id ?? null;
+    }
+    return rootId;
+  }, [conversations, currentConversationId]);
+
+  // Never hide the thread the user is currently reading: when the active
+  // conversation is nested, auto-expand every loaded ancestor so the row is
+  // actually reachable (a grandchild needs both its parent and grandparent
+  // open). Only ever adds — a manual collapse of an inactive parent sticks.
+  React.useEffect(() => {
+    if (!currentConversationId) {
+      return;
+    }
+    const conversationsById = new Map(
+      conversations.map((conversation) => [conversation.id, conversation]),
+    );
+    const activeConversation = conversationsById.get(currentConversationId);
+    const ancestorIds: string[] = [];
+    const seen = new Set<string>();
+    let parentId = activeConversation?.parent_conversation_id ?? null;
+    while (parentId && conversationsById.has(parentId) && !seen.has(parentId)) {
+      seen.add(parentId);
+      ancestorIds.push(parentId);
+      parentId =
+        conversationsById.get(parentId)?.parent_conversation_id ?? null;
+    }
+    if (ancestorIds.length === 0) {
+      return;
+    }
+    setExpandedSubConversationParentIds((prev) => {
+      if (ancestorIds.every((id) => prev.has(id))) {
+        return prev;
+      }
+      const next = new Set(prev);
+      ancestorIds.forEach((id) => next.add(id));
+      return next;
+    });
+  }, [conversations, currentConversationId]);
 
   // Pin/archive ID sets derive from the tags on the loaded conversations
   // (the unfiltered set, so archived-but-pinned rows still resolve and
@@ -600,6 +731,13 @@ export function ConversationPanel({
     return sortConversationsByField(visible, conversationSort);
   }, [recentScoped, olderScoped, showOlderConversations, conversationSort]);
 
+  // Chronological rows: children whose parent is loaded move under that
+  // parent. Orphans stay flat (see `nestSubConversations`).
+  const nestedVisibleConversations = React.useMemo(
+    () => nestSubConversations(sortedVisibleConversations, conversationSort),
+    [sortedVisibleConversations, conversationSort],
+  );
+
   const groupLabels = React.useMemo(
     () => ({
       emptyWorkspace: t(I18nKey.CONVERSATION_PANEL$NO_WORKSPACE),
@@ -654,12 +792,12 @@ export function ConversationPanel({
       groupedSourceConversations,
       conversationPageById,
       activeBackend.kind,
-      { forceIncludeConversationId: currentConversationId },
+      { forceIncludeConversationId: activeRootConversationId },
     );
   }, [
     activeBackend.kind,
+    activeRootConversationId,
     conversationPageById,
-    currentConversationId,
     groupedSourceConversations,
   ]);
 
@@ -670,9 +808,78 @@ export function ConversationPanel({
     return applyGroupFolderOrder(conversationGroups, groupFolderOrder);
   }, [conversationGroups, groupFolderOrder]);
 
+  // Grouped mode nests across folder boundaries: a child isolated in another
+  // worktree/workspace still nests under its parent, and its flat slot is
+  // removed from whichever folder it would otherwise appear in.
+  const groupedSubConversationsByParentId = React.useMemo(() => {
+    const byParentId = new Map<string, NestedConversationRow[]>();
+    if (!groupedSourceConversations) {
+      return byParentId;
+    }
+    for (const row of nestSubConversations(
+      groupedSourceConversations,
+      conversationSort,
+    )) {
+      if (row.children.length > 0) {
+        byParentId.set(row.conversation.id, row.children);
+      }
+    }
+    return byParentId;
+  }, [groupedSourceConversations, conversationSort]);
+
+  const groupedNestedChildIds = React.useMemo(() => {
+    const collectDescendantIds = (
+      rows: readonly NestedConversationRow[],
+    ): string[] =>
+      rows.flatMap((row) => [
+        row.conversation.id,
+        ...collectDescendantIds(row.children),
+      ]);
+    return new Set(
+      Array.from(groupedSubConversationsByParentId.values()).flatMap(
+        collectDescendantIds,
+      ),
+    );
+  }, [groupedSubConversationsByParentId]);
+
+  const groupsWithTopLevelRowsBeforeNesting = React.useMemo(
+    () =>
+      new Set(
+        (orderedConversationGroups ?? [])
+          .filter((group) => group.conversations.length > 0)
+          .map((group) => group.id),
+      ),
+    [orderedConversationGroups],
+  );
+
+  const displayConversationGroups = React.useMemo(() => {
+    if (!orderedConversationGroups) {
+      return null;
+    }
+    if (groupedNestedChildIds.size === 0) {
+      return orderedConversationGroups;
+    }
+    return orderedConversationGroups
+      .map((group) => ({
+        ...group,
+        conversations: group.conversations.filter(
+          (conversation) => !groupedNestedChildIds.has(conversation.id),
+        ),
+      }))
+      .filter(
+        (group) =>
+          group.conversations.length > 0 ||
+          !groupsWithTopLevelRowsBeforeNesting.has(group.id),
+      );
+  }, [
+    groupedNestedChildIds,
+    groupsWithTopLevelRowsBeforeNesting,
+    orderedConversationGroups,
+  ]);
+
   const conversationGroupIds = React.useMemo(
-    () => conversationGroups?.map((group) => group.id) ?? [],
-    [conversationGroups],
+    () => displayConversationGroups?.map((group) => group.id) ?? [],
+    [displayConversationGroups],
   );
 
   const compactVisibleConversations = React.useMemo(
@@ -688,7 +895,7 @@ export function ConversationPanel({
 
   const visibleFlatCount = sortedVisibleConversations.length;
 
-  const visibleGroupCount = orderedConversationGroups?.length ?? 0;
+  const visibleGroupCount = displayConversationGroups?.length ?? 0;
 
   const listIsEffectivelyEmpty =
     organizeMode === "grouped" && !compact
@@ -1039,14 +1246,49 @@ export function ConversationPanel({
     }
   };
 
+  const handleCancelDeleteAll = () => {
+    if (isDeletingAll) return;
+    deleteAllRequest.current += 1;
+    setConfirmDeleteAllVisible(false);
+  };
+
+  const handleRequestDeleteAll = async () => {
+    const request = ++deleteAllRequest.current;
+    setDeleteAllPreparation("loading");
+    setConfirmDeleteAllVisible(true);
+    let page = data?.pages.at(-1);
+    const visitedPages = new Set<string>();
+
+    while (page?.next_page_id) {
+      if (visitedPages.has(page.next_page_id)) {
+        setDeleteAllPreparation("error");
+        return;
+      }
+      visitedPages.add(page.next_page_id);
+      const result = await fetchNextPage();
+      if (request !== deleteAllRequest.current) return;
+      if (result.isFetchNextPageError || !result.data) {
+        setDeleteAllPreparation("error");
+        return;
+      }
+      page = result.data.pages.at(-1);
+    }
+    setDeleteAllPreparation("ready");
+  };
+
   const handleConfirmDeleteAll = async () => {
-    // Delete against the unfiltered loaded set so archived (currently hidden)
-    // conversations are still removed from the server — matching the action's
-    // "delete all conversations" label and confirmation count.
+    if (deleteAllPreparation !== "ready" || isDeletingAll) return;
+    // Every item, including its planning children, belongs to this confirmed
+    // backend/org even if the host changes selection while requests await.
+    const deletionScope =
+      AgentServerConversationService.createConversationDeletionScope();
+    setIsDeletingAll(true);
+    // Enumeration completes before confirmation. Capture that complete,
+    // deduplicated set before deletes start invalidating the paginated cache.
     const idsToDelete = allLoadedConversations.map((c) => c.id);
     const results = await Promise.allSettled(
       idsToDelete.map((conversationId) =>
-        deleteConversationAsync({ conversationId }),
+        deleteConversationAsync({ conversationId, deletionScope }),
       ),
     );
 
@@ -1071,6 +1313,7 @@ export function ConversationPanel({
         `${failedCount} conversation${failedCount === 1 ? "" : "s"} could not be deleted.`,
       );
     }
+    setIsDeletingAll(false);
   };
 
   const renderConversationCard = React.useCallback(
@@ -1147,6 +1390,7 @@ export function ConversationPanel({
           isArchived={isArchived}
           explicitlyArchived={explicitlyArchived}
           contextMenuOpen={openContextMenuId === conversation.id}
+          isInMobileDrawer={isInMobileDrawer}
           inPinnedSection={!!options?.inPinnedSection}
           allowEditTags={activeBackend.kind === "local"}
           showHoverMetadata={showHoverMetadata}
@@ -1201,6 +1445,7 @@ export function ConversationPanel({
       showLlmProfiles,
       showTagsMetadata,
       showHoverMetadata,
+      isInMobileDrawer,
     ],
   );
 
@@ -1217,8 +1462,8 @@ export function ConversationPanel({
   const hasVisibleGroups =
     organizeMode === "grouped" &&
     !compact &&
-    orderedConversationGroups != null &&
-    orderedConversationGroups.length > 0;
+    displayConversationGroups != null &&
+    displayConversationGroups.length > 0;
   const showEmptyState =
     isFetched &&
     !isLoading &&
@@ -1233,14 +1478,14 @@ export function ConversationPanel({
   // none is. Folders outside the current view keep their own state.
   const allGroupsCollapsed =
     hasVisibleGroups &&
-    (orderedConversationGroups ?? []).every((group) =>
+    (displayConversationGroups ?? []).every((group) =>
       collapsedGroupIds.has(group.id),
     );
 
   const toggleAllGroupsCollapsed = React.useCallback(() => {
     setCollapsedGroupIds((prev) => {
       const groupIds =
-        orderedConversationGroups?.map((group) => group.id) ?? [];
+        displayConversationGroups?.map((group) => group.id) ?? [];
       if (groupIds.length === 0) {
         return prev;
       }
@@ -1252,7 +1497,7 @@ export function ConversationPanel({
       }
       return next;
     });
-  }, [orderedConversationGroups]);
+  }, [displayConversationGroups]);
 
   const showConversationHeader = !compact;
 
@@ -1275,7 +1520,7 @@ export function ConversationPanel({
             data-testid="older-conversations-summary"
             className="flex min-w-0 flex-nowrap items-center gap-x-2 py-2 pl-4 pr-2.5 text-muted"
           >
-            {hasVisibleGroups ? (
+            {hasVisibleGroups && !showSharedList ? (
               <button
                 type="button"
                 data-testid="conversations-header-toggle"
@@ -1283,7 +1528,7 @@ export function ConversationPanel({
                 onClick={toggleAllGroupsCollapsed}
                 className={cn(
                   "min-w-0 cursor-pointer truncate text-left text-sm font-medium",
-                  "text-muted transition-colors hover:text-white",
+                  "text-muted transition-colors hover:text-contrast",
                   "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-border",
                 )}
               >
@@ -1298,24 +1543,50 @@ export function ConversationPanel({
               <ConversationPanelNewThreadPicker
                 backendKind={activeBackend.kind}
               />
-              <ConversationLayoutsMenu
-                menuOpen={filterMenuOpen}
-                setMenuOpen={setFilterMenuOpen}
-                menuRef={filterMenuRef}
-                backendKind={activeBackend.kind}
-                tagFacets={tagFacets}
-                automationNameFacets={automationNameFacets}
-                totalConversationsCount={allLoadedConversations.length}
-                onRequestDeleteAll={() => setConfirmDeleteAllVisible(true)}
-              />
+              {/* Its filters and "Delete all" act on the private list only. */}
+              {!showSharedList && (
+                <ConversationLayoutsMenu
+                  menuOpen={filterMenuOpen}
+                  setMenuOpen={setFilterMenuOpen}
+                  menuRef={filterMenuRef}
+                  backendKind={activeBackend.kind}
+                  tagFacets={tagFacets}
+                  automationNameFacets={automationNameFacets}
+                  totalConversationsCount={allLoadedConversations.length}
+                  onRequestDeleteAll={handleRequestDeleteAll}
+                />
+              )}
             </div>
           </div>
+          {canShowSharedList && (
+            <div className="pb-2 pl-4 pr-2.5">
+              <SegmentedToggle
+                value={listScope}
+                options={[
+                  {
+                    value: "private",
+                    label: t(I18nKey.CONVERSATION_PANEL$PRIVATE),
+                    icon: <Lock className="size-3" aria-hidden />,
+                  },
+                  {
+                    value: "shared",
+                    label: t(I18nKey.CONVERSATION_PANEL$SHARED),
+                    icon: <Link2 className="size-3" aria-hidden />,
+                  },
+                ]}
+                onChange={setListScope}
+                ariaLabel={t(I18nKey.SIDEBAR$CONVERSATIONS)}
+                testId="conversation-list-scope"
+                equalWidth
+              />
+            </div>
+          )}
         </div>
       )}
 
       {/* Sits above the list, not inside the scroll container: a filter that
           scrolls out of view is a filter the user can't see. */}
-      {!compact && (
+      {!compact && !showSharedList && (
         <ConversationActiveTagFilters
           selectedFacets={selectedTagFacets}
           onToggleFacet={toggleTagFacet}
@@ -1325,6 +1596,10 @@ export function ConversationPanel({
         />
       )}
 
+      {showSharedList && <SharedConversationList onClose={onClose} />}
+
+      {/* Hidden, not unmounted, while the shared list shows, so the private
+          list keeps its scroll position and loaded pages. */}
       <div
         ref={scrollContainerRef}
         data-testid="conversation-panel-list-scroll"
@@ -1334,6 +1609,7 @@ export function ConversationPanel({
         className={cn(
           "flex min-h-0 flex-1 flex-col overflow-y-auto overflow-x-hidden overscroll-contain custom-scrollbar-always",
           !compact && "conversation-panel-list-scroll",
+          showSharedList && "hidden",
         )}
       >
         {showInitialSkeleton && <ConversationCardSkeleton compact={compact} />}
@@ -1493,10 +1769,10 @@ export function ConversationPanel({
         {!showInitialSkeleton &&
         !compact &&
         organizeMode === "grouped" &&
-        orderedConversationGroups &&
-        orderedConversationGroups.length > 0 ? (
+        displayConversationGroups &&
+        displayConversationGroups.length > 0 ? (
           <ConversationGroupFolderList
-            groups={orderedConversationGroups}
+            groups={displayConversationGroups}
             groupIds={conversationGroupIds}
             groupFolderOrder={groupFolderOrder}
             setGroupFolderOrder={setGroupFolderOrder}
@@ -1506,11 +1782,29 @@ export function ConversationPanel({
             onToggleGroupCollapsed={toggleGroupCollapsed}
             onToggleGroupPreviewExpanded={toggleGroupPreviewExpanded}
             isCreatingConversationFlow={isCreatingConversationFlow}
-            activeConversationId={currentConversationId}
+            activeConversationId={activeRootConversationId}
             onLaunchFromGroup={launchFromGroup}
-            renderConversationCard={(conversation) =>
-              renderConversationCard(conversation)
-            }
+            renderConversationCard={(conversation) => (
+              <ConversationSubConversationGroup
+                key={conversation.id}
+                conversation={conversation}
+                subConversations={
+                  groupedSubConversationsByParentId.get(conversation.id) ?? []
+                }
+                expandedIds={expandedSubConversationParentIds}
+                onToggle={toggleSubConversationParentExpanded}
+                renderParent={(parent) => renderConversationCard(parent)}
+                renderChild={(child) => (
+                  <div
+                    key={child.id}
+                    data-testid="sub-conversation-row"
+                    data-conversation-id={child.id}
+                  >
+                    {renderConversationCard(child)}
+                  </div>
+                )}
+              />
+            )}
           />
         ) : null}
 
@@ -1518,9 +1812,25 @@ export function ConversationPanel({
         !compact &&
         organizeMode === "chronological" ? (
           <div className="space-y-0.5">
-            {sortedVisibleConversations.map((conversation) =>
-              renderConversationCard(conversation),
-            )}
+            {nestedVisibleConversations.map((row) => (
+              <ConversationSubConversationGroup
+                key={row.conversation.id}
+                conversation={row.conversation}
+                subConversations={row.children}
+                expandedIds={expandedSubConversationParentIds}
+                onToggle={toggleSubConversationParentExpanded}
+                renderParent={(parent) => renderConversationCard(parent)}
+                renderChild={(child) => (
+                  <div
+                    key={child.id}
+                    data-testid="sub-conversation-row"
+                    data-conversation-id={child.id}
+                  >
+                    {renderConversationCard(child)}
+                  </div>
+                )}
+              />
+            ))}
           </div>
         ) : null}
 
@@ -1598,14 +1908,24 @@ export function ConversationPanel({
       {confirmDeleteAllVisible && (
         <ConfirmDeleteModal
           title={t(I18nKey.CONVERSATION$CONFIRM_DELETE_ALL_TITLE)}
-          description={t(I18nKey.CONVERSATION$CONFIRM_DELETE_ALL_DESC, {
-            count: allLoadedConversations.length,
-          })}
+          description={
+            deleteAllPreparation === "ready"
+              ? t(I18nKey.CONVERSATION$CONFIRM_DELETE_ALL_DESC, {
+                  count: allLoadedConversations.length,
+                })
+              : t(
+                  deleteAllPreparation === "error"
+                    ? I18nKey.ERROR$GENERIC
+                    : I18nKey.HOME$LOADING,
+                )
+          }
+          isConfirmDisabled={deleteAllPreparation !== "ready"}
+          isPending={isDeletingAll}
           onConfirm={async () => {
             await handleConfirmDeleteAll();
             setConfirmDeleteAllVisible(false);
           }}
-          onCancel={() => setConfirmDeleteAllVisible(false)}
+          onCancel={handleCancelDeleteAll}
         />
       )}
 

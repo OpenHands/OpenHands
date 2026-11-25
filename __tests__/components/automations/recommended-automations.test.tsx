@@ -257,6 +257,7 @@ describe("recommended automations", () => {
       );
 
     expect(cardIds).toEqual([
+      "cve-remediation-factory",
       "github-pr-reviewer",
       "custom-automation",
       "github-issue-to-pr",
@@ -280,9 +281,11 @@ describe("recommended automations", () => {
       "github-delivery-watchdog",
       "github-issue-triage",
       "upstream-fork-sync",
+      "gitlab-mr-reviewer",
       "incident-retrospective-drafter",
       "github-stale-ci-pr-closer",
       "github-comment-cleanup",
+      "gitlab-prd-refiner",
     ]);
   });
 
@@ -298,7 +301,7 @@ describe("recommended automations", () => {
     const suggestedHeading = screen.getByText(
       I18nKey.RECOMMENDED_AUTOMATIONS$SUGGESTED_TITLE,
     ).parentElement!;
-    expect(within(suggestedHeading).getByText("6")).toBeInTheDocument();
+    expect(within(suggestedHeading).getByText("7")).toBeInTheDocument();
     expect(
       screen.getByText(I18nKey.RECOMMENDED_AUTOMATIONS$SECTION_DESCRIPTION),
     ).toBeInTheDocument();
@@ -309,7 +312,7 @@ describe("recommended automations", () => {
     expect(moreHeading).toHaveTextContent(
       I18nKey.RECOMMENDED_AUTOMATIONS$MORE_TITLE,
     );
-    expect(within(moreHeading).getByText("20")).toBeInTheDocument();
+    expect(within(moreHeading).getByText("22")).toBeInTheDocument();
 
     const moreSection = screen.getByTestId(
       "recommended-automations-beta-section",
@@ -412,6 +415,29 @@ describe("recommended automations", () => {
     expect(screen.getByTestId("template-filters")).toBe(filterRail);
   });
 
+  it("names a built-in provider's filter chip after the product, with the logo it stands for", () => {
+    render(
+      <RecommendedAutomationsSection
+        backendKind="local"
+        installedServers={[]}
+        filters={{ integrationId: null, trigger: null }}
+        onFiltersChange={vi.fn()}
+        onSelect={vi.fn()}
+      />,
+    );
+
+    // The Data Center templates are Bitbucket Data Center's only through
+    // their repository picker; the integration catalog has no such entry.
+    const chip = screen.getByTestId(
+      "template-filter-integration-bitbucket_data_center",
+    );
+    expect(chip).toHaveTextContent(/^Bitbucket Data Center$/);
+    expect(chip.querySelector('img[alt="Bitbucket logo"]')).toBeInTheDocument();
+    expect(
+      screen.getByTestId("template-filter-integration-bitbucket"),
+    ).toHaveTextContent(/^Bitbucket$/);
+  });
+
   it("shows a left-aligned MCP icon stack on each card", () => {
     render(
       <RecommendedAutomationsSection
@@ -448,7 +474,13 @@ describe("recommended automations", () => {
     const badge = screen.getByTestId(
       "recommended-automation-icon-github-pr-reviewer",
     );
-    expect(badge.querySelector('img[alt="GitHub logo"]')).toBeInTheDocument();
+    const githubLogoUrl = INTEGRATION_CATALOG.find(
+      (entry) => entry.id === "github",
+    )?.logoUrl;
+    // Theme-backed logos use a tintable mask with the same provider artwork.
+    expect(
+      within(badge).getByTestId("mcp-logo-tinted-mark").style.maskImage,
+    ).toBe(`url("${githubLogoUrl}")`);
   });
 
   it("shows the declared glyph instead of a logo stack when an entry names one", () => {

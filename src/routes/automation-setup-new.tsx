@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { createPortal } from "react-dom";
+import { AppearancePortal } from "#/components/shared/appearance-portal";
 import { useTranslation } from "react-i18next";
 import { useSearchParams } from "react-router";
 import AutomationService from "#/api/automation-service/automation-service.api";
@@ -21,6 +21,8 @@ import {
   automationListPath,
 } from "#/manifests/automation-interface";
 import { AutomationPageHeader } from "#/components/features/automations/automation-page-header";
+import { factoryPath, withFactoryContext } from "#/constants/factories";
+import { useFactoryContext } from "#/hooks/use-factory-context";
 import { buildAutomationDraftTags } from "#/utils/automation-draft-tags";
 import { setupDraftFromAutomation } from "#/utils/automation-edit-draft";
 import { displayErrorToast } from "#/utils/custom-toast-handlers";
@@ -36,6 +38,7 @@ const BLANK_DRAFT: AutomationSetupDraft = { prompt: "", kind: "prompt" };
 export default function AutomationSetupNew() {
   const { t } = useTranslation("openhands");
   const [searchParams] = useSearchParams();
+  const factoryContext = useFactoryContext();
   const automationId = searchParams.get("automationId")?.trim() ?? "";
   const draftId = searchParams.get("draftId")?.trim() ?? "";
   const { startConversationFromPrompt, isPending } = useStartAutomationSetup();
@@ -101,6 +104,10 @@ export default function AutomationSetupNew() {
     };
   }, [automationId, draftId]);
 
+  const closeFactoryId = draft?.factoryId ?? factoryContext;
+  const closePath = closeFactoryId
+    ? factoryPath(closeFactoryId)
+    : automationListPath();
   const title = draft?.form?.name?.trim() || t(I18nKey.AUTOMATION_SETUP$TITLE);
   const conversationTags = draft?.serverDraftId
     ? buildAutomationDraftTags(
@@ -117,8 +124,11 @@ export default function AutomationSetupNew() {
         title={title}
         backTo={
           automationId
-            ? automationDetailPath(automationId)
-            : automationListPath()
+            ? withFactoryContext(
+                automationDetailPath(automationId),
+                factoryContext,
+              )
+            : closePath
         }
         actionsRef={setToolbarElement}
       />
@@ -150,25 +160,21 @@ export default function AutomationSetupNew() {
             />
           </div>
         </div>
-        {composerTarget
-          ? createPortal(
-              <ComposerDockedProvider enabled minimal>
-                {/* No conversation route is mounted here, so a persisting
-                    composer would read and write the Home draft. The prompt
-                    belongs to this setup only and is not kept as a draft. */}
-                <InteractiveChatBox
-                  onSubmit={(content) => startConversationFromPrompt(content)}
-                  disabled={isPending || !draft}
-                  persistDraft={false}
-                  showGitControlBar={false}
-                  placeholder={t(
-                    I18nKey.AUTOMATION_SETUP$DOCKED_COMPOSER_PLACEHOLDER,
-                  )}
-                />
-              </ComposerDockedProvider>,
-              composerTarget,
-            )
-          : null}
+        {composerTarget ? (
+          <AppearancePortal container={composerTarget}>
+            <ComposerDockedProvider enabled minimal>
+              <InteractiveChatBox
+                onSubmit={(content) => startConversationFromPrompt(content)}
+                disabled={isPending || !draft}
+                persistDraft={false}
+                showGitControlBar={false}
+                placeholder={t(
+                  I18nKey.AUTOMATION_SETUP$DOCKED_COMPOSER_PLACEHOLDER,
+                )}
+              />
+            </ComposerDockedProvider>
+          </AppearancePortal>
+        ) : null}
       </div>
     </div>
   );

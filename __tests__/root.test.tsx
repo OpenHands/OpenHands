@@ -5,11 +5,15 @@ import {
   screen,
   waitFor,
 } from "@testing-library/react";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { Children, type ReactElement, type ReactNode } from "react";
 import { createRoutesStub } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { http, HttpResponse } from "msw";
-import App, { links } from "#/root";
+import App, { Layout, links } from "#/root";
+import { AgentServerUIRoot } from "#/components/providers/agent-server-ui-root";
 import { server } from "#/mocks/node";
 import { __resetActiveStoreForTests } from "#/api/backend-registry/active-store";
 import { LOCKED_CLOUD_BACKEND_ID } from "#/api/backend-registry/default-backend";
@@ -21,6 +25,63 @@ import {
 import { CLOUD_BACKEND_LOGGED_OUT_ERROR } from "#/hooks/query/use-backends-health";
 import { ActiveBackendProvider } from "#/contexts/active-backend-context";
 import { ONBOARDING_COMPLETED_STORAGE_KEY } from "#/components/features/onboarding/use-onboarding-completion";
+
+const rootMocks = vi.hoisted(() => ({
+  settings: {
+    data: { user_consents_to_analytics: false as boolean | null },
+    isLoading: false,
+    isSuccess: true,
+  },
+  showTelemetryBanner: false,
+}));
+
+vi.mock("#/api/settings-service/settings-service.api", () => ({
+  default: {
+    getSettings: vi.fn(async () => rootMocks.settings.data),
+    saveSettings: vi.fn(async () => true),
+  },
+}));
+
+vi.mock(
+  "#/components/features/analytics/telemetry-consent-banner",
+  async () => {
+    const React = await import("react");
+
+    return {
+      TelemetryConsentBanner: ({
+        onChoice,
+      }: {
+        onChoice?: (granted: boolean) => void;
+      }) => {
+        if (!rootMocks.showTelemetryBanner) return null;
+
+        return React.createElement(
+          "div",
+          { role: "dialog", "aria-label": "Help improve OpenHands" },
+          React.createElement(
+            "form",
+            {
+              "data-testid": "telemetry-consent-form",
+              onSubmit: (event: { preventDefault: () => void }) => {
+                event.preventDefault();
+                rootMocks.showTelemetryBanner = false;
+                onChoice?.(true);
+              },
+            },
+            React.createElement(
+              "button",
+              {
+                type: "submit",
+                "data-testid": "confirm-telemetry-preferences",
+              },
+              "Confirm preferences",
+            ),
+          ),
+        );
+      },
+    };
+  },
+);
 
 const TRANSLATIONS: Record<string, string> = {
   BACKEND$MANAGE_TITLE: "Manage backends",
@@ -58,7 +119,11 @@ vi.mock("#/components/features/onboarding/onboarding-modal", async () => {
       const { navigate } = useNavigation();
       return React.createElement(
         "div",
-        { "data-testid": "onboarding-modal" },
+        {
+          "data-testid": "onboarding-modal",
+          role: "dialog",
+          "aria-label": "Welcome to OpenHands",
+        },
         React.createElement("div", {
           "data-testid": "onboarding-step-check-backend",
         }),
@@ -164,6 +229,25 @@ describe("App root agent-server availability guard", () => {
       window as unknown as Record<string, unknown>
     ).__AGENT_CANVAS_SESSION_API_KEY__ = "test-session-key";
     __resetActiveStoreForTests();
+    rootMocks.settings = {
+      data: { user_consents_to_analytics: false },
+      isLoading: false,
+      isSuccess: true,
+    };
+    rootMocks.showTelemetryBanner = false;
+
+    server.use(
+      http.get("*/api/settings", () =>
+        HttpResponse.json({
+          agent_settings: {},
+          conversation_settings: {},
+          llm_api_key_is_set: false,
+          misc_settings: {
+            app_preferences: { user_consents_to_analytics: false },
+          },
+        }),
+      ),
+    );
   });
 
   afterEach(() => {
@@ -244,10 +328,53 @@ describe("App root agent-server availability guard", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("collects local telemetry consent before showing first-run onboarding", async () => {
+    rootMocks.settings = {
+      data: { user_consents_to_analytics: null },
+      isLoading: false,
+      isSuccess: true,
+    };
+    rootMocks.showTelemetryBanner = true;
+
+    server.use(
+      http.get("*/api/settings", () =>
+        HttpResponse.json({
+          agent_settings: {},
+          conversation_settings: {},
+          llm_api_key_is_set: false,
+          misc_settings: {
+            app_preferences: { user_consents_to_analytics: null },
+          },
+        }),
+      ),
+      http.get("*/server_info", () =>
+        HttpResponse.json({ uptime: 0, idle_time: 0, version: "1.63.1" }),
+      ),
+    );
+
+    await renderApp(["/"]);
+
+    expect(
+      await screen.findByTestId("telemetry-consent-form"),
+    ).toBeInTheDocument();
+    expect(screen.getAllByRole("dialog")).toHaveLength(1);
+    expect(screen.queryByTestId("onboarding-modal")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId("confirm-telemetry-preferences"));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("onboarding-modal")).toBeInTheDocument();
+    });
+    expect(
+      screen.queryByTestId("telemetry-consent-form"),
+    ).not.toBeInTheDocument();
+    expect(screen.getAllByRole("dialog")).toHaveLength(1);
+  });
+
   it("lets root-level onboarding navigate to the launched conversation before closing", async () => {
     server.use(
       http.get("*/server_info", () =>
-        HttpResponse.json({ uptime: 0, idle_time: 0, version: "1.59.0" }),
+        HttpResponse.json({ uptime: 0, idle_time: 0, version: "1.63.1" }),
       ),
     );
 
@@ -393,10 +520,13 @@ describe("App root agent-server availability guard", () => {
           agent_settings: {
             llm: { model: "openai/gpt-5.5", api_key: "stored" },
           },
+          misc_settings: {
+            app_preferences: { user_consents_to_analytics: false },
+          },
         }),
       ),
       http.get("*/server_info", () =>
-        HttpResponse.json({ uptime: 0, idle_time: 0, version: "1.59.0" }),
+        HttpResponse.json({ uptime: 0, idle_time: 0, version: "1.63.1" }),
       ),
     );
 
@@ -452,7 +582,7 @@ describe("App root agent-server availability guard", () => {
         }),
       ),
       http.get("*/server_info", () =>
-        HttpResponse.json({ uptime: 0, idle_time: 0, version: "1.59.0" }),
+        HttpResponse.json({ uptime: 0, idle_time: 0, version: "1.63.1" }),
       ),
     );
 
@@ -809,10 +939,13 @@ describe("App root agent-server availability guard", () => {
             agent_settings: {
               llm: { model: "openai/gpt-5.5", api_key: "stored" },
             },
+            misc_settings: {
+              app_preferences: { user_consents_to_analytics: false },
+            },
           }),
         ),
         http.get("*/server_info", () =>
-          HttpResponse.json({ uptime: 0, idle_time: 0, version: "1.59.0" }),
+          HttpResponse.json({ uptime: 0, idle_time: 0, version: "1.63.1" }),
         ),
       );
 
@@ -1028,6 +1161,23 @@ describe("App root agent-server availability guard", () => {
   });
 });
 
+describe("App root viewport sizing", () => {
+  it("uses a dynamic viewport constraint for the outer UI wrapper", () => {
+    const layout = Layout({ children: <div /> }) as ReactElement<{
+      children: ReactNode;
+    }>;
+    const body = Children.toArray(layout.props.children)[1] as ReactElement<{
+      children: ReactNode;
+    }>;
+    const uiRoot = Children.toArray(body.props.children)[0] as ReactElement<{
+      contentClassName: string;
+    }>;
+
+    expect(uiRoot.type).toBe(AgentServerUIRoot);
+    expect(uiRoot.props.contentClassName).toBe("h-dvh min-h-0");
+  });
+});
+
 describe("App root document links", () => {
   it("declares the SVG favicon used by the browser tab", () => {
     // Act
@@ -1054,7 +1204,37 @@ describe("App root document links", () => {
       type: "image/svg+xml",
       href: "/canvas/favicon.svg",
     });
+    expect(documentLinks).toContainEqual({
+      rel: "manifest",
+      href: "/canvas/site.webmanifest",
+    });
 
     vi.unstubAllEnvs();
+  });
+
+  it("provides install metadata and relative icon assets", () => {
+    const manifest = JSON.parse(
+      readFileSync("public/site.webmanifest", "utf8"),
+    );
+
+    expect(manifest).toMatchObject({
+      name: expect.any(String),
+      short_name: expect.any(String),
+      description: expect.any(String),
+      start_url: "./",
+      scope: "./",
+      display: "standalone",
+      categories: ["productivity"],
+    });
+    expect(manifest.name).not.toBe("");
+    expect(manifest.short_name).not.toBe("");
+
+    for (const icon of manifest.icons) {
+      expect(icon.src).not.toMatch(/^\//);
+      const png = readFileSync(resolve("public", icon.src));
+      expect(png.subarray(1, 4).toString()).toBe("PNG");
+      expect(png.readUInt32BE(16)).toBe(Number(icon.sizes.split("x")[0]));
+      expect(png.readUInt32BE(20)).toBe(Number(icon.sizes.split("x")[1]));
+    }
   });
 });

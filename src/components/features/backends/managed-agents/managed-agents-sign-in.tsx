@@ -71,7 +71,7 @@ export function ManagedAgentsSignIn({
       {isExpired ? (
         <p
           data-testid="managed-agents-expired"
-          className="w-full rounded-md border border-warning/40 bg-warning/10 p-2.5 text-center text-xs text-warning"
+          className="w-full rounded-md border border-warning/40 bg-warning-soft p-2.5 text-center text-xs text-warning-soft-foreground dark:bg-warning/10 dark:text-warning"
         >
           {t(I18nKey.BACKEND$DIGITALOCEAN_EXPIRED)}
         </p>
@@ -114,7 +114,7 @@ export function ManagedAgentsSignIn({
             href={DO_CREATE_TOKEN_URL}
             target="_blank"
             rel="noreferrer"
-            className="inline-flex items-center gap-1 text-primary hover:underline"
+            className="inline-flex items-center gap-1 text-link hover:underline"
           >
             {t(I18nKey.DO_AGENTS$CREATE_TOKEN)}
             <ExternalLink className="size-3" aria-hidden />

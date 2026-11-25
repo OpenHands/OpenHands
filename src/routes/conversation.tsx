@@ -237,7 +237,7 @@ function AppContent() {
   const content = (
     <EventHandler>
       <ConversationOverviewDrawerProvider>
-        <div data-testid="app-route" className="flex h-full flex-col">
+        <div data-testid="app-route" className="flex h-full min-h-0 flex-col">
           {showsMobilePanelPage ? (
             <ConversationMobilePanelPage
               onNavigateBack={() =>

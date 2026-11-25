@@ -253,10 +253,24 @@ export interface CloudIntegrationsConfig {
    */
   isOrgMcpServersEnabled: boolean;
   /**
+   * Whether the instance has Agent Profiles turned on
+   * (`feature_flags.enable_agent_profiles_page`). Only meaningful on a
+   * self-hosted instance: OpenHands Cloud reports it false and still runs
+   * profiles.
+   */
+  isAgentProfilesEnabled: boolean;
+  /**
    * Whether the instance enables service accounts, and with them automations
    * that run as a service account.
    */
   isServiceAccountsEnabled: boolean;
+  /**
+   * Whether git connections are individual rows (`feature_flags.enable_oauth_v2_login`),
+   * so a user can have several of one type, such as two GitLab hosts.
+   */
+  isOauthV2LoginEnabled: boolean;
+  /** Whether the instance turns Factories on (`feature_flags.enable_factories`). */
+  isFactoriesEnabled: boolean;
 }
 
 export async function fetchCloudIntegrationsConfig(): Promise<CloudIntegrationsConfig> {
@@ -270,7 +284,10 @@ export async function fetchCloudIntegrationsConfig(): Promise<CloudIntegrationsC
       enable_linear?: boolean;
       deployment_mode?: string;
       enable_org_mcp_servers?: boolean;
+      enable_agent_profiles_page?: boolean;
       enable_service_accounts?: boolean;
+      enable_oauth_v2_login?: boolean;
+      enable_factories?: boolean;
     };
   }>({
     backend,
@@ -286,8 +303,12 @@ export async function fetchCloudIntegrationsConfig(): Promise<CloudIntegrationsC
     deploymentMode: config.feature_flags?.deployment_mode ?? null,
     isOrgMcpServersEnabled:
       config.feature_flags?.enable_org_mcp_servers === true,
+    isAgentProfilesEnabled:
+      config.feature_flags?.enable_agent_profiles_page === true,
     isServiceAccountsEnabled:
       config.feature_flags?.enable_service_accounts === true,
+    isOauthV2LoginEnabled: config.feature_flags?.enable_oauth_v2_login === true,
+    isFactoriesEnabled: config.feature_flags?.enable_factories === true,
   };
 }
 

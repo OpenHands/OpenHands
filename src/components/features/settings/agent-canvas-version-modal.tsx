@@ -18,6 +18,9 @@ import DockerIcon from "#/icons/docker.svg?react";
 import NpmIcon from "#/icons/npm.svg?react";
 import { I18nKey } from "#/i18n/declaration";
 import { cn } from "#/utils/utils";
+import { statusToneBadgeClassName } from "#/utils/status-tone-classes";
+import { copyToClipboard } from "#/utils/copy-to-clipboard";
+import { displayErrorToast } from "#/utils/custom-toast-handlers";
 
 const COPY_FEEDBACK_MS = 2000;
 
@@ -81,8 +84,11 @@ export function AgentCanvasVersionModal({
     }
   }, [selectedTab]);
 
-  const copyCommand = React.useCallback(() => {
-    void navigator.clipboard?.writeText(command);
+  const copyCommand = React.useCallback(async () => {
+    if (!(await copyToClipboard(command))) {
+      displayErrorToast(t(I18nKey.CHAT_INTERFACE$CHAT_MESSAGE_COPY_FAILED));
+      return;
+    }
     setCopied(true);
     if (copiedTimeoutRef.current !== null) {
       window.clearTimeout(copiedTimeoutRef.current);
@@ -91,7 +97,7 @@ export function AgentCanvasVersionModal({
       setCopied(false);
       copiedTimeoutRef.current = null;
     }, COPY_FEEDBACK_MS);
-  }, [command]);
+  }, [command, t]);
 
   return (
     <ModalBackdrop
@@ -107,7 +113,7 @@ export function AgentCanvasVersionModal({
         <header className="flex items-center gap-3 pr-8">
           {updateAvailable ? (
             <ArrowUpCircle
-              className="size-7 shrink-0 text-[#3B82F6]"
+              className="size-7 shrink-0 text-info dark:text-canvas-update"
               aria-hidden
             />
           ) : (
@@ -124,7 +130,12 @@ export function AgentCanvasVersionModal({
             )}
           </h2>
           {updateAvailable && latestVersion ? (
-            <span className="rounded-full bg-[#1E3A5F] px-2 py-0.5 text-xs font-semibold text-[#3B82F6]">
+            <span
+              className={cn(
+                "rounded-full border border-info/30 px-2 py-0.5 text-xs font-semibold dark:border-transparent dark:bg-canvas-update-surface dark:text-canvas-update",
+                statusToneBadgeClassName.info,
+              )}
+            >
               {latestVersion}
             </span>
           ) : null}
@@ -132,7 +143,7 @@ export function AgentCanvasVersionModal({
 
         <div className="flex flex-col gap-1">
           {updateAvailable && latestVersion ? (
-            <p className="text-sm text-[var(--oh-text)]">
+            <p className="text-sm text-canvas-version-copy">
               {t(I18nKey.SETTINGS$VERSION_UPDATE_MESSAGE, {
                 installed: installedVersion,
                 latest: latestVersion,
@@ -141,7 +152,7 @@ export function AgentCanvasVersionModal({
                 href={AGENT_CANVAS_RELEASE_NOTES_URL}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center gap-1.5 whitespace-nowrap font-medium text-contrast hover:text-[var(--oh-text)]"
+                className="inline-flex items-center gap-1.5 whitespace-nowrap font-medium text-contrast hover:text-canvas-version-copy"
               >
                 {t(I18nKey.SETTINGS$VERSION_RELEASE_NOTES)}
                 <ExternalLink className="size-4 shrink-0" aria-hidden />
@@ -149,7 +160,7 @@ export function AgentCanvasVersionModal({
             </p>
           ) : (
             <>
-              <p className="text-sm text-[var(--oh-text)]">
+              <p className="text-sm text-canvas-version-copy">
                 {t(I18nKey.SETTINGS$VERSION_INSTALLED, {
                   version: installedVersion,
                 })}
@@ -161,7 +172,7 @@ export function AgentCanvasVersionModal({
                     href={AGENT_CANVAS_RELEASE_NOTES_URL}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1.5 font-medium text-contrast hover:text-[var(--oh-text)]"
+                    className="inline-flex items-center gap-1.5 font-medium text-contrast hover:text-canvas-version-copy"
                   >
                     {t(I18nKey.SETTINGS$VERSION_RELEASE_NOTES)}
                     <ExternalLink className="size-4 shrink-0" aria-hidden />
@@ -226,7 +237,7 @@ export function AgentCanvasVersionModal({
             <button
               type="button"
               onClick={onCheckForUpdates}
-              className="inline-flex items-center gap-2 text-sm font-medium text-contrast hover:text-[var(--oh-text)] disabled:cursor-wait disabled:text-muted"
+              className="inline-flex items-center gap-2 text-sm font-medium text-contrast hover:text-canvas-version-copy disabled:cursor-wait disabled:text-muted"
               disabled={isChecking}
             >
               {t(I18nKey.SETTINGS$VERSION_CHECK_FOR_UPDATES)}

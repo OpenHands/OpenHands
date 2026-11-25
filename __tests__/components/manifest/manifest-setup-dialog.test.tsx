@@ -28,9 +28,13 @@ const mocks = vi.hoisted(() => ({
   capabilities: vi.fn(),
   llmProfiles: vi.fn(),
   nativeIntegrations: vi.fn(),
-  missingCreateEndpoints: vi.fn<(entry: SetupEntry) => string[]>(() => []),
+  instanceConfig: vi.fn(),
+  missingCreateEndpoints: vi.fn<
+    (entry: SetupEntry, action?: string | null) => string[]
+  >(() => []),
   tracking: {
     trackAutomationSetupOpened: vi.fn(),
+    trackAutomationSetupBlocked: vi.fn(),
     trackAutomationSetupValidated: vi.fn(),
     trackAutomationSetupCreated: vi.fn(),
     trackAutomationSetupFailed: vi.fn(),
@@ -49,6 +53,11 @@ vi.mock("#/contexts/active-backend-context", () => ({
     backend: { id: "local-1", kind: "local" },
     orgId: null,
   }),
+}));
+
+// External deployment configuration is controlled; the availability hook runs for real.
+vi.mock("#/hooks/query/use-cloud-integrations-config", () => ({
+  useCloudIntegrationsConfig: () => mocks.instanceConfig(),
 }));
 
 vi.mock("#/hooks/query/use-manifest-capabilities", () => ({
@@ -146,16 +155,16 @@ const CUSTOM_AUTOMATION_ENTRY = AUTOMATION_CATALOG.find(
 
 function renderDialog(entry: SetupEntry = ENTRY) {
   const user = userEvent.setup();
-  render(
-    <QueryClientProvider
-      client={
-        new QueryClient({ defaultOptions: { queries: { retry: false } } })
-      }
-    >
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  const dialog = () => (
+    <QueryClientProvider client={client}>
       <SetupDialog entry={entry} onClose={vi.fn()} />
-    </QueryClientProvider>,
+    </QueryClientProvider>
   );
-  return { user };
+  const view = render(dialog());
+  return { user, rerender: () => view.rerender(dialog()) };
 }
 
 /** Answer the two required fields the entry ships without a default. */
@@ -172,6 +181,7 @@ beforeEach(() => {
   // clearAllMocks resets calls, not implementations, so the one case that
   // stubs a manifest without the bundle endpoints would leak into the rest.
   mocks.missingCreateEndpoints.mockReturnValue([]);
+  mocks.instanceConfig.mockReturnValue({ data: undefined });
   mocks.prerequisites.mockReturnValue(NOTHING_TO_CONNECT);
   mocks.nativeIntegrations.mockReturnValue(NO_NATIVE_INTEGRATIONS);
   mocks.capabilities.mockReturnValue({
@@ -337,6 +347,101 @@ const LLM_PROFILE_ENTRY: SetupEntry = (() => {
 })();
 
 describe("SetupDialog", () => {
+  it("does not count unresolved prerequisites as a blocked setup", () => {
+    const blocked = {
+      ...NOTHING_TO_CONNECT,
+      blockingIntegrations: [
+        {
+          id: "github",
+          requirement: { message: "Connect GitHub" },
+          entry: null,
+        },
+      ],
+      isBlocked: true,
+    };
+    mocks.prerequisites.mockReturnValue({ ...blocked, isLoading: true });
+    const { rerender } = renderDialog();
+    expect(mocks.tracking.trackAutomationSetupBlocked).not.toHaveBeenCalled();
+
+    mocks.prerequisites.mockReturnValue(NOTHING_TO_CONNECT);
+    rerender();
+    expect(mocks.tracking.trackAutomationSetupBlocked).not.toHaveBeenCalled();
+
+    mocks.prerequisites.mockReturnValue(blocked);
+    rerender();
+    rerender();
+    expect(
+      mocks.tracking.trackAutomationSetupBlocked,
+    ).toHaveBeenCalledExactlyOnceWith({
+      automationId: ENTRY.id,
+      stage: "prerequisites",
+      reason: "github",
+      errorCode: "prerequisites_blocked",
+    });
+  });
+
+  it("does not count an initial action that discovery replaces as unsupported", () => {
+    const entry = createSetupEntry({
+      setup: createSetup({
+        actions: {
+          upload: {
+            label: "Upload",
+            help: "Upload a bundle",
+            features: [],
+            args: {},
+            tarballPath: "bundle.tar.gz",
+            entrypoint: "python main.py",
+          },
+          prompt: {
+            label: "Prompt",
+            help: "Run a prompt",
+            features: [],
+            args: {},
+            prompt: "Watch widgets",
+          },
+        },
+      }),
+    });
+    mocks.missingCreateEndpoints.mockImplementation((_entry, action) =>
+      action === "upload" ? ["uploads"] : [],
+    );
+    mocks.capabilities.mockReturnValue({
+      ...UNSUPPORTED,
+      supported: "unknown",
+      isLoading: true,
+    });
+    const { rerender } = renderDialog(entry);
+    expect(mocks.tracking.trackAutomationSetupBlocked).not.toHaveBeenCalled();
+
+    mocks.capabilities.mockReturnValue({
+      capabilities: ACTION_CAPABILITIES,
+      supported: true,
+      unmet: [],
+      isLoading: false,
+    });
+    rerender();
+    expect(screen.getByTestId("setup-field-widgetName")).toBeInTheDocument();
+    expect(mocks.tracking.trackAutomationSetupBlocked).not.toHaveBeenCalled();
+  });
+
+  it("waits for capability discovery before counting an unsupported setup", () => {
+    mocks.capabilities.mockReturnValue({ ...UNSUPPORTED, isLoading: true });
+    const { rerender } = renderDialog();
+    expect(mocks.tracking.trackAutomationSetupBlocked).not.toHaveBeenCalled();
+
+    mocks.capabilities.mockReturnValue(UNSUPPORTED);
+    rerender();
+    rerender();
+    expect(
+      mocks.tracking.trackAutomationSetupBlocked,
+    ).toHaveBeenCalledExactlyOnceWith({
+      automationId: ENTRY.id,
+      stage: "prerequisites",
+      reason: "webhookDelivery",
+      errorCode: "unsupported",
+    });
+  });
+
   it("offers agent profiles only for actions that accept them", async () => {
     mocks.capabilities.mockReturnValue({
       capabilities: ACTION_CAPABILITIES,
@@ -533,6 +638,13 @@ describe("SetupDialog", () => {
     ).toHaveTextContent("SETUP$VALIDATION_REQUIRED");
     expect(AutomationService.validateDraft).not.toHaveBeenCalled();
     expect(screen.queryByTestId("setup-review")).toBeNull();
+    expect(mocks.tracking.trackAutomationSetupBlocked).toHaveBeenCalledWith({
+      automationId: ENTRY.id,
+      stage: "form",
+      reason: "local_validation",
+      field: "widgetName",
+      errorCode: "required",
+    });
   });
 
   it("creates from the derived payload and opens what was created", async () => {
@@ -734,6 +846,12 @@ describe("SetupDialog", () => {
 
     // Assert
     expect(screen.queryByTestId("setup-fallback-conversation")).toBeNull();
+    expect(mocks.tracking.trackAutomationSetupBlocked).toHaveBeenCalledWith({
+      automationId: ENTRY.id,
+      stage: "prerequisites",
+      reason: "webhookDelivery",
+      errorCode: "unsupported",
+    });
   });
 
   it("carries a repository typed but not added through to the review step", async () => {
@@ -770,6 +888,12 @@ describe("SetupDialog", () => {
       "createBundle, uploads",
     );
     expect(screen.queryByTestId("setup-field-widgetName")).toBeNull();
+    expect(mocks.tracking.trackAutomationSetupBlocked).toHaveBeenCalledWith({
+      automationId: BUNDLE_ENTRY.id,
+      stage: "prerequisites",
+      reason: "createBundle,uploads",
+      errorCode: "unsupported",
+    });
   });
 
   it("returns a rejected create to the field the service blamed", async () => {
@@ -808,6 +932,13 @@ describe("SetupDialog", () => {
     );
     expect(screen.queryByTestId("setup-review")).toBeNull();
     expect(mocks.navigate).not.toHaveBeenCalled();
+    expect(mocks.tracking.trackAutomationSetupBlocked).toHaveBeenCalledWith({
+      automationId: ENTRY.id,
+      stage: "submit",
+      reason: "service_validation",
+      field: "schedule",
+      errorCode: "service_error",
+    });
   });
 
   it("omits a connected provider's secret-name field on a self-hosted instance and still names the default", async () => {
@@ -906,4 +1037,93 @@ it("creates a bundle with an optional selected agent profile", async () => {
   expect(mocks.runAction.mock.calls[0][1]).toMatchObject({
     agent_profile_id: "review-profile",
   });
+});
+
+it.each([false, true])(
+  "respects backend profile availability (%s) in template setup",
+  async (enabled) => {
+    mocks.instanceConfig.mockReturnValue({
+      data: { deploymentMode: "self_hosted", isAgentProfilesEnabled: enabled },
+    });
+    mocks.capabilities.mockReturnValue({
+      capabilities: ACTION_CAPABILITIES,
+      supported: true,
+      unmet: [],
+      isLoading: false,
+    });
+    renderDialog(BUNDLE_ENTRY);
+    expect(Boolean(screen.queryByTestId("automation-agent-profile"))).toBe(
+      enabled,
+    );
+  },
+);
+
+it("drops a selected profile from review and submission when backend availability changes", async () => {
+  mocks.capabilities.mockReturnValue({
+    capabilities: ACTION_CAPABILITIES,
+    supported: true,
+    unmet: [],
+    isLoading: false,
+  });
+  const { user } = renderDialog(BUNDLE_ENTRY);
+  await fillForm(user);
+  await user.click(screen.getByTestId("automation-agent-profile"));
+  await user.click(await screen.findByRole("option", { name: "Reviewer" }));
+  mocks.instanceConfig.mockReturnValue({
+    data: { deploymentMode: "self_hosted", isAgentProfilesEnabled: false },
+  });
+  await user.type(screen.getByTestId("setup-field-widgetName"), " updated");
+  expect(
+    screen.queryByTestId("automation-agent-profile"),
+  ).not.toBeInTheDocument();
+  await user.click(screen.getByTestId("setup-continue-button"));
+  await screen.findByTestId("setup-review");
+  await user.click(screen.getByTestId("setup-continue-button"));
+  expect(mocks.runAction.mock.calls[0][1].agent_profile_id).toBe("");
+  expect(mocks.runAction.mock.calls[0][2]).not.toHaveProperty(
+    "agent_profile_id",
+  );
+});
+
+it("cancels queued profile preflight when eligibility changes", async () => {
+  mocks.capabilities.mockReturnValue({
+    capabilities: ACTION_CAPABILITIES,
+    supported: true,
+    unmet: [],
+    isLoading: false,
+  });
+  const { user, rerender } = renderDialog(BUNDLE_ENTRY);
+  await fillForm(user);
+  await user.click(screen.getByTestId("automation-agent-profile"));
+  await user.click(await screen.findByRole("option", { name: "Reviewer" }));
+  await user.click(screen.getByTestId("setup-field-widgetName"));
+  await user.tab();
+  vi.mocked(AutomationService.validateDraft).mockClear();
+  mocks.instanceConfig.mockReturnValue({
+    data: { deploymentMode: "self_hosted", isAgentProfilesEnabled: false },
+  });
+  rerender();
+  await new Promise((resolve) => setTimeout(resolve, 500));
+  expect(AutomationService.validateDraft).not.toHaveBeenCalled();
+});
+
+it("returns to form when reviewed execution inputs change", async () => {
+  mocks.capabilities.mockReturnValue({
+    capabilities: ACTION_CAPABILITIES,
+    supported: true,
+    unmet: [],
+    isLoading: false,
+  });
+  const { user, rerender } = renderDialog(BUNDLE_ENTRY);
+  await fillForm(user);
+  await user.click(screen.getByTestId("automation-agent-profile"));
+  await user.click(await screen.findByRole("option", { name: "Reviewer" }));
+  await user.click(screen.getByTestId("setup-continue-button"));
+  await screen.findByTestId("setup-review");
+  mocks.instanceConfig.mockReturnValue({
+    data: { deploymentMode: "self_hosted", isAgentProfilesEnabled: false },
+  });
+  rerender();
+  expect(screen.queryByTestId("setup-review")).not.toBeInTheDocument();
+  expect(mocks.runAction).not.toHaveBeenCalled();
 });
