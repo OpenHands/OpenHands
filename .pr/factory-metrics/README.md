@@ -14,7 +14,7 @@ and the reference material needed to revise it.
 
 ```
 index.html          built output: charts as static SVG, no script
-src/index.html      editable source: 14 sheets, inline <style>, build-time chart script
+src/index.html      editable source: 15 sheets, inline <style>, build-time chart script
 src/build.py        renders src/index.html to ../index.html
 reference/          inputs the design was derived from (see reference/README.md)
 ```
