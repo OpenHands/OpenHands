@@ -312,6 +312,72 @@ describe("MetaProfileEditor", () => {
     expect(screen.getByTestId("meta-profile-save")).toBeEnabled();
   });
 
+  it("keeps a typed classifier that is not a saved profile", async () => {
+    const user = userEvent.setup();
+    const onSave = vi.fn();
+    renderWithProviders(
+      <MetaProfileEditor
+        mode="edit"
+        initialName="balanced"
+        initialConfig={FILLED}
+        availableProfiles={AVAILABLE}
+        isSaving={false}
+        onSave={onSave}
+        onCancel={vi.fn()}
+      />,
+    );
+
+    const classifier = screen.getByTestId("meta-profile-classifier-input");
+    await user.clear(classifier);
+    await user.type(classifier, "qa-classifier");
+    expect(classifier).toHaveValue("qa-classifier");
+    expect(
+      screen.queryByRole("option", { name: "qa-classifier" }),
+    ).not.toBeInTheDocument();
+
+    await user.click(screen.getByTestId("meta-profile-name-input"));
+    expect(classifier).toHaveValue("qa-classifier");
+
+    const save = screen.getByTestId("meta-profile-save");
+    expect(save).toBeEnabled();
+    await user.click(save);
+
+    expect(onSave).toHaveBeenCalledWith(
+      "balanced",
+      { ...FILLED, classifier_model: "qa-classifier" },
+      null,
+    );
+  });
+
+  it("selects a saved profile picked from the classifier list", async () => {
+    const user = userEvent.setup();
+    const onSave = vi.fn();
+    renderWithProviders(
+      <MetaProfileEditor
+        mode="edit"
+        initialName="balanced"
+        initialConfig={FILLED}
+        availableProfiles={AVAILABLE}
+        isSaving={false}
+        onSave={onSave}
+        onCancel={vi.fn()}
+      />,
+    );
+
+    const classifier = screen.getByTestId("meta-profile-classifier-input");
+    await user.clear(classifier);
+    await user.type(classifier, "deep");
+    await user.click(await screen.findByRole("option", { name: "deepseek" }));
+    expect(classifier).toHaveValue("deepseek");
+
+    await user.click(screen.getByTestId("meta-profile-save"));
+    expect(onSave).toHaveBeenCalledWith(
+      "balanced",
+      { ...FILLED, classifier_model: "deepseek" },
+      null,
+    );
+  });
+
   it("calls onCancel when Cancel is clicked", async () => {
     const user = userEvent.setup();
     const onCancel = vi.fn();

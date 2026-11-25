@@ -399,6 +399,7 @@ function requireDirectConversationInfo(item: unknown): DirectConversationInfo {
     sub_conversation_ids: normalizeSubConversationIds(
       item.sub_conversation_ids,
     ),
+    parent_conversation_id: stringOrNull(item.parent_conversation_id),
     // SDK-runtime ACP model fields (populated when the agent-server supports
     // ``ConversationInfo.current_model_*``). Consumed by the conversation
     // adapter to drive the per-card chip's model text. Older agent-servers
@@ -547,6 +548,23 @@ export interface CreateConversationOptions {
 }
 
 class AgentServerConversationService {
+  static async answerAskUser(
+    conversationId: string,
+    askId: string,
+    answer: { optionIndex?: number; text?: string },
+    runtime?: ConversationRuntimeContext | null,
+  ) {
+    if (
+      getActiveBackend().backend.kind === "cloud" &&
+      (!runtime?.conversationUrl || !runtime.sessionApiKey)
+    ) {
+      throw new Error("Conversation sandbox is still starting.");
+    }
+    return new ConversationClient(
+      getAgentServerClientOptions(runtime ?? {}),
+    ).answerAskUser(conversationId, askId, answer);
+  }
+
   static async sendMessage(
     conversationId: string,
     message: SendMessageRequest,
@@ -647,6 +665,9 @@ class AgentServerConversationService {
         selected_repository: metadata?.selected_repository ?? null,
         selected_branch: metadata?.selected_branch ?? null,
         git_provider: metadata?.git_provider ?? null,
+        ...(metadata?.git_provider_id != null
+          ? { git_provider_id: metadata.git_provider_id }
+          : {}),
         plugins: plugins ?? null,
         parent_conversation_id: parentConversationId ?? null,
         agent_type: agentType,
@@ -1031,6 +1052,7 @@ class AgentServerConversationService {
     repository: string | null,
     branch?: string | null,
     gitProvider?: Provider | null,
+    gitProviderId?: number | null,
   ): Promise<AppConversation> {
     // Cloud conversations keep the repository on the server, so other
     // browsers and server features see it. Best effort: an older server can
@@ -1043,6 +1065,7 @@ class AgentServerConversationService {
           repository,
           branch ?? null,
           gitProvider ?? null,
+          gitProviderId,
         );
       } catch (error) {
         console.warn(
@@ -1052,12 +1075,15 @@ class AgentServerConversationService {
       }
     }
     if (repository) {
-      const existing = getStoredConversationMetadata(conversationId);
+      // The previous id belongs to the previous repository, so drop it.
+      const { git_provider_id: _previous, ...existing } =
+        getStoredConversationMetadata(conversationId) ?? {};
       setStoredConversationMetadata(conversationId, {
-        ...(existing ?? {}),
+        ...existing,
         selected_repository: repository,
         selected_branch: branch ?? null,
         git_provider: gitProvider ?? null,
+        ...(gitProviderId != null ? { git_provider_id: gitProviderId } : {}),
       });
     } else {
       removeStoredConversationMetadata(conversationId);

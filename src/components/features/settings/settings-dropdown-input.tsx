@@ -13,6 +13,7 @@ interface SettingsDropdownInputProps {
   name: string;
   items: { key: React.Key; label: string }[];
   label?: ReactNode;
+  ariaLabel?: string;
   wrapperClassName?: string;
   placeholder?: string;
   showOptionalTag?: boolean;
@@ -20,6 +21,12 @@ interface SettingsDropdownInputProps {
   isLoading?: boolean;
   defaultSelectedKey?: string;
   selectedKey?: string | null;
+  /**
+   * Controls the text in the input. Pass it together with ``selectedKey``
+   * when ``allowsCustomValue`` text is the field's value: with only the
+   * selection controlled, a selected key that matches no item resets the
+   * input to "".
+   */
   inputValue?: string;
   defaultInputValue?: string;
   isClearable?: boolean;
@@ -70,12 +77,14 @@ function OpenOnClickInput({
   name,
   className,
   placeholder,
+  ariaLabel,
   onFocus,
 }: {
   testId: string;
   name: string;
   className?: string;
   placeholder?: string;
+  ariaLabel?: string;
   onFocus?: React.FocusEventHandler<HTMLInputElement>;
 }) {
   const state = useContext(ComboBoxStateContext);
@@ -85,6 +94,7 @@ function OpenOnClickInput({
       name={name}
       className={className}
       placeholder={placeholder}
+      aria-label={ariaLabel}
       onFocus={onFocus}
       onClick={() => {
         if (state && !state.isOpen) state.open(null, "manual");
@@ -96,6 +106,7 @@ function OpenOnClickInput({
 export function SettingsDropdownInput({
   testId,
   label,
+  ariaLabel,
   wrapperClassName,
   name,
   items,
@@ -107,7 +118,10 @@ export function SettingsDropdownInput({
   selectedKey,
   inputValue,
   defaultInputValue,
-  isClearable = false,
+  // HeroUI v2's Autocomplete was clearable by default; the v3 ComboBox port
+  // restored that default so callers keep the clear affordance unless they
+  // explicitly opt out (#19648).
+  isClearable = true,
   allowsCustomValue,
   required,
   onSelectionChange,
@@ -132,7 +146,7 @@ export function SettingsDropdownInput({
       <ComboBox
         menuTrigger="focus"
         allowsEmptyCollection
-        aria-label={typeof label === "string" ? label : name}
+        aria-label={ariaLabel ?? (typeof label === "string" ? label : name)}
         defaultItems={items}
         defaultSelectedKey={defaultSelectedKey}
         selectedKey={selectedKey}
@@ -160,6 +174,7 @@ export function SettingsDropdownInput({
             name={name}
             className="border-0 bg-transparent shadow-none outline-none focus:ring-0 focus-visible:ring-0 data-[focused=true]:ring-0"
             placeholder={isLoading ? t(I18nKey.HOME$LOADING) : placeholder}
+            ariaLabel={ariaLabel}
           />
           <ClearButton
             isClearable={isClearable}

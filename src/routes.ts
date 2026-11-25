@@ -21,6 +21,8 @@ export default [
     route("apps", "routes/canvas-extensions.tsx"),
     route("extensions/:extensionName/*", "routes/canvas-extension-page.tsx"),
     route("mcp", "routes/mcp.tsx"),
+    route("projects", "routes/projects.tsx"),
+    route("projects/:projectId", "routes/project.tsx"),
     route("settings", "routes/settings.tsx", [
       index("routes/settings-index.tsx"),
       route("llm", "routes/llm-settings.tsx"),
@@ -32,6 +34,7 @@ export default [
       route("verification", "routes/verification-settings.tsx"),
       route("runtime", "routes/runtime-settings.tsx"),
       route("app", "routes/app-settings.tsx"),
+      route("experimental", "routes/experimental-settings.tsx"),
       route("secrets", "routes/secrets-settings.tsx"),
     ]),
     route("oauth/device/verify", "routes/device-verify.tsx"),
@@ -42,6 +45,9 @@ export default [
     route("automations/new/:automationId", "routes/automation-setup-route.tsx"),
     route("automations/setup", "routes/automation-setup-new.tsx"),
     route("automations/:automationId", "routes/automation-detail.tsx"),
+    route("factories", "routes/factories-list.tsx"),
+    route("factories/:factoryId", "routes/factory-detail.tsx"),
+    route("factories/:factoryId/worklogs", "routes/factory-worklogs.tsx"),
     // Unknown URLs (including /settings/<x>) render inside the app shell.
     route("*", "routes/not-found.tsx"),
   ]),

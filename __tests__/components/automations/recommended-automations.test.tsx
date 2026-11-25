@@ -257,6 +257,7 @@ describe("recommended automations", () => {
       );
 
     expect(cardIds).toEqual([
+      "cve-remediation-factory",
       "github-pr-reviewer",
       "custom-automation",
       "github-issue-to-pr",
@@ -280,9 +281,11 @@ describe("recommended automations", () => {
       "github-delivery-watchdog",
       "github-issue-triage",
       "upstream-fork-sync",
+      "gitlab-mr-reviewer",
       "incident-retrospective-drafter",
       "github-stale-ci-pr-closer",
       "github-comment-cleanup",
+      "gitlab-prd-refiner",
     ]);
   });
 
@@ -298,7 +301,7 @@ describe("recommended automations", () => {
     const suggestedHeading = screen.getByText(
       I18nKey.RECOMMENDED_AUTOMATIONS$SUGGESTED_TITLE,
     ).parentElement!;
-    expect(within(suggestedHeading).getByText("6")).toBeInTheDocument();
+    expect(within(suggestedHeading).getByText("7")).toBeInTheDocument();
     expect(
       screen.getByText(I18nKey.RECOMMENDED_AUTOMATIONS$SECTION_DESCRIPTION),
     ).toBeInTheDocument();
@@ -309,7 +312,7 @@ describe("recommended automations", () => {
     expect(moreHeading).toHaveTextContent(
       I18nKey.RECOMMENDED_AUTOMATIONS$MORE_TITLE,
     );
-    expect(within(moreHeading).getByText("20")).toBeInTheDocument();
+    expect(within(moreHeading).getByText("22")).toBeInTheDocument();
 
     const moreSection = screen.getByTestId(
       "recommended-automations-beta-section",

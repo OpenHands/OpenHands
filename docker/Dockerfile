@@ -44,9 +44,11 @@ COPY . .
 # VITE_WORKING_DIR is the base directory for per-conversation working dirs. It
 # must be absolute and inside a volume so they outlive the container (#18960).
 ARG VITE_POSTHOG_API_KEY=""
+ARG VITE_POSTHOG_SURVEY_ID=""
 ARG VITE_BASE_PATH="/canvas"
 ARG VITE_WORKING_DIR="/home/openhands/.openhands/agent-canvas/workspaces"
 ENV VITE_POSTHOG_API_KEY=${VITE_POSTHOG_API_KEY}
+ENV VITE_POSTHOG_SURVEY_ID=${VITE_POSTHOG_SURVEY_ID}
 ENV VITE_BASE_PATH=${VITE_BASE_PATH}
 ENV VITE_WORKING_DIR=${VITE_WORKING_DIR}
 RUN npm run build
@@ -102,7 +104,7 @@ USER root
 # Refresh inherited packages so the final image includes available security
 # fixes. asyncpg publishes wheels for the supported Python and architectures
 # and implements the PostgreSQL protocol directly, so no libpq package is needed.
-ARG DEBIAN_SNAPSHOT=20261108T000000Z
+ARG DEBIAN_SNAPSHOT=20261114T000000Z
 RUN if command -v apt-get >/dev/null 2>&1; then \
       printf '%s\n' \
         'Types: deb' \

@@ -13,7 +13,10 @@ import type {
   AutomationSetupTriggerKind,
   AutomationSetupFrequency,
 } from "#/api/automation-setup-types";
-import type { AutomationRepository } from "#/types/automation";
+import type {
+  AutomationRepository,
+  AutomationVisibility,
+} from "#/types/automation";
 import { readAutomationRepositories } from "#/utils/automation-preset-sources";
 
 const AUTOMATION_FORM_SESSION_CHANGED_EVENT =
@@ -78,6 +81,10 @@ function isAutomationSetupKind(value: unknown): value is AutomationSetupKind {
   );
 }
 
+function isAutomationVisibility(value: unknown): value is AutomationVisibility {
+  return value === "organization" || value === "private";
+}
+
 function normalizeString(value: unknown): string | null {
   return typeof value === "string" ? value : null;
 }
@@ -112,6 +119,9 @@ function normalizeFormPatch(value: unknown): AutomationSetupFormPatch {
   }
   if (typeof source.showTimeout === "boolean") {
     form.showTimeout = source.showTimeout;
+  }
+  if (isAutomationVisibility(source.visibility)) {
+    form.visibility = source.visibility;
   }
   return form;
 }
@@ -188,10 +198,16 @@ function normalizeDraft(value: AutomationSetupDraft): AutomationSetupDraft {
       : null;
   const serverDraftId =
     typeof value.serverDraftId === "string" ? value.serverDraftId.trim() : "";
+  const savedDraftRequestKey =
+    serverDraftId && typeof value.savedDraftRequestKey === "string"
+      ? value.savedDraftRequestKey
+      : "";
   const materializedAutomationId =
     typeof value.materializedAutomationId === "string"
       ? value.materializedAutomationId.trim()
       : null;
+  const factoryId =
+    typeof value.factoryId === "string" ? value.factoryId.trim() : "";
   const appliedAgentEventIds = Array.isArray(value.appliedAgentEventIds)
     ? [
         ...new Set(
@@ -215,8 +231,13 @@ function normalizeDraft(value: AutomationSetupDraft): AutomationSetupDraft {
       ? { canUpdateRepositories: true }
       : {}),
     ...(existingEventTrigger ? { existingEventTrigger } : {}),
+    ...(isAutomationVisibility(value.existingVisibility)
+      ? { existingVisibility: value.existingVisibility }
+      : {}),
     ...(serverDraftId ? { serverDraftId } : {}),
+    ...(savedDraftRequestKey ? { savedDraftRequestKey } : {}),
     ...(materializedAutomationId ? { materializedAutomationId } : {}),
+    ...(factoryId ? { factoryId } : {}),
     ...(fieldMetadata ? { fieldMetadata } : {}),
     ...(appliedAgentEventIds && appliedAgentEventIds.length > 0
       ? { appliedAgentEventIds }
@@ -267,6 +288,19 @@ export function setAutomationFormSessionRepositories(
   sessions.set(
     conversationId,
     normalizeDraft({ ...existing, existingRepositories: repositories }),
+  );
+}
+
+/** Record the request last saved to the session's server draft. */
+export function setAutomationFormSessionSavedDraftRequestKey(
+  conversationId: string,
+  savedDraftRequestKey: string,
+) {
+  const existing = sessions.get(conversationId);
+  if (!existing) return;
+  sessions.set(
+    conversationId,
+    normalizeDraft({ ...existing, savedDraftRequestKey }),
   );
 }
 
@@ -407,6 +441,10 @@ export function subscribeAutomationFormSession(
   window.addEventListener(AUTOMATION_FORM_SESSION_CHANGED_EVENT, handler);
   return () =>
     window.removeEventListener(AUTOMATION_FORM_SESSION_CHANGED_EVENT, handler);
+}
+
+export function __resetAutomationFormSessionsForTests(): void {
+  sessions.clear();
 }
 
 export function clearAutomationFormSession(conversationId: string) {

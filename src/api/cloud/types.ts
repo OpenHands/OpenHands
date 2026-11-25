@@ -14,6 +14,12 @@ export interface CloudOrganization {
    * "visible" — only an explicit `false` hides an org.
    */
   is_visible?: boolean;
+  /**
+   * Whether members can discover the conversations shared with the org in
+   * the Shared list. An Org Admin turns it off on Settings > Organization.
+   * An app-server that predates the setting omits it, which means "on".
+   */
+  enable_shared_conversation_discovery?: boolean;
 }
 
 export interface CloudOrganizationsResponse {
@@ -33,6 +39,21 @@ export interface CloudOrganizationMember {
   email?: string | null;
   role?: string;
   status?: string;
+}
+
+/**
+ * Subset of the caller's own budget that the GUI reads. Returned by
+ * `GET /api/organizations/{orgId}/budgets/me`. `enabled` is false when the
+ * organization budget is off, and no other field is set then.
+ */
+export interface CloudMyBudget {
+  enabled: boolean;
+  /** The caller's own monthly limit, in USD. */
+  monthly_limit?: number | null;
+  /** The organization's monthly limit, in USD. */
+  org_monthly_limit?: number | null;
+  /** Admin-written guidance for a member who reaches either limit. */
+  limit_reached_instructions?: string | null;
 }
 
 /**

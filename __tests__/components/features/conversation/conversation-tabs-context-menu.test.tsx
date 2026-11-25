@@ -28,6 +28,11 @@ vi.mock("#/hooks/use-task-list", () => ({
   }),
 }));
 
+let mockProjectId: string | undefined;
+vi.mock("#/hooks/query/use-conversation-project", () => ({
+  useConversationProjectId: () => mockProjectId,
+}));
+
 vi.mock("#/hooks/use-is-archived-conversation", () => ({
   useIsArchivedConversation: () => false,
 }));
@@ -151,6 +156,7 @@ describe("ConversationTabsContextMenu", () => {
     localStorage.clear();
     __resetActiveStoreForTests();
     mockHasTaskList = false;
+    mockProjectId = undefined;
     useConversationStore.setState({
       selectedTab: "files",
       isRightPanelShown: true,
@@ -182,6 +188,18 @@ describe("ConversationTabsContextMenu", () => {
     }
 
     expect(screen.queryByText("FILES$DIFF_VIEW")).not.toBeInTheDocument();
+  });
+
+  it("lists the Project tab only in a project conversation", () => {
+    const { unmount } = render(
+      <ConversationTabsContextMenu isOpen={true} onClose={vi.fn()} />,
+    );
+    expect(screen.queryByText("PROJECTS$PROJECT_TAB")).not.toBeInTheDocument();
+    unmount();
+
+    mockProjectId = "aa000000000040008000000000000001";
+    render(<ConversationTabsContextMenu isOpen={true} onClose={vi.fn()} />);
+    expect(screen.getByText("PROJECTS$PROJECT_TAB")).toBeInTheDocument();
   });
 
   it("should show the Planner entry when the active backend is cloud", () => {

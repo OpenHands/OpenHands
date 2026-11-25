@@ -18,7 +18,14 @@ vi.mock("#/hooks/use-conversation-id", () => ({
   }),
 }));
 
+let mockProjectId: string | undefined;
+vi.mock("#/hooks/query/use-conversation-project", () => ({
+  useConversationProjectId: () => mockProjectId,
+}));
 
+vi.mock("#/routes/project-tab", () => ({
+  default: () => <div data-testid="project-tab-content">Project</div>,
+}));
 
 // Mock lazy-loaded components
 vi.mock("#/routes/files-tab", () => ({
@@ -26,7 +33,8 @@ vi.mock("#/routes/files-tab", () => ({
 }));
 
 // Control for lazy loading test
-let pendingBrowserTab: { promise: Promise<void>; resolve: () => void } | null = null;
+let pendingBrowserTab: { promise: Promise<void>; resolve: () => void } | null =
+  null;
 vi.mock("#/routes/browser-tab", () => ({
   default: () => {
     if (pendingBrowserTab) {
@@ -61,7 +69,9 @@ describe("ConversationTabContent", () => {
   const createWrapper = () => {
     return ({ children }: { children: React.ReactNode }) => (
       <MemoryRouter initialEntries={["/conversations/test-conversation-id"]}>
-        <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+        <QueryClientProvider client={queryClient}>
+          {children}
+        </QueryClientProvider>
       </MemoryRouter>
     );
   };
@@ -82,6 +92,7 @@ describe("ConversationTabContent", () => {
     useConversationStore.setState({ selectedTab: "files" });
     // Reset conversation ID
     mockConversationId = "test-conversation-id-123";
+    mockProjectId = undefined;
   });
 
   afterEach(() => {
@@ -120,6 +131,33 @@ describe("ConversationTabContent", () => {
       await waitFor(() => {
         expect(screen.getByTestId("files-tab-content")).toBeInTheDocument();
       });
+    });
+  });
+
+  describe("Project tab", () => {
+    it("shows the project in a project conversation", async () => {
+      mockProjectId = "aa000000000040008000000000000001";
+      setSelectedTab("project");
+
+      render(<ConversationTabContent />, { wrapper: createWrapper() });
+
+      expect(
+        await screen.findByTestId("project-tab-content"),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole("tabpanel", { name: "PROJECTS$PROJECT_TAB" }),
+      ).toBeInTheDocument();
+    });
+
+    it("falls back to Files once the conversation is in no project", async () => {
+      setSelectedTab("project");
+
+      render(<ConversationTabContent />, { wrapper: createWrapper() });
+
+      expect(
+        await screen.findByTestId("files-tab-content"),
+      ).toBeInTheDocument();
+      expect(screen.queryByTestId("project-tab-content")).toBeNull();
     });
   });
 

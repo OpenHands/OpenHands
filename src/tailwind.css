@@ -28,6 +28,9 @@
 }
 
 @theme inline {
+  /* Colour emoji first, for reaction chips: theme fonts can carry plain emoji glyphs. */
+  --font-emoji:
+    "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif;
   /* HeroUI utilities its imported component CSS applies, on Canvas tokens.
      Radius scale stays Canvas-owned; only HeroUI's field/shadow slots map. */
   --color-overlay: var(--overlay);
@@ -156,6 +159,10 @@
   --color-on-accent: var(--oh-accent-foreground);
   --color-info: var(--oh-info);
   --color-warning: var(--oh-warning);
+  /* Existing update feedback colors and the version dialog's host text hook. */
+  --color-canvas-update: #3b82f6;
+  --color-canvas-update-surface: #1e3a5f;
+  --color-canvas-version-copy: var(--oh-text);
 
   /* Status badge / banner pairs (see status-tone-classes.ts) */
   --color-success-soft: var(--oh-success-soft);
@@ -1028,8 +1035,10 @@ code .token {
   max-height: 85vh;
 }
 
+/* The repository row is a size container, so the menu opened from its start
+   stays within the row however deeply the card nests it. */
 @utility automation-setup-repository-menu {
-  width: min(28rem, calc(100vw - 3rem));
+  width: min(28rem, 100cqw);
 }
 
 /* Command palette geometry and effects keep their viewport and filter composition. */
@@ -1278,6 +1287,10 @@ code .token {
 
 @utility onboarding-viewport-height {
   max-height: 90vh;
+}
+
+@utility onboarding-step-height {
+  max-height: calc(90vh - 7rem);
 }
 
 @utility dialog-content-height {
