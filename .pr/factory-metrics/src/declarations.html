@@ -190,6 +190,10 @@ pre.json .hl{background:rgba(224,36,94,.16);border-radius:3px;padding:0 3px}
 pre.json .pinref{margin-left:8px;vertical-align:1px}
 .plate .why{margin:12px 0 0;font-size:13px;color:var(--ink2);max-width:104ch;line-height:1.6}
 .plate .why .pinref{vertical-align:-3px;margin:0 2px}
+.ab .facts{font:11.5px/1.5 var(--mono);color:var(--muted);width:300px}
+.ab .fp{display:flex;gap:8px;flex-wrap:wrap;width:300px}
+.ab .fp .b{font-size:13px;line-height:20px;padding:3px 10px}
+.ab .fl{font:11.5px/1.5 var(--mono);color:var(--muted);width:300px}
 @media (max-width:1100px){.plate-g{grid-template-columns:1fr}}
 </style>
 </head>
@@ -199,6 +203,7 @@ pre.json .pinref{margin-left:8px;vertical-align:1px}
   <h2>Sheets</h2>
   <a href="#s01"><b>01</b>Reading guide</a>
   <a href="#s02"><b>02</b>Count (MC-01)</a>
+  <a href="#s03"><b>03</b>Aggregations</a>
 </nav>
 <main>
 <section class="cover">
@@ -208,7 +213,7 @@ pre.json .pinref{margin-left:8px;vertical-align:1px}
     <p>Companion to the card design sheet (<code>index.html</code> in the same folder). That sheet says what a card looks like. This page says how a plugin declares it.</p>
   </div>
   <div class="tb"><dl>
-    <dt>Sheets</dt><dd>2: reading guide and Count. Number with trend, sparkline and percent follow.</dd>
+    <dt>Sheets</dt><dd>3: reading guide, Count and aggregations. Number with trend, sparkline and percent follow.</dd>
     <dt>Manifest</dt><dd><code>.plugin/plugin.json</code>, key <code>automation.outcomes</code></dd>
     <dt>Status</dt><dd>As of 2026-11-25. Nothing here is built.</dd>
   </dl></div>
@@ -352,6 +357,163 @@ pre.json .pinref{margin-left:8px;vertical-align:1px}
       <p class="why">One metric, two cards. The metric says what the number is. A card says how to show it. Cards <span class="pinref">a</span> and <span class="pinref">b</span> read the same metric with different windows. Remove card <span class="pinref">b</span> and the metric and card <span class="pinref">a</span> stay. Remove the metric while a card uses it, and the service refuses with 409.</p>
     </div>
     <div class="note">Card keys are unique in a factory. Install adds a suggested card only when its key is free, and never overwrites a card an admin has edited. A manifest that declares <code>outcomes</code> fails to install on a service that does not support it.</div>
+  </div>
+</section>
+<section class="sheet" id="s03">
+  <header><span class="no">03</span><h2>Aggregations</h2><span class="sub">How the facts in a window become the number on a card. Eight examples.</span></header>
+  <div class="body">
+    <p>An aggregation turns the facts in the window into one number. The metric names a default, and a card can set its own. Each example below is a card on the left and the manifest lines that set it up on the right. The two metrics come first, with their facts. The facts do not change from one example to the next.</p>
+
+    <div class="plate first">
+      <div class="plate-h"><b>The metrics · a number metric</b><span class="chips"><span class="chip ext">new: manifest</span></span></div>
+      <div class="plate-g">
+        <div class="ab flat"><span class="cap">facts</span><div class="fl">pr_lines · facts in the last 30 days, oldest first</div><div class="fp"><span class="b n">100</span><span class="b n">40</span><span class="b n">300</span><span class="b n">60</span></div></div>
+        <div><div class="mf-cap">.plugin/plugin.json · automation.outcomes</div><pre class="json">&quot;outcomes&quot;: {
+  &quot;keys&quot;: {
+    &quot;pr_lines&quot;: {
+      &quot;type&quot;: &quot;number&quot;,
+      &quot;label&quot;: &quot;Lines changed per PR&quot;,
+      &quot;description&quot;: &quot;Lines changed in one merged PR&quot;,
+      &quot;unit&quot;: &quot;count&quot;,
+      &quot;direction&quot;: &quot;neutral&quot;,
+      <span class="hl">&quot;aggregation&quot;: &quot;sum&quot;</span>
+    }
+  }
+}</pre></div>
+      </div>
+      <p class="why">A metric holds facts. This one gets one fact for each merged PR. The window holds four facts. The highlighted <code>aggregation</code> is the default for cards that do not set their own. Every number on this sheet comes from these four facts, so you can check each one by hand.</p>
+    </div>
+    <div class="plate">
+      <div class="plate-h"><b>The metrics · a boolean metric</b><span class="chips"><span class="chip ext">new: manifest</span></span></div>
+      <div class="plate-g">
+        <div class="ab flat"><span class="cap">facts</span><div class="fl">review_passed · facts in the last 30 days</div><div class="fp"><span class="b good">true</span><span class="b good">true</span><span class="b bad">false</span><span class="b good">true</span><span class="b bad">false</span></div></div>
+        <div><div class="mf-cap">.plugin/plugin.json · automation.outcomes</div><pre class="json">&quot;outcomes&quot;: {
+  &quot;keys&quot;: {
+    &quot;review_passed&quot;: {
+      &quot;type&quot;: &quot;boolean&quot;,
+      &quot;label&quot;: &quot;Review passed&quot;,
+      &quot;description&quot;: &quot;True when the author accepted the review&quot;,
+      &quot;unit&quot;: &quot;count&quot;,
+      &quot;direction&quot;: &quot;up_is_good&quot;,
+      <span class="hl">&quot;aggregation&quot;: &quot;count_true&quot;</span>
+    }
+  }
+}</pre></div>
+      </div>
+      <p class="why">A second metric, for the boolean examples. It has five facts: three true and two false.</p>
+    </div>
+    <div class="plate">
+      <div class="plate-h"><b>A · sum</b><span class="chips"><span class="chip merged">merged</span><span class="chip ext">new: manifest</span></span></div>
+      <div class="plate-g">
+        <div class="ab flat"><span class="cap">A · card · 1:1</span><div style="position:relative;width:300px"><div class="mc"><div class="t"><span class="tx">Lines changed, 30 days</span></div><div class="v">500</div></div><span class="pin" style="left:0;top:54px">2</span></div><div class="facts">100 + 40 + 300 + 60 = 500</div></div>
+        <div><div class="mf-cap">.plugin/plugin.json · automation.outcomes.suggested_cards[ ]</div><pre class="json">{ &quot;key&quot;: &quot;lines-changed-30-days&quot;,
+  &quot;title&quot;: &quot;Lines changed, 30 days&quot;,
+  &quot;source&quot;: { &quot;type&quot;: &quot;outcomes&quot;, &quot;metric&quot;: &quot;pr_lines&quot; },
+  &quot;display&quot;: &quot;number&quot;,
+  <span class="hl">&quot;window&quot;: &quot;30d&quot; }</span><span class="pinref">2</span></pre></div>
+      </div>
+      <p class="why">Adds the numbers. This is the metric default, so the card has no <code>aggregation</code> line. <span class="pinref">2</span> The value is the default aggregation over the <code>30d</code> window.</p>
+    </div>
+    <div class="plate">
+      <div class="plate-h"><b>B · avg</b><span class="chips"><span class="chip merged">merged</span><span class="chip ext">new: manifest</span></span></div>
+      <div class="plate-g">
+        <div class="ab flat"><span class="cap">B · card · 1:1</span><div style="position:relative;width:300px"><div class="mc"><div class="t"><span class="tx">Average PR size</span></div><div class="v">125</div></div><span class="pin" style="left:0;top:54px">2</span></div><div class="facts">(100 + 40 + 300 + 60) ÷ 4 = 125</div></div>
+        <div><div class="mf-cap">.plugin/plugin.json · automation.outcomes.suggested_cards[ ]</div><pre class="json">{ &quot;key&quot;: &quot;average-pr-size&quot;,
+  &quot;title&quot;: &quot;Average PR size&quot;,
+  &quot;source&quot;: { &quot;type&quot;: &quot;outcomes&quot;, &quot;metric&quot;: &quot;pr_lines&quot; },
+  &quot;display&quot;: &quot;number&quot;,
+  <span class="hl">&quot;aggregation&quot;: &quot;avg&quot;,</span><span class="pinref">2</span>
+  <span class="hl">&quot;window&quot;: &quot;30d&quot; }</span><span class="pinref">2</span></pre></div>
+      </div>
+      <p class="why">The mean of the numbers. <span class="pinref">2</span> The card sets <code>aggregation: avg</code>, which overrides the metric default. The metric does not change.</p>
+    </div>
+    <div class="plate">
+      <div class="plate-h"><b>C · min</b><span class="chips"><span class="chip merged">merged</span><span class="chip ext">new: manifest</span></span></div>
+      <div class="plate-g">
+        <div class="ab flat"><span class="cap">C · card · 1:1</span><div style="position:relative;width:300px"><div class="mc"><div class="t"><span class="tx">Smallest PR</span></div><div class="v">40</div></div><span class="pin" style="left:0;top:54px">2</span></div><div class="facts">smallest of 100, 40, 300, 60 = 40</div></div>
+        <div><div class="mf-cap">.plugin/plugin.json · automation.outcomes.suggested_cards[ ]</div><pre class="json">{ &quot;key&quot;: &quot;smallest-pr&quot;,
+  &quot;title&quot;: &quot;Smallest PR&quot;,
+  &quot;source&quot;: { &quot;type&quot;: &quot;outcomes&quot;, &quot;metric&quot;: &quot;pr_lines&quot; },
+  &quot;display&quot;: &quot;number&quot;,
+  <span class="hl">&quot;aggregation&quot;: &quot;min&quot;,</span><span class="pinref">2</span>
+  <span class="hl">&quot;window&quot;: &quot;30d&quot; }</span><span class="pinref">2</span></pre></div>
+      </div>
+      <p class="why">The lowest number in the window. It needs a number metric.</p>
+    </div>
+    <div class="plate">
+      <div class="plate-h"><b>D · max</b><span class="chips"><span class="chip merged">merged</span><span class="chip ext">new: manifest</span></span></div>
+      <div class="plate-g">
+        <div class="ab flat"><span class="cap">D · card · 1:1</span><div style="position:relative;width:300px"><div class="mc"><div class="t"><span class="tx">Largest PR</span></div><div class="v">300</div></div><span class="pin" style="left:0;top:54px">2</span></div><div class="facts">largest of 100, 40, 300, 60 = 300</div></div>
+        <div><div class="mf-cap">.plugin/plugin.json · automation.outcomes.suggested_cards[ ]</div><pre class="json">{ &quot;key&quot;: &quot;largest-pr&quot;,
+  &quot;title&quot;: &quot;Largest PR&quot;,
+  &quot;source&quot;: { &quot;type&quot;: &quot;outcomes&quot;, &quot;metric&quot;: &quot;pr_lines&quot; },
+  &quot;display&quot;: &quot;number&quot;,
+  <span class="hl">&quot;aggregation&quot;: &quot;max&quot;,</span><span class="pinref">2</span>
+  <span class="hl">&quot;window&quot;: &quot;30d&quot; }</span><span class="pinref">2</span></pre></div>
+      </div>
+      <p class="why">The highest number in the window. It needs a number metric.</p>
+    </div>
+    <div class="plate">
+      <div class="plate-h"><b>E · count</b><span class="chips"><span class="chip merged">merged</span><span class="chip ext">new: manifest</span></span></div>
+      <div class="plate-g">
+        <div class="ab flat"><span class="cap">E · card · 1:1</span><div style="position:relative;width:300px"><div class="mc"><div class="t"><span class="tx">PRs merged, 30 days</span></div><div class="v">4</div></div><span class="pin" style="left:0;top:54px">2</span></div><div class="facts">four facts = 4</div></div>
+        <div><div class="mf-cap">.plugin/plugin.json · automation.outcomes.suggested_cards[ ]</div><pre class="json">{ &quot;key&quot;: &quot;prs-merged-30-days&quot;,
+  &quot;title&quot;: &quot;PRs merged, 30 days&quot;,
+  &quot;source&quot;: { &quot;type&quot;: &quot;outcomes&quot;, &quot;metric&quot;: &quot;pr_lines&quot; },
+  &quot;display&quot;: &quot;number&quot;,
+  <span class="hl">&quot;aggregation&quot;: &quot;count&quot;,</span><span class="pinref">2</span>
+  <span class="hl">&quot;window&quot;: &quot;30d&quot; }</span><span class="pinref">2</span></pre></div>
+      </div>
+      <p class="why">Counts the facts and ignores their values. It works on a metric of any type. Here each fact is one merged PR.</p>
+    </div>
+    <div class="plate">
+      <div class="plate-h"><b>F · count_true</b><span class="chips"><span class="chip merged">merged</span><span class="chip ext">new: manifest</span></span></div>
+      <div class="plate-g">
+        <div class="ab flat"><span class="cap">F · card · 1:1</span><div style="position:relative;width:300px"><div class="mc"><div class="t"><span class="tx">Reviews that passed</span></div><div class="v">3</div></div><span class="pin" style="left:0;top:54px">2</span></div><div class="facts">true, true, false, true, false → 3 true</div></div>
+        <div><div class="mf-cap">.plugin/plugin.json · automation.outcomes.suggested_cards[ ]</div><pre class="json">{ &quot;key&quot;: &quot;reviews-that-passed&quot;,
+  &quot;title&quot;: &quot;Reviews that passed&quot;,
+  &quot;source&quot;: { &quot;type&quot;: &quot;outcomes&quot;, &quot;metric&quot;: &quot;review_passed&quot; },
+  &quot;display&quot;: &quot;number&quot;,
+  <span class="hl">&quot;aggregation&quot;: &quot;count_true&quot;,</span><span class="pinref">2</span>
+  <span class="hl">&quot;window&quot;: &quot;30d&quot; }</span><span class="pinref">2</span></pre></div>
+      </div>
+      <p class="why">Counts the true values. It needs a boolean metric.</p>
+    </div>
+    <div class="plate">
+      <div class="plate-h"><b>G · count_false</b><span class="chips"><span class="chip merged">merged</span><span class="chip ext">new: manifest</span></span></div>
+      <div class="plate-g">
+        <div class="ab flat"><span class="cap">G · card · 1:1</span><div style="position:relative;width:300px"><div class="mc"><div class="t"><span class="tx">Reviews that needed changes</span></div><div class="v">2</div></div><span class="pin" style="left:0;top:54px">2</span></div><div class="facts">true, true, false, true, false → 2 false</div></div>
+        <div><div class="mf-cap">.plugin/plugin.json · automation.outcomes.suggested_cards[ ]</div><pre class="json">{ &quot;key&quot;: &quot;reviews-that-needed-changes&quot;,
+  &quot;title&quot;: &quot;Reviews that needed changes&quot;,
+  &quot;source&quot;: { &quot;type&quot;: &quot;outcomes&quot;, &quot;metric&quot;: &quot;review_passed&quot; },
+  &quot;display&quot;: &quot;number&quot;,
+  <span class="hl">&quot;aggregation&quot;: &quot;count_false&quot;,</span><span class="pinref">2</span>
+  <span class="hl">&quot;window&quot;: &quot;30d&quot; }</span><span class="pinref">2</span></pre></div>
+      </div>
+      <p class="why">Counts the false values. It needs a boolean metric.</p>
+    </div>
+    <div class="plate">
+      <div class="plate-h"><b>H · last</b><span class="chips"><span class="chip gap">gap: last</span><span class="chip ext">new: manifest</span></span></div>
+      <div class="plate-g">
+        <div class="ab flat"><span class="cap">H · card · 1:1</span><div style="position:relative;width:300px"><div class="mc"><div class="t"><span class="tx">Size of the latest PR</span></div><div class="v">60</div></div><span class="pin" style="left:0;top:54px">2</span></div><div class="facts">the newest of 100, 40, 300, 60 = 60</div></div>
+        <div><div class="mf-cap">.plugin/plugin.json · automation.outcomes.suggested_cards[ ]</div><pre class="json">{ &quot;key&quot;: &quot;size-of-the-latest-pr&quot;,
+  &quot;title&quot;: &quot;Size of the latest PR&quot;,
+  &quot;source&quot;: { &quot;type&quot;: &quot;outcomes&quot;, &quot;metric&quot;: &quot;pr_lines&quot; },
+  &quot;display&quot;: &quot;number&quot;,
+  <span class="hl">&quot;aggregation&quot;: &quot;last&quot;,</span><span class="pinref">2</span>
+  <span class="hl">&quot;window&quot;: &quot;30d&quot; }</span><span class="pinref">2</span></pre></div>
+      </div>
+      <p class="why">The most recent fact by time. Use it for a level, such as open PRs. The service has no <code>last</code> yet, so this card is not available until that gap closes.</p>
+    </div>
+
+    <h3>Which aggregation fits which metric type</h3>
+    <table class="t">
+      <tr><th>Metric type</th><th>Aggregations</th></tr>
+      <tr><td class="n"><code>number</code></td><td><code>sum</code> <code>avg</code> <code>min</code> <code>max</code> <code>count</code> <span class="chip gap">gap</span> <code>last</code></td></tr>
+      <tr><td class="n"><code>boolean</code></td><td><code>count_true</code> <code>count_false</code> <code>count</code></td></tr>
+      <tr><td class="n"><code>string</code> <code>datetime</code> <code>json</code></td><td><code>count</code></td></tr>
+    </table>
+    <div class="note">With no facts in the window, <code>sum</code>, <code>avg</code>, <code>min</code> and <code>max</code> have no value and the card shows —. <code>count</code>, <code>count_true</code> and <code>count_false</code> give 0. A card never shows 0 for a number that is missing. A card whose aggregation does not fit its metric type is refused with 422. This is a proposed rule. Percentiles such as <code>p50</code> and <code>p90</code> are a gap and are not on this sheet.</div>
   </div>
 </section>
 <footer class="doc">Drafted by an AI agent (OpenHands) on behalf of John-Mason Shackelford. Draft for discussion. Nothing here has been built or tested. Backend facts were read from <code>OpenHands/automation</code> <code>main</code> on 2026-11-25.</footer>
