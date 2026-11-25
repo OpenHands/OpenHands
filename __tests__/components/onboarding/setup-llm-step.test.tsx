@@ -196,6 +196,7 @@ const API_KEY_PROFILE_DEFAULTS = {
   auth_type: "api_key",
   subscription_vendor: null,
   provider_connection_id: null,
+  stream: true,
 };
 
 function givenActiveProfile(name: string, config: Record<string, unknown>) {
@@ -564,6 +565,7 @@ describe("SetupLlmStep", () => {
         auth_type: "subscription",
         subscription_vendor: "openai",
         provider_connection_id: null,
+        stream: true,
         temperature: 0.2,
       },
       include_secrets: true,
@@ -588,6 +590,7 @@ describe("SetupLlmStep", () => {
         auth_type: "subscription",
         subscription_vendor: "openai",
         provider_connection_id: null,
+        stream: true,
       },
       include_secrets: true,
     });
