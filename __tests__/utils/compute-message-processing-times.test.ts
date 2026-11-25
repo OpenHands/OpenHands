@@ -52,4 +52,33 @@ describe("computeAssistantProcessingTimes", () => {
     ];
     expect(computeAssistantProcessingTimes(events).get("a1")).toBe(0);
   });
+
+  it("attributes a turn's time only to its last reply", () => {
+    const events = [
+      message("u1", "user", "2026-01-01T00:00:00Z"),
+      message("a1", "agent", "2026-01-01T00:00:20Z"),
+      message("a2", "agent", "2026-01-01T00:02:00Z"),
+      message("a3", "agent", "2026-01-01T00:04:00Z"),
+    ];
+
+    const result = computeAssistantProcessingTimes(events);
+    expect(result.has("a1")).toBe(false);
+    expect(result.has("a2")).toBe(false);
+    expect(result.get("a3")).toBe(4 * 60_000);
+  });
+
+  it("measures each turn independently from its own user message", () => {
+    const events = [
+      message("u1", "user", "2026-01-01T00:00:00Z"),
+      message("a1", "agent", "2026-01-01T00:00:10Z"),
+      message("a2", "agent", "2026-01-01T00:00:30Z"),
+      message("u2", "user", "2026-01-01T00:05:00Z"),
+      message("a3", "agent", "2026-01-01T00:05:45Z"),
+    ];
+
+    const result = computeAssistantProcessingTimes(events);
+    expect(result.has("a1")).toBe(false);
+    expect(result.get("a2")).toBe(30_000);
+    expect(result.get("a3")).toBe(45_000);
+  });
 });

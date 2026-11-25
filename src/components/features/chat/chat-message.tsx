@@ -44,6 +44,8 @@ interface ChatMessageProps {
   processingTimeMs?: number;
   /** Start time for the live elapsed timer shown while the reply streams. */
   liveStartTimestamp?: string;
+  /** Whether to show the timestamp by default (e.g. a time gap or new day). */
+  showTimestamp?: boolean;
   /** The message is a reply still being streamed in. */
   isStreaming?: boolean;
 }
@@ -63,6 +65,7 @@ export function ChatMessage({
   timestamp,
   processingTimeMs,
   liveStartTimestamp,
+  showTimestamp,
   isStreaming = false,
 }: React.PropsWithChildren<ChatMessageProps>) {
   const { t } = useTranslation("openhands");
@@ -294,6 +297,8 @@ export function ChatMessage({
         !isPendingUserMessage && (
           <MessageTimestamp
             timestamp={timestamp}
+            active={isHovering}
+            showAlways={showTimestamp}
             align={type === "user" ? "right" : "left"}
             suffix={
               type === "agent" && processingTimeMs != null

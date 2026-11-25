@@ -12,38 +12,49 @@ const toTimestampMs = (timestamp?: string): number | null => {
 };
 
 /**
- * Maps each assistant message event id to how long its request took: the
- * elapsed time (ms) between the most recent preceding user message and that
- * reply. Only `source === "agent"` message events receive an entry; a reply
- * with no preceding user message (e.g. history is only partially loaded) is
- * skipped.
+ * Maps the LAST assistant message of each turn to how long that request took:
+ * the elapsed time (ms) between the turn's user message and that final reply.
+ * Intermediate assistant messages in a turn (progress updates) receive no
+ * entry, so a single "took ~Xs" appears per request rather than one under every
+ * update. A reply with no preceding user message (e.g. history only partially
+ * loaded) is skipped.
  */
 export const computeAssistantProcessingTimes = (
   events: OpenHandsEvent[],
 ): Map<string, number> => {
   const processingTimes = new Map<string, number>();
-  let lastUserTimestampMs: number | null = null;
+  let turnStartMs: number | null = null;
+  let lastReplyId: string | null = null;
+  let lastReplyMs: number | null = null;
+
+  const finalizeTurn = () => {
+    if (turnStartMs !== null && lastReplyId !== null && lastReplyMs !== null) {
+      processingTimes.set(lastReplyId, Math.max(0, lastReplyMs - turnStartMs));
+    }
+  };
 
   for (const event of events) {
     if (isUserMessageEvent(event)) {
-      lastUserTimestampMs = toTimestampMs(event.timestamp);
+      finalizeTurn();
+      turnStartMs = toTimestampMs(event.timestamp);
+      lastReplyId = null;
+      lastReplyMs = null;
       continue;
     }
 
     if (
       isMessageEvent(event) &&
       event.source === "agent" &&
-      lastUserTimestampMs !== null
+      turnStartMs !== null
     ) {
       const replyMs = toTimestampMs(event.timestamp);
       if (replyMs !== null) {
-        processingTimes.set(
-          event.id,
-          Math.max(0, replyMs - lastUserTimestampMs),
-        );
+        lastReplyId = event.id;
+        lastReplyMs = replyMs;
       }
     }
   }
 
+  finalizeTurn();
   return processingTimes;
 };

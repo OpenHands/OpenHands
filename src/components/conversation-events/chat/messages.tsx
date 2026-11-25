@@ -50,6 +50,7 @@ import {
 } from "#/components/features/chat/row-expansion-context";
 import { cn } from "#/utils/utils";
 import { computeAssistantProcessingTimes } from "#/utils/compute-message-processing-times";
+import { computeMessageGaps } from "#/utils/compute-message-gaps";
 import { formatClock } from "#/utils/format-clock";
 import { useMessageExpansionStore } from "#/stores/message-expansion-store";
 import {
@@ -264,17 +265,12 @@ export const Messages: React.FC<MessagesProps> = React.memo(
       [messages],
     );
 
-    // The current turn's start: the timestamp of the most recent user message.
-    // Drives the live elapsed timer while the agent works on that turn.
-    const turnStartTimestamp = React.useMemo(() => {
-      for (let i = messages.length - 1; i >= 0; i -= 1) {
-        const event = messages[i];
-        if (isMessageEvent(event) && event.source === "user") {
-          return event.timestamp;
-        }
-      }
-      return undefined;
-    }, [messages]);
+    // Messages whose timestamp is shown by default (a real time gap or a new
+    // day since the previous message); other messages keep hover-only times.
+    const showTimestampByEventId = React.useMemo(
+      () => computeMessageGaps(messages),
+      [messages],
+    );
 
     // Set of event ids that have a /model entry anchored to them — used to
     // avoid mounting <ModelMessages> for every event (the component would
@@ -338,6 +334,39 @@ export const Messages: React.FC<MessagesProps> = React.memo(
     const { isPlanningAgentRunning } = usePlanningAgentState();
     const isAgentRunning =
       curAgentState === AgentState.RUNNING || isPlanningAgentRunning;
+
+    // The current run's start, for the live timer. We lock it in when the agent
+    // begins running so a follow-up user message mid-run doesn't reset the
+    // clock. `wasRunningRef` starts false, so the first effect pass also treats
+    // an already-running mount (page reload) as a fresh start, falling back to
+    // the latest user message timestamp.
+    const latestUserMessageTimestamp = React.useMemo(() => {
+      for (let i = messages.length - 1; i >= 0; i -= 1) {
+        const event = messages[i];
+        if (isMessageEvent(event) && event.source === "user") {
+          return event.timestamp;
+        }
+      }
+      return undefined;
+    }, [messages]);
+
+    const [runStartTimestamp, setRunStartTimestamp] = React.useState<
+      string | undefined
+    >(undefined);
+    const wasRunningRef = React.useRef(false);
+
+    React.useEffect(() => {
+      const wasRunning = wasRunningRef.current;
+      wasRunningRef.current = isAgentRunning;
+
+      if (isAgentRunning && !wasRunning) {
+        setRunStartTimestamp(latestUserMessageTimestamp);
+      } else if (!isAgentRunning) {
+        setRunStartTimestamp(undefined);
+      }
+    }, [isAgentRunning, latestUserMessageTimestamp]);
+
+    const turnStartTimestamp = isAgentRunning ? runStartTimestamp : undefined;
     // Fold consecutive action/observation events into collapsible groups so a
     // long sequence of tool calls doesn't dominate the chat scroll. The trailing
     // run uses `minSize` 1 while the agent works, so the stage it is on is a
@@ -528,9 +557,10 @@ export const Messages: React.FC<MessagesProps> = React.memo(
               processingTimeMs={
                 event.id ? processingTimeByEventId.get(event.id) : undefined
               }
-              liveStartTimestamp={
-                isAgentRunning ? turnStartTimestamp : undefined
+              showTimestamp={
+                event.id ? showTimestampByEventId.has(event.id) : false
               }
+              liveStartTimestamp={turnStartTimestamp}
               suppressReasoning={groupedReasoningIds.has(
                 isObservationEvent(event) || isUserRejectObservation(event)
                   ? event.action_id
