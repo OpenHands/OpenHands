@@ -197,7 +197,8 @@ pre.json .pinref{margin-left:8px;vertical-align:1px}
 <div class="shell">
 <nav class="toc" aria-label="Sheets">
   <h2>Sheets</h2>
-  <a href="#s01"><b>01</b>Count (MC-01)</a>
+  <a href="#s01"><b>01</b>Reading guide</a>
+  <a href="#s02"><b>02</b>Count (MC-01)</a>
 </nav>
 <main>
 <section class="cover">
@@ -207,15 +208,38 @@ pre.json .pinref{margin-left:8px;vertical-align:1px}
     <p>Companion to the card design sheet (<code>index.html</code> in the same folder). That sheet says what a card looks like. This page says how a plugin declares it.</p>
   </div>
   <div class="tb"><dl>
-    <dt>Sheets</dt><dd>1 (Count). Number with trend, sparkline and percent follow.</dd>
+    <dt>Sheets</dt><dd>2: reading guide and Count. Number with trend, sparkline and percent follow.</dd>
     <dt>Manifest</dt><dd><code>.plugin/plugin.json</code>, key <code>automation.outcomes</code></dd>
     <dt>Status</dt><dd>As of 2026-11-25. Nothing here is built.</dd>
   </dl></div>
 </section>
 <section class="sheet" id="s01">
-  <header><span class="no">01</span><h2>Count (MC-01)</h2><span class="sub">How a plugin manifest sets up a Count card. Four examples.</span></header>
+  <header><span class="no">01</span><h2>Reading guide</h2><span class="sub">How to read the pins and the labels on the sheets that follow.</span></header>
   <div class="body">
-    <p>Left is the card as the factory page shows it, drawn 1:1. Right is the part of the plugin manifest that sets it up. A pin joins a manifest line to the part of the card it controls. Pin <span class="pinref">5</span> has no place on the card. Every manifest field on this sheet is <span class="chip ext">new</span>. The backend chips say what the service supports today.</p>
+    <h3>Pins</h3>
+    <p>A pin joins a line of the manifest to the part of the card it controls. The numbers mean the same on every sheet.</p>
+    <table class="t">
+      <tr><td style="width:150px"><span class="pinref">1</span></td><td>The card title. It comes from the card, not from the metric.</td></tr>
+      <tr><td><span class="pinref">2</span></td><td>The value. The metric <code>aggregation</code> and the card <code>window</code> decide it together.</td></tr>
+      <tr><td><span class="pinref">3</span></td><td>The hint line. It comes from the metric <code>description</code>.</td></tr>
+      <tr><td><span class="pinref">4</span></td><td>The link. The whole card becomes a link, and a chevron shows.</td></tr>
+      <tr><td><span class="pinref">5</span></td><td>No place on the card. It says where the number comes from (<code>from</code>).</td></tr>
+      <tr><td><span class="pinref">a</span> <span class="pinref">b</span></td><td>Letters mark separate cards when one example has more than one card.</td></tr>
+    </table>
+    <h3>Labels</h3>
+    <p>Two kinds of label sit at the top right of each example. One says if the manifest field is proposed. The other says if the service can do the work today.</p>
+    <table class="t">
+      <tr><td style="width:150px"><span class="chip ext">new</span> <span class="chip ext">new: manifest</span></td><td>A manifest field proposed by this page. The manifest schema does not have it today. It rejects fields it does not know.</td></tr>
+      <tr><td><span class="chip merged">merged</span></td><td>The service does this work in <code>OpenHands/automation</code> <code>main</code> today, for example an aggregation.</td></tr>
+      <tr><td><span class="chip open">open PR</span></td><td>The work is in an open pull request and not on <code>main</code>.</td></tr>
+      <tr><td><span class="chip gap">gap</span></td><td>The card needs it and no pull request provides it yet. The text after the colon says what is missing.</td></tr>
+    </table>
+  </div>
+</section>
+<section class="sheet" id="s02">
+  <header><span class="no">02</span><h2>Count (MC-01)</h2><span class="sub">How a plugin manifest sets up a Count card. Four examples.</span></header>
+  <div class="body">
+    <p>Left is the card as the factory page shows it, drawn 1:1. Right is the part of the plugin manifest that sets it up. Sheet 01 explains the pins and the labels.</p>
 
     <div class="plate first">
       <div class="plate-h"><b>A · A total over all time</b><span class="chips"><span class="chip merged">merged</span><span class="chip ext">new: manifest</span></span></div>
