@@ -116,6 +116,50 @@ describe("hook execution event message", () => {
     },
   );
 
+  it("resolves hook detail labels to the muted role, not the subtle token", () => {
+    renderHookEvent({
+      hook_command: "check-policy",
+      success: false,
+      blocked: true,
+      exit_code: 1,
+      reason: "denied",
+      stdout: "out",
+      stderr: "err",
+      error: "oops",
+      additional_context: "ctx",
+    });
+
+    const labelKeys = [
+      I18nKey.HOOK$COMMAND,
+      I18nKey.HOOK$EXIT_CODE,
+      I18nKey.HOOK$BLOCKED_REASON,
+      I18nKey.HOOK$CONTEXT,
+      I18nKey.HOOK$ERROR,
+      I18nKey.HOOK$OUTPUT,
+      I18nKey.HOOK$STDERR,
+    ];
+
+    for (const key of labelKeys) {
+      const label = screen.getByText(`${key}:`);
+      const css = compiler.build([...label.classList]);
+      const declarations = [
+        ...css.matchAll(/\.((?:\\.|[\w-])+)\s*\{([^}]+)\}/g),
+      ]
+        .filter(([, selector]) =>
+          label.classList.contains(selector.replace(/\\(.)/g, "$1")),
+        )
+        .map(([, , body]) => body)
+        .join("\n");
+
+      const color = [...declarations.matchAll(/(?:^|\n)\s*color:\s*([^;]+);/g)]
+        .at(-1)?.[1]
+        .trim();
+
+      expect(color).not.toBe("var(--oh-text-subtle)");
+      expect(color).toBe("var(--oh-muted)");
+    }
+  });
+
   it("renders nothing for an event from another event family", () => {
     const event = {
       id: "state-event-1",
