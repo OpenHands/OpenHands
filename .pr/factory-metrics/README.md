@@ -5,6 +5,7 @@ Design discussion for the metric cards on a Factory's pages. This folder is temp
 and the reference material needed to revise it.
 
 - **Open the sheet:** `index.html` (self-contained, no script). Reviewers use the htmlpreview link in the PR body.
+- **Plugin declarations:** `declarations.html` is a second page. One sheet per card type: the card on the left, the plugin manifest that sets it up on the right.
 - **Status:** exploratory. The open decision is the range of metrics Factories will support, which narrows the
   card types worth building. Nothing here is built.
 - **Not a spec.** The Notion pages and the merged backend are inspiration. Where they disagree, the sheet says so
@@ -14,14 +15,16 @@ and the reference material needed to revise it.
 
 ```
 index.html          built output: charts as static SVG, no script
-src/index.html      editable source: 15 sheets, inline <style>, build-time chart script
-src/build.py        renders src/index.html to ../index.html
+declarations.html   built output of the plugin declaration page
+src/index.html      editable source: 14 sheets, inline <style>, build-time chart script
+src/declarations.html  editable source of the declaration page (copies the style block of src/index.html)
+src/build.py        renders both sources to ../
 reference/          inputs the design was derived from (see reference/README.md)
 ```
 
 ## Revise the design
 
-1. Edit `src/index.html` (styles are in its `<style>` block). Never edit the built `index.html` by hand.
+1. Edit `src/index.html` or `src/declarations.html` (styles are in the `<style>` block of each). Never edit a built file by hand. If you change a shared rule such as `.mc`, change it in both sources.
 2. Rebuild: `python3 .pr/factory-metrics/src/build.py` (needs `chromium` or `google-chrome`).
 3. Look at the result before pushing. Headless screenshot of the built file:
    `chromium --headless=new --no-sandbox --window-size=1600,24000 --virtual-time-budget=3000 --screenshot=out.png file://$PWD/.pr/factory-metrics/index.html`
@@ -46,7 +49,7 @@ reference/          inputs the design was derived from (see reference/README.md)
 
 ### Checks before pushing
 
-- `grep -c "<script" .pr/factory-metrics/index.html` prints `0`.
+- `grep -c "<script" .pr/factory-metrics/index.html .pr/factory-metrics/declarations.html` prints `0` for both.
 - No `.tsx` or `.css` files under `.pr/`. The PR description check treats them as frontend code and then requires screenshots. Reference copies use a `.txt` suffix, and the styles stay inline in `src/index.html`.
 - Backend claims still match `OpenHands/automation` `main`. Re-check the open PRs listed in `reference/automation/PRS.md`.
 

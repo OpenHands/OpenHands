@@ -177,21 +177,6 @@ footer.doc{margin:28px 0 8px;font-size:12px;color:var(--ink3);text-align:center}
 
 table.t.dense{font-size:12px}table.t.dense td,table.t.dense th{padding:6px 7px}table.t.dense th{white-space:normal}table.t.dense td.n{white-space:normal}table.t.dense .chip{white-space:normal;margin:1px 0}
 
-/* plugin declaration plates (sheet 15) */
-.plate{padding:20px 0;border-top:1px solid var(--rule2)}
-.plate.first{border-top:0;padding-top:4px}
-.plate-h{display:flex;align-items:baseline;gap:10px;margin:0 0 10px}
-.plate-h b{font-size:14px}
-.plate-h .chips{margin-left:auto;display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
-.plate-g{display:grid;grid-template-columns:minmax(330px,400px) minmax(0,1fr);gap:24px;align-items:stretch}
-.plate-g .ab{display:flex;flex-direction:column;justify-content:center;gap:16px;padding:40px 36px 32px}
-.mf-cap{font:11px var(--mono);color:var(--ink3);margin:0 0 4px}
-.plate pre.json{margin:0;overflow:visible}
-pre.json .hl{background:rgba(224,36,94,.16);border-radius:3px;padding:0 3px}
-pre.json .pinref{margin-left:8px;vertical-align:1px}
-.plate .why{margin:12px 0 0;font-size:13px;color:var(--ink2);max-width:104ch;line-height:1.6}
-.plate .why .pinref{vertical-align:-3px;margin:0 2px}
-@media (max-width:1100px){.plate-g{grid-template-columns:1fr}}
 /* pin <-> row highlight without script */
 #s03:has(.pin[data-pin="1"]:hover) #anat-t tr[data-pin="1"]{background:#f6f8ff}
 #s03:has(.pin[data-pin="1"]:hover) #anat-t tr[data-pin="1"] td:first-child{box-shadow:inset 3px 0 0 var(--rl)}
@@ -243,7 +228,6 @@ pre.json .pinref{margin-left:8px;vertical-align:1px}
   <a href="#s12"><b>12</b>Data contract and gaps</a>
   <a href="#s13"><b>13</b>Interaction and a11y</a>
   <a href="#s14"><b>14</b>Open questions</a>
-  <a href="#s15"><b>15</b>Declare: Count (MC-01)</a>
 </nav>
 
 <main>
@@ -256,7 +240,7 @@ pre.json .pinref{margin-left:8px;vertical-align:1px}
   </div>
   <div class="tb">
     <dl>
-      <dt>Sheets</dt><dd>15</dd>
+      <dt>Sheets</dt><dd>14</dd>
       <dt>Card types</dt><dd>9 (MC-01 to MC-09)</dd>
       <dt>Size</dt><dd>One standard card (M). The grid decides the rest.</dd>
       <dt>Theme</dt><dd>Agent Canvas dark tokens</dd>
@@ -1048,126 +1032,6 @@ Limits: key [a-zA-Z0-9_.-], ≤100 chars · ≤50 values per submission · paylo
         </tbody></table>
       </div>
     </div>
-  </div>
-</section>
-
-<!-- ============ 15 ============ -->
-<section class="sheet" id="s15">
-  <header><span class="no">15</span><h2>Declare: Count (MC-01)</h2><span class="sub">How a plugin manifest sets up a Count card. Four examples.</span></header>
-  <div class="body">
-    <p>Left is the card as the factory page shows it, drawn 1:1. Right is the part of the plugin manifest that sets it up. A pin joins a manifest line to the part of the card it controls. Pin <span class="pinref">5</span> has no place on the card. Every manifest field on this sheet is <span class="chip ext">new</span>. The backend chips say what the service supports today.</p>
-
-    <div class="plate first">
-      <div class="plate-h"><b>A · A total over all time</b><span class="chips"><span class="chip merged">merged</span><span class="chip ext">new: manifest</span></span></div>
-      <div class="plate-g">
-        <div class="ab flat"><span class="cap">A · card · 1:1</span><div style="position:relative;width:300px"><div class="mc"><div class="t"><span class="tx">Reviews posted</span></div><div class="v">148</div><div class="m" style="margin-top:4px">Reviews the agent has posted</div></div><span class="pin" style="left:0;top:24px">1</span><span class="pin" style="left:0;top:54px">2</span><span class="pin" style="left:0;top:83px">3</span></div></div>
-        <div><div class="mf-cap">.plugin/plugin.json · automation.outcomes</div><pre class="json">"outcomes": {
-  "keys": {
-    "reviews_posted": {
-      "type": "number",
-      <span class="hl">"from": "result.reviews",</span><span class="pinref">5</span>
-      "label": "Reviews posted",
-      <span class="hl">"description": "Reviews the agent has posted",</span><span class="pinref">3</span>
-      "unit": "count",
-      "direction": "up_is_good",
-      <span class="hl">"aggregation": "sum"</span><span class="pinref">2</span>
-    }
-  },
-  "suggested_cards": [{
-    "key": "reviews-total",
-    <span class="hl">"title": "Reviews posted",</span><span class="pinref">1</span>
-    "source": { "type": "outcomes", "metric": "reviews_posted" },
-    "display": "number",
-    <span class="hl">"window": "all"</span><span class="pinref">2</span>
-  }]
-}</pre></div>
-      </div>
-      <p class="why">The simplest Count card. The plugin declares one metric and one suggested card. <span class="pinref">1</span> The title comes from the card. <span class="pinref">2</span> The value is the sum of <code>reviews_posted</code> over the window, and here the window is <code>all</code>. <span class="pinref">3</span> The hint line is the metric <code>description</code>. <code>label</code> names the metric in lists and menus, and the card does not use it. <span class="pinref">5</span> <code>from</code> says where the number comes from: the <code>reviews</code> field of the run result. It has no place on the card. A plugin that posts its own values leaves <code>from</code> out. The card has no <code>link</code>, so it shows no chevron and no hover style.</p>
-    </div>
-
-    <div class="plate">
-      <div class="plate-h"><b>B · A latest value, with a link</b><span class="chips"><span class="chip gap">gap: last</span><span class="chip ext">new: manifest</span></span></div>
-      <div class="plate-g">
-        <div class="ab flat"><span class="cap">B · card · 1:1</span><div style="position:relative;width:300px"><div class="mc link"><div class="t"><span class="tx">PRs awaiting review</span></div><div class="v">12<span class="chev">↗</span></div><div class="m" style="margin-top:4px">As of the last scan</div></div><span class="pin" style="left:0;top:24px">1</span><span class="pin" style="left:0;top:54px">2</span><span class="pin" style="left:0;top:83px">3</span><span class="pin" style="left:100%;top:54px">4</span></div></div>
-        <div><div class="mf-cap">.plugin/plugin.json · automation.outcomes</div><pre class="json">"outcomes": {
-  "keys": {
-    "open_prs": {
-      "type": "number",
-      "label": "PRs awaiting review",
-      <span class="hl">"description": "As of the last scan",</span><span class="pinref">3</span>
-      "unit": "count",
-      "direction": "down_is_good",
-      <span class="hl">"aggregation": "last"</span><span class="pinref">2</span>
-    }
-  },
-  "suggested_cards": [{
-    "key": "open-prs",
-    <span class="hl">"title": "PRs awaiting review",</span><span class="pinref">1</span>
-    "source": { "type": "outcomes", "metric": "open_prs" },
-    "display": "number",
-    <span class="hl">"window": "all",</span><span class="pinref">2</span>
-    <span class="hl">"link": { "url": "https://github.com/acme/api/pulls?q=is%3Aopen+review%3Arequired" }</span><span class="pinref">4</span>
-  }]
-}</pre></div>
-      </div>
-      <p class="why">A gauge is a level, not a total. <span class="pinref">2</span> <code>aggregation: last</code> makes the card show the latest value and not a sum. <span class="pinref">4</span> <code>link</code> makes the whole card a link. A URL outside the app opens in a new tab and shows ↗ in place of ›. The service cannot compute <code>last</code> yet, so this card is not available until that gap closes.</p>
-    </div>
-
-    <div class="plate">
-      <div class="plate-h"><b>C · A count of true values in a window</b><span class="chips"><span class="chip merged">merged</span><span class="chip ext">new: manifest</span></span></div>
-      <div class="plate-g">
-        <div class="ab flat"><span class="cap">C · card · 1:1</span><div style="position:relative;width:300px"><div class="mc"><div class="t"><span class="tx">Passed review, 7 days</span></div><div class="v">31</div><div class="m" style="margin-top:4px">Reviews the author accepted</div></div><span class="pin" style="left:0;top:24px">1</span><span class="pin" style="left:0;top:54px">2</span><span class="pin" style="left:0;top:83px">3</span></div></div>
-        <div><div class="mf-cap">.plugin/plugin.json · automation.outcomes</div><pre class="json">"outcomes": {
-  "keys": {
-    "review_passed": {
-      "type": "boolean",
-      "label": "Reviews passed",
-      <span class="hl">"description": "Reviews the author accepted",</span><span class="pinref">3</span>
-      "unit": "count",
-      "direction": "up_is_good",
-      <span class="hl">"aggregation": "count_true"</span><span class="pinref">2</span>
-    }
-  },
-  "suggested_cards": [{
-    "key": "passed-7d",
-    <span class="hl">"title": "Passed review, 7 days",</span><span class="pinref">1</span>
-    "source": { "type": "outcomes", "metric": "review_passed" },
-    "display": "number",
-    <span class="hl">"window": "7d"</span><span class="pinref">2</span>
-  }]
-}</pre></div>
-      </div>
-      <p class="why">A boolean metric can drive a Count card. <span class="pinref">2</span> <code>count_true</code> counts the true values inside the window. The card <code>window</code> of <code>7d</code> sets the period, and the metric does not change. The card does not add the window to its title, so the title says it: <code>Passed review, 7 days</code>.</p>
-    </div>
-
-    <div class="plate">
-      <div class="plate-h"><b>D · One metric, two cards</b><span class="chips"><span class="chip merged">merged</span><span class="chip ext">new: manifest</span></span></div>
-      <div class="plate-g">
-        <div class="ab flat"><span class="cap">D · card · 1:1</span><div style="position:relative;width:300px"><div class="mc"><div class="t"><span class="tx">Reviews posted</span></div><div class="v">148</div><div class="m" style="margin-top:4px">Reviews the agent has posted</div></div><span class="pin" style="left:0;top:24px">a</span></div><div style="position:relative;width:300px"><div class="mc"><div class="t"><span class="tx">Reviews posted, 7 days</span></div><div class="v">23</div><div class="m" style="margin-top:4px">Reviews the agent has posted</div></div><span class="pin" style="left:0;top:24px">b</span></div></div>
-        <div><div class="mf-cap">.plugin/plugin.json · automation.outcomes</div><pre class="json">"outcomes": {
-  "keys": {
-    "reviews_posted": {
-      "type": "number",
-      "label": "Reviews posted",
-      "description": "Reviews the agent has posted",
-      "unit": "count",
-      "direction": "up_is_good",
-      "aggregation": "sum"
-    }
-  },
-  "suggested_cards": [
-    <span class="hl">{ "key": "reviews-total", "title": "Reviews posted",</span><span class="pinref">a</span>
-      "source": { "type": "outcomes", "metric": "reviews_posted" },
-      "display": "number", "window": "all" },
-    <span class="hl">{ "key": "reviews-7d", "title": "Reviews posted, 7 days",</span><span class="pinref">b</span>
-      "source": { "type": "outcomes", "metric": "reviews_posted" },
-      "display": "number", "window": "7d" }
-  ]
-}</pre></div>
-      </div>
-      <p class="why">One metric, two cards. The metric says what the number is. A card says how to show it. Cards <span class="pinref">a</span> and <span class="pinref">b</span> read the same metric with different windows. Remove card <span class="pinref">b</span> and the metric and card <span class="pinref">a</span> stay. Remove the metric while a card uses it, and the service refuses with 409.</p>
-    </div>
-    <div class="note">Card keys are unique in a factory. Install adds a suggested card only when its key is free, and never overwrites a card an admin has edited. A manifest that declares <code>outcomes</code> fails to install on a service that does not support it.</div>
   </div>
 </section>
 
