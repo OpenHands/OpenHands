@@ -40,12 +40,12 @@ interface ToolsContextMenuProps {
    */
   showAgentProfileSwitch?: boolean;
   /** When set, renders a divider and this action as the last menu item. */
-  footerAction?: {
+  footerActions?: {
     testId: string;
     icon: React.ReactNode;
     label: string;
     onClick: () => void;
-  };
+  }[];
 }
 
 export function ToolsContextMenu({
@@ -58,7 +58,7 @@ export function ToolsContextMenu({
   shouldShowHooks = false,
   shouldShowPlugins = false,
   showAgentProfileSwitch = false,
-  footerAction,
+  footerActions = [],
 }: ToolsContextMenuProps) {
   const { t } = useTranslation("openhands");
   const { data: conversation } = useActiveConversation();
@@ -269,25 +269,21 @@ export function ToolsContextMenu({
         </ArchivedDisabledTooltip>
       )}
 
-      {footerAction && (
-        <>
-          <Divider />
-          <ContextMenuListItem
-            testId={footerAction.testId}
-            onClick={(event) => {
-              event.preventDefault();
-              event.stopPropagation();
-              footerAction.onClick();
-              handleClose();
-            }}
-          >
-            <ToolsContextMenuIconText
-              icon={footerAction.icon}
-              text={footerAction.label}
-            />
-          </ContextMenuListItem>
-        </>
-      )}
+      {footerActions.length > 0 && <Divider />}
+      {footerActions.map((action) => (
+        <ContextMenuListItem
+          key={action.testId}
+          testId={action.testId}
+          onClick={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            action.onClick();
+            handleClose();
+          }}
+        >
+          <ToolsContextMenuIconText icon={action.icon} text={action.label} />
+        </ContextMenuListItem>
+      ))}
     </ContextMenu>
   );
 }

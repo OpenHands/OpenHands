@@ -14,6 +14,10 @@ import {
   displayErrorToast,
   displaySuccessToast,
 } from "#/utils/custom-toast-handlers";
+import {
+  TRANSCRIPTION_API_KEY_STORAGE_KEY,
+  TRANSCRIPTION_ENDPOINT_STORAGE_KEY,
+} from "#/utils/transcription-endpoint-storage";
 
 vi.mock("#/utils/custom-toast-handlers", () => ({
   displayErrorToast: vi.fn(),
@@ -222,6 +226,62 @@ describe("AppSettingsScreen", () => {
       expect(getBackendVersions).toHaveBeenCalledTimes(2);
       expect(getAutomationVersionInfo).toHaveBeenCalledTimes(2);
     });
+  });
+
+  it("keeps voice input auto-save separate from the application form after reload", async () => {
+    const user = userEvent.setup();
+    window.localStorage.clear();
+    window.sessionStorage.clear();
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(buildSettings());
+    const saveSettingsSpy = vi
+      .spyOn(SettingsService, "saveSettings")
+      .mockResolvedValue(true);
+
+    const { unmount } = renderAppSettingsScreen();
+    const baseUrlInput = await screen.findByTestId(
+      "transcription-base-url-input",
+    );
+    const apiKeyInput = screen.getByTestId("transcription-api-key-input");
+    const modelInput = screen.getByTestId("transcription-model-input");
+
+    expect(screen.getByTestId("voice-input-autosave-notice")).toHaveTextContent(
+      "SETTINGS$VOICE_INPUT_AUTOSAVE_NOTICE",
+    );
+    expect(baseUrlInput).toHaveAccessibleDescription(
+      "SETTINGS$VOICE_INPUT_AUTOSAVE_NOTICE",
+    );
+
+    await user.type(baseUrlInput, "http://127.0.0.1:9/v1");
+    await user.type(apiKeyInput, "fake-whisper-key");
+    await user.type(modelInput, "fake-whisper-model");
+
+    expect(screen.getByTestId("submit-button")).toBeDisabled();
+    expect(saveSettingsSpy).not.toHaveBeenCalled();
+    expect(
+      JSON.parse(
+        window.localStorage.getItem(TRANSCRIPTION_ENDPOINT_STORAGE_KEY) ?? "{}",
+      ),
+    ).toEqual({
+      baseUrl: "http://127.0.0.1:9/v1",
+      model: "fake-whisper-model",
+    });
+    expect(
+      window.sessionStorage.getItem(TRANSCRIPTION_API_KEY_STORAGE_KEY),
+    ).toBe("fake-whisper-key");
+
+    unmount();
+    renderAppSettingsScreen();
+
+    expect(
+      await screen.findByTestId("transcription-base-url-input"),
+    ).toHaveValue("http://127.0.0.1:9/v1");
+    expect(screen.getByTestId("transcription-api-key-input")).toHaveValue(
+      "fake-whisper-key",
+    );
+    expect(screen.getByTestId("transcription-model-input")).toHaveValue(
+      "fake-whisper-model",
+    );
+    expect(screen.getByTestId("submit-button")).toBeDisabled();
   });
 
   it("renders the analytics toggle as checked and disabled for cloud backends", async () => {

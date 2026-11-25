@@ -183,6 +183,8 @@ export const CONVERSATION_QUERY_KEYS = {
   ],
   paginated: (limit: number, backendId: string, orgId: string | null) =>
     ["user", "conversations", "paginated", limit, backendId, orgId] as const,
+  shared: (backendId: string, orgId: string | null) =>
+    ["user", "conversations", "shared", backendId, orgId] as const,
   startTask: (id: string | null) => ["start-task", id] as const,
   subConversations: ["v1", "sub-conversations"] as const,
 } as const;

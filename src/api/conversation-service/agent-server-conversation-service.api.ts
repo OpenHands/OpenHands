@@ -83,7 +83,10 @@ import {
   toAcpEffortChoices,
   toAcpModelOptions,
 } from "#/constants/acp-providers";
-import { isPlannerConversationOf } from "#/utils/plan-file";
+import {
+  isPlannerConversationOf,
+  LOCAL_PLANNER_PARENT_TAG_KEY,
+} from "#/utils/plan-file";
 import { buildAutomationSetupModeTags } from "#/utils/automation-draft-tags";
 import {
   AUTOMATION_SETUP_SYSTEM_SUFFIX,
@@ -374,8 +377,14 @@ function requirePathInsideDirectory(path: string, directory: string): string {
   return normalizedPath;
 }
 
+function hasConversationId(
+  item: unknown,
+): item is Record<string, unknown> & { id: string } {
+  return isRecord(item) && typeof item.id === "string" && !!item.id.trim();
+}
+
 function requireDirectConversationInfo(item: unknown): DirectConversationInfo {
-  if (!isRecord(item) || typeof item.id !== "string" || !item.id.trim()) {
+  if (!hasConversationId(item)) {
     throw invalidConversationResponse();
   }
 
@@ -399,6 +408,7 @@ function requireDirectConversationInfo(item: unknown): DirectConversationInfo {
     sub_conversation_ids: normalizeSubConversationIds(
       item.sub_conversation_ids,
     ),
+    parent_conversation_id: stringOrNull(item.parent_conversation_id),
     // SDK-runtime ACP model fields (populated when the agent-server supports
     // ``ConversationInfo.current_model_*``). Consumed by the conversation
     // adapter to drive the per-card chip's model text. Older agent-servers
@@ -409,15 +419,6 @@ function requireDirectConversationInfo(item: unknown): DirectConversationInfo {
     current_effort: stringOrNull(item.current_effort),
     available_efforts: normalizeAcpEfforts(item.available_efforts),
   };
-}
-
-function requireDirectConversationItems(
-  items: unknown,
-): DirectConversationInfo[] {
-  if (!Array.isArray(items)) {
-    throw invalidConversationResponse();
-  }
-  return items.map(requireDirectConversationInfo);
 }
 
 /**
@@ -436,26 +437,48 @@ function requireDirectConversationBatch(
   );
 }
 
-function requireConversationSearchPage(page: unknown): {
-  items: DirectConversationInfo[];
-  next_page_id: string | null;
-} {
-  if (Array.isArray(page)) {
-    return {
-      items: requireDirectConversationItems(page),
-      next_page_id: null,
-    };
-  }
-
-  if (!isRecord(page)) {
+function readConversationSearchPage(response: unknown): AppConversationPage {
+  const page = Array.isArray(response) ? { items: response } : response;
+  if (!isRecord(page) || !Array.isArray(page.items)) {
     throw invalidConversationResponse();
   }
 
-  return {
-    items: requireDirectConversationItems(page.items),
+  const result = toConversationPage({
+    items: page.items
+      .filter(hasConversationId)
+      .map(requireDirectConversationInfo),
     next_page_id:
       typeof page.next_page_id === "string" ? page.next_page_id : null,
-  };
+  });
+  if (!Array.isArray(page.broken_items)) return result;
+
+  const healthyCount = result.items.length;
+  const existingIds = new Set(result.items.map(({ id }) => id));
+  for (const rawItem of page.broken_items) {
+    if (!hasConversationId(rawItem)) continue;
+    const { reason } = rawItem;
+    if (reason !== "metadata" && reason !== "state") continue;
+    const item = requireDirectConversationInfo(rawItem);
+    if (existingIds.has(item.id) || item.tags?.[LOCAL_PLANNER_PARENT_TAG_KEY]) {
+      continue;
+    }
+    existingIds.add(item.id);
+    result.items.push({
+      ...toAppConversation(item),
+      broken_reason: reason,
+      conversation_url: null,
+      session_api_key: null,
+      execution_status: null,
+      llm_model: null,
+    });
+  }
+  if (result.items.length > healthyCount) {
+    result.items.sort(
+      (left, right) =>
+        Date.parse(right.updated_at) - Date.parse(left.updated_at),
+    );
+  }
+  return result;
 }
 
 const RUNTIME_STATUSES = new Set<string>([
@@ -1222,7 +1245,7 @@ class AgentServerConversationService {
       sort_order: ConversationSortOrder.UPDATED_AT_DESC,
     });
 
-    return toConversationPage(requireConversationSearchPage(data));
+    return readConversationSearchPage(data);
   }
 
   static createConversationDeletionScope(): ConversationDeletionScope {
@@ -1245,6 +1268,7 @@ class AgentServerConversationService {
   static async deleteConversation(
     conversationId: string,
     scope: ConversationDeletionScope = this.createConversationDeletionScope(),
+    { broken = false }: { broken?: boolean } = {},
   ): Promise<void> {
     if (scope.kind === "cloud") {
       await deleteCloudConversation(conversationId, scope);
@@ -1256,10 +1280,12 @@ class AgentServerConversationService {
     // planner helper is hidden from the conversation list by its
     // `plannerparent` tag — so without this it would survive its parent as an
     // invisible, unreachable conversation (plus its events and state).
-    const planningConversationIds = await this.getLocalPlanningConversationIds(
-      conversationId,
-      scope.client,
-    );
+    const planningConversationIds = broken
+      ? []
+      : await this.getLocalPlanningConversationIds(
+          conversationId,
+          scope.client,
+        );
 
     const { client } = scope;
     await Promise.all(

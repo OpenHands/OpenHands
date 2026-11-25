@@ -1,3 +1,4 @@
+import React from "react";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { compile } from "@tailwindcss/node";
@@ -14,6 +15,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Sidebar } from "#/components/features/sidebar/sidebar";
 import { SidebarMobileNavProvider } from "#/components/features/sidebar/sidebar-mobile-nav-context";
 import { SidebarMobileMenuBar } from "#/components/features/sidebar/sidebar-mobile-menu-bar";
+import { useCloseOnEscape } from "#/hooks/use-close-on-escape";
 import { useSidebarStore } from "#/stores/sidebar-store";
 import {
   NavigationProvider,
@@ -21,6 +23,10 @@ import {
 } from "#/context/navigation-context";
 import { getPinnedHomeRouteKey } from "#/hooks/use-pinned-home-route";
 import translations from "#/i18n/translation.json";
+
+const sidebarConversationListMockState = vi.hoisted(() => ({
+  renderNestedEscapeMenu: false,
+}));
 
 // The global `useTranslation` mock in `vitest.setup.ts` returns the key
 // as-is. Override it here so `t(...)` resolves keys via the source-of-truth
@@ -41,6 +47,15 @@ vi.mock("react-i18next", async () => {
     }),
   };
 });
+
+const factoriesSupport = vi.hoisted(() => ({ isSupported: false }));
+
+vi.mock("#/hooks/query/use-factories", () => ({
+  useFactoriesSupported: () => ({
+    isLoading: false,
+    isSupported: factoriesSupport.isSupported,
+  }),
+}));
 
 vi.mock("#/hooks/query/use-config", () => ({
   useConfig: () => ({ data: { feature_flags: {} } }),
@@ -193,9 +208,37 @@ vi.mock("#/components/features/backends/manage-backends-modal", () => ({
 }));
 
 vi.mock("#/components/features/sidebar/sidebar-conversation-list", () => ({
-  SidebarConversationList: () => (
-    <div data-testid="sidebar-conversation-list" />
-  ),
+  SidebarConversationList: () => {
+    const [menuOpen, setMenuOpen] = React.useState(false);
+    const triggerRef = React.useRef<HTMLButtonElement>(null);
+    useCloseOnEscape(
+      sidebarConversationListMockState.renderNestedEscapeMenu && menuOpen,
+      () => setMenuOpen(false),
+      triggerRef,
+    );
+
+    if (!sidebarConversationListMockState.renderNestedEscapeMenu) {
+      return <div data-testid="sidebar-conversation-list" />;
+    }
+
+    return (
+      <div data-testid="sidebar-conversation-list">
+        <button
+          ref={triggerRef}
+          type="button"
+          data-testid="nested-menu-trigger"
+          onClick={() => setMenuOpen(true)}
+        >
+          Open nested menu
+        </button>
+        {menuOpen ? (
+          <button type="button" data-testid="nested-menu-item">
+            Nested menu item
+          </button>
+        ) : null}
+      </div>
+    );
+  },
 }));
 
 vi.mock("#/hooks/use-settings-nav-items", () => ({
@@ -214,10 +257,11 @@ function getDesktopSidebar(collapsed?: boolean): HTMLElement {
   return sidebar;
 }
 
-function renderSidebar(currentPath: string) {
+function renderSidebar(currentPath: string, currentSearch = "") {
   const navigate = vi.fn();
   const value: NavigationContextValue = {
     currentPath,
+    currentSearch,
     conversationId: null,
     isNavigating: false,
     navigate,
@@ -243,11 +287,14 @@ describe("Sidebar", () => {
     // Zustand store is a module singleton; reset it so collapsed state from
     // a prior test doesn't bleed into this one.
     useSidebarStore.setState({ collapsed: false });
+    sidebarConversationListMockState.renderNestedEscapeMenu = false;
+    factoriesSupport.isSupported = false;
   });
 
   afterEach(() => {
     window.localStorage.clear();
     useSidebarStore.setState({ collapsed: false });
+    sidebarConversationListMockState.renderNestedEscapeMenu = false;
   });
 
   it("opens and closes the mobile navigation drawer from the menu button", async () => {
@@ -397,6 +444,29 @@ describe("Sidebar", () => {
     });
 
     expect(toggle).toHaveAttribute("aria-expanded", "true");
+
+    fireEvent.keyDown(document.body, { key: "Escape" });
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+  });
+
+  it("lets a nested Escape layer close before the mobile drawer", () => {
+    sidebarConversationListMockState.renderNestedEscapeMenu = true;
+    renderSidebar("/conversations");
+    const toggle = screen.getByTestId("sidebar-mobile-menu-toggle");
+    fireEvent.click(toggle);
+
+    const drawer = screen.getByTestId("sidebar-mobile-drawer");
+    const nestedTrigger = within(drawer).getByTestId("nested-menu-trigger");
+    fireEvent.click(nestedTrigger);
+    expect(within(drawer).getByTestId("nested-menu-item")).toBeInTheDocument();
+
+    fireEvent.keyDown(document.body, { key: "Escape" });
+
+    expect(
+      within(drawer).queryByTestId("nested-menu-item"),
+    ).not.toBeInTheDocument();
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+    expect(document.activeElement).toBe(nestedTrigger);
 
     fireEvent.keyDown(document.body, { key: "Escape" });
     expect(toggle).toHaveAttribute("aria-expanded", "false");
@@ -645,6 +715,53 @@ describe("Sidebar", () => {
       checklist.compareDocumentPosition(backendBar) &
         Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
+  });
+
+  it("hides the Factories link when the automation service has no factories", () => {
+    renderSidebar("/conversations");
+
+    expect(
+      screen.queryByTestId("sidebar-factories-link"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("links to the factories list when the automation service has factories", () => {
+    factoriesSupport.isSupported = true;
+
+    renderSidebar("/conversations");
+
+    const link = screen.getByTestId("sidebar-factories-link");
+    expect(link).toHaveTextContent("Factories");
+    expect(link).toHaveAttribute("href", "/factories");
+  });
+
+  it("keeps Factories selected on an automation page opened from a factory", () => {
+    factoriesSupport.isSupported = true;
+
+    renderSidebar("/automations/setup", "?factory=factory-1");
+
+    expect(screen.getByTestId("sidebar-factories-link")).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+    expect(screen.getByTestId("sidebar-automations-link")).toHaveAttribute(
+      "aria-current",
+      "false",
+    );
+  });
+
+  it("selects Automate on the same pages when no factory is in play", () => {
+    factoriesSupport.isSupported = true;
+
+    renderSidebar("/automations/setup");
+
+    expect(screen.getByTestId("sidebar-automations-link")).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+    expect(screen.getByTestId("sidebar-factories-link")).not.toHaveAttribute(
+      "aria-current",
+    );
   });
 
   it("renders icons for every top-level nav item so they remain meaningful in the collapsed rail", () => {

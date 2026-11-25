@@ -2555,6 +2555,19 @@ describe("AgentServerConversationService", () => {
       expect(result.next_page_id).toBeNull();
     });
 
+    it("preserves the parent conversation link from conversation search", async () => {
+      mockSearchConversations.mockResolvedValue([
+        makeDirectConversation({
+          id: "child-conv",
+          parent_conversation_id: "parent-conv",
+        }),
+      ]);
+
+      const result = await AgentServerConversationService.searchConversations();
+
+      expect(result.items[0]?.parent_conversation_id).toBe("parent-conv");
+    });
+
     it("preserves a string cursor from a paginated conversation search", async () => {
       mockSearchConversations.mockResolvedValue({
         items: [makeDirectConversation({ id: "page-conv" })],
@@ -2572,6 +2585,47 @@ describe("AgentServerConversationService", () => {
         page_id: "current-page",
         sort_order: "UPDATED_AT_DESC",
       });
+    });
+
+    it("keeps healthy and identifiable broken rows when another row is malformed", async () => {
+      mockSearchConversations.mockResolvedValue({
+        items: [
+          null,
+          makeDirectConversation({ id: "healthy" }),
+          { title: "No ID" },
+        ],
+        broken_items: [
+          {
+            id: "damaged",
+            title: "Forked conversation",
+            reason: "state",
+            updated_at: "2099-01-01T00:00:00Z",
+          },
+        ],
+        next_page_id: "next-page",
+      });
+
+      const page = await AgentServerConversationService.searchConversations();
+
+      expect(page.items).toMatchObject([
+        {
+          id: "damaged",
+          title: "Forked conversation",
+          broken_reason: "state",
+          conversation_url: null,
+        },
+        { id: "healthy" },
+      ]);
+      expect(page.next_page_id).toBe("next-page");
+    });
+
+    it("propagates a backend error during conversation search", async () => {
+      const error = new Error("Unauthorized");
+      mockSearchConversations.mockRejectedValue(error);
+
+      await expect(
+        AgentServerConversationService.searchConversations(),
+      ).rejects.toBe(error);
     });
 
     it.each([

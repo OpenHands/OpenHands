@@ -1871,4 +1871,63 @@ describe("ConversationWebSocketProvider — conversation-scoped event store", ()
       ),
     );
   });
+
+  it("drops a delivered first message once the history page starts after it", async () => {
+    // Arrange: a Home prompt reached its conversation late, after the agent
+    // had produced more events than one history page holds. The page has older
+    // events behind it and no echo of the prompt; a follow-up sent since then
+    // is still waiting for its own echo.
+    const store = useOptimisticUserMessageStore.getState();
+    store.enqueuePendingMessage({
+      conversationId: "task-1",
+      text: "first prompt",
+    });
+    store.reassignPendingMessages("task-1", "conv-a");
+    store.enqueuePendingMessage({
+      conversationId: "conv-a",
+      text: "follow-up",
+    });
+    vi.mocked(EventService.searchEvents).mockResolvedValue({
+      items: [makeAgentReply()],
+      next_page_id: "older-page",
+    });
+
+    // Act: open the conversation; the preload returns that page.
+    renderProvider("conv-a");
+
+    // Assert: only the message that can still be echoed stays pending.
+    await waitFor(() =>
+      expect(
+        useOptimisticUserMessageStore
+          .getState()
+          .pendingMessages.map((message) => message.text),
+      ).toEqual(["follow-up"]),
+    );
+  });
+
+  it("keeps a first message pending while the history page is the whole log", async () => {
+    // Arrange: nothing older sits behind the page and it does not hold the
+    // prompt yet, so the echo can still arrive over the socket.
+    const store = useOptimisticUserMessageStore.getState();
+    store.enqueuePendingMessage({
+      conversationId: "task-1",
+      text: "first prompt",
+    });
+    store.reassignPendingMessages("task-1", "conv-a");
+    vi.mocked(EventService.searchEvents).mockResolvedValue({
+      items: [makeAgentReply()],
+      next_page_id: null,
+    });
+
+    // Act: open the conversation and let the preload land.
+    renderProvider("conv-a");
+    await waitFor(() => expect(eventIds()).toContain(AGENT_REPLY_ID));
+
+    // Assert: the bubble is still there for the socket replay to confirm.
+    expect(
+      useOptimisticUserMessageStore
+        .getState()
+        .pendingMessages.map((message) => message.text),
+    ).toEqual(["first prompt"]);
+  });
 });
