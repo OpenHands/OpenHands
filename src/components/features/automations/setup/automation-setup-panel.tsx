@@ -107,6 +107,10 @@ import {
   useServiceAccounts,
 } from "#/hooks/query/use-service-accounts";
 import { useAutomationPermissions } from "#/hooks/use-automation-permissions";
+import {
+  useFactories,
+  useFactoriesSupported,
+} from "#/hooks/query/use-factories";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import { AUTOMATION_DETAIL_QUERY_KEY } from "#/hooks/query/use-automation-detail";
 import {
@@ -224,6 +228,7 @@ const AUTOMATION_SETUP_FIELD_RENDER_ORDER: AutomationSetupField[] = [
   "kind",
   "name",
   "runAsUserId",
+  "factoryId",
   "prompt",
   "pluginSource",
   "pluginRef",
@@ -270,6 +275,7 @@ const DEFAULT_CUSTOM_WEBHOOK_SIGNATURE_SCHEME: CustomWebhookSignatureScheme =
 const NON_CHARACTER_STREAM_FIELDS = new Set<AutomationSetupField>([
   "kind",
   "runAsUserId",
+  "factoryId",
   "triggerKind",
   "frequency",
   "weekday",
@@ -503,6 +509,7 @@ function buildInitialForm(
     kind,
     name: form.name ?? deriveName(prompt),
     runAsUserId: form.runAsUserId ?? "",
+    factoryId: form.factoryId ?? draft.factoryId ?? "",
     visibility: form.visibility ?? draft.existingVisibility ?? "organization",
     prompt,
     repository: form.repository ?? "",
@@ -785,6 +792,7 @@ const ACTION_SECTION_FIELDS: readonly AutomationSetupField[] = [
 const SETTINGS_SECTION_FIELDS: readonly AutomationSetupField[] = [
   "name",
   "runAsUserId",
+  "factoryId",
   "showTimeout",
   "timeoutSeconds",
 ];
@@ -817,7 +825,7 @@ export function AutomationSetupPanel({
   const serviceAccountRunAsEnabled = useServiceAccountRunAsEnabled();
   const serviceAccounts = useServiceAccounts().data;
   const { backend, orgId } = useActiveBackend();
-  const { userId } = useAutomationPermissions();
+  const { userId, canManage } = useAutomationPermissions();
   // There is someone to hide an automation from only in a cloud team
   // workspace (a personal one's org id is the user id), and only a service
   // that advertises the feature stores a visibility.
@@ -907,6 +915,12 @@ export function AutomationSetupPanel({
     getAutomationEditIdFromTags(conversationTags) ||
     "";
   const isEditingExisting = editingAutomationId.length > 0;
+  // Putting an automation in a factory needs manage_automations, and only a
+  // new automation is placed: an existing one uses Change factory.
+  const { isSupported: isFactoriesSupported } = useFactoriesSupported();
+  const showFactoryPicker =
+    isFactoriesSupported && canManage && !isEditingExisting;
+  const factories = useFactories({ enabled: showFactoryPicker }).data;
   const [existingPluginSpec, setExistingPluginSpec] = useState(
     draft.existingPluginSpec,
   );
@@ -1140,6 +1154,7 @@ export function AutomationSetupPanel({
     kind,
     name,
     runAsUserId,
+    factoryId,
     visibility = "organization",
     prompt,
     repository,
@@ -1500,9 +1515,7 @@ export function AutomationSetupPanel({
   // Only the final create runs enabled: drafts and preflight validation must
   // stay inert, so the flag travels with the caller's intent.
   // Only a new automation is placed in a factory; an edit leaves it where it is.
-  const newAutomationFactoryId = isEditingExisting
-    ? ""
-    : (draft.factoryId?.trim() ?? "");
+  const newAutomationFactoryId = isEditingExisting ? "" : factoryId.trim();
   const buildPresetBody = (enabled: boolean): SetupRequestBody => {
     const trimmedPrompt = prompt.trim();
     const body: SetupRequestBody = {
@@ -2931,6 +2944,44 @@ export function AutomationSetupPanel({
                                 {account.name}
                               </option>
                             ))}
+                        </select>
+                        <ChevronDown
+                          className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-muted"
+                          aria-hidden
+                        />
+                      </div>
+                    </Field>
+                  ) : null}
+                  {showFactoryPicker ? (
+                    <Field label={t(I18nKey.AUTOMATIONS$CHANGE_FACTORY_TARGET)}>
+                      <div className="relative">
+                        <select
+                          data-testid="automation-setup-factory"
+                          value={factoryId}
+                          onChange={(event) =>
+                            updateField("factoryId", event.target.value)
+                          }
+                          className={cn(
+                            formControlFieldClassName,
+                            "appearance-none pr-8",
+                          )}
+                        >
+                          <option value="">
+                            {t(I18nKey.AUTOMATIONS$CHANGE_FACTORY_NONE)}
+                          </option>
+                          {/* The factory a draft was opened with stays selected while
+                              the list loads, and if it was deleted since. */}
+                          {factoryId &&
+                          !(factories ?? []).some(
+                            (factory) => factory.id === factoryId,
+                          ) ? (
+                            <option value={factoryId}>{factoryId}</option>
+                          ) : null}
+                          {(factories ?? []).map((factory) => (
+                            <option key={factory.id} value={factory.id}>
+                              {factory.name}
+                            </option>
+                          ))}
                         </select>
                         <ChevronDown
                           className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-muted"

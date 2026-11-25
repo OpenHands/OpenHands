@@ -23,7 +23,9 @@ import {
   AGENT_FIELD_STREAM_SETTLE_DELAY_MS,
   AutomationSetupPanel,
 } from "#/components/features/automations/setup/automation-setup-panel";
+import { I18nKey } from "#/i18n/declaration";
 import AutomationService from "#/api/automation-service/automation-service.api";
+import { experimentalFeaturesService } from "#/api/experimental-features-service/experimental-features-service.api";
 import { useEffect, useLayoutEffect, useState } from "react";
 import {
   PENDING_AUTOMATION_SETUP_ID,
@@ -180,6 +182,8 @@ vi.mock("#/api/automation-service/automation-service.api", () => ({
     getAutomation: vi.fn(),
     createCustomWebhook: vi.fn(),
     supportsAutomationDrafts: vi.fn(),
+    supportsFactories: vi.fn(),
+    listFactories: vi.fn(),
   },
 }));
 
@@ -281,6 +285,7 @@ vi.mock("#/utils/tar-gzip", () => ({
 }));
 
 vi.mock("#/manifests/automation-interface", () => ({
+  hasAutomationInterface: () => true,
   automationListPath: () => "/automations",
   automationDetailPath: (id: string) => `/automations/${id}`,
   getAutomationEndpoint: (name: string) =>
@@ -380,6 +385,10 @@ describe("AutomationSetupPanel", () => {
     serviceAccountMocks.enabled = false;
     window.sessionStorage.clear();
     vi.clearAllMocks();
+    vi.spyOn(
+      experimentalFeaturesService,
+      "listExperimentalFeatures",
+    ).mockResolvedValue([]);
     // By default the deployment does not advertise server-backed drafts, so
     // the panel falls back to the preflight-only Test path the existing
     // assertions cover. BE-draft tests override this per-test.
@@ -2014,6 +2023,110 @@ describe("AutomationSetupPanel", () => {
         "plugin",
       ),
     );
+  });
+
+  describe("factory", () => {
+    const factory = (id: string, name: string) => ({
+      id,
+      name,
+      automation_count: 0,
+      created_at: "2026-01-01T00:00:00Z",
+      updated_at: "2026-01-01T00:00:00Z",
+    });
+
+    beforeEach(() => {
+      vi.mocked(AutomationService.supportsFactories).mockReturnValue(true);
+      vi.spyOn(
+        experimentalFeaturesService,
+        "listExperimentalFeatures",
+      ).mockResolvedValue([
+        {
+          key: "factories",
+          label: "Factories",
+          description: "Shows Factories in the sidebar.",
+          enabled: true,
+        },
+      ]);
+      vi.mocked(AutomationService.listFactories).mockResolvedValue({
+        factories: [factory("f-1", "Core SDLC"), factory("f-2", "Docs")],
+        total: 2,
+      });
+      vi.mocked(AutomationService.createAutomationDraft).mockResolvedValue({
+        id: "automation-1",
+      });
+    });
+
+    it("creates a new automation in the factory the user picks", async () => {
+      // Arrange
+      const user = userEvent.setup();
+      renderPanel({ prompt: "Review every pull request", kind: "prompt" });
+      const picker = await screen.findByTestId("automation-setup-factory");
+      await screen.findByRole("option", { name: "Docs" });
+
+      // Act
+      await user.selectOptions(picker, "Docs");
+      await user.click(screen.getByTestId("automation-setup-create"));
+
+      // Assert
+      await waitFor(() =>
+        expect(AutomationService.createAutomationDraft).toHaveBeenCalledWith(
+          expect.objectContaining({ factory_id: "f-2" }),
+          expect.anything(),
+        ),
+      );
+    });
+
+    it("starts on the factory the form was opened from, and can drop it", async () => {
+      // Arrange
+      const user = userEvent.setup();
+      renderPanel({
+        prompt: "Review every pull request",
+        kind: "prompt",
+        factoryId: "f-1",
+      });
+      const picker = await screen.findByTestId("automation-setup-factory");
+      await screen.findByRole("option", { name: "Core SDLC" });
+      expect(picker).toHaveValue("f-1");
+
+      // Act
+      await user.selectOptions(picker, I18nKey.AUTOMATIONS$CHANGE_FACTORY_NONE);
+      await user.click(screen.getByTestId("automation-setup-create"));
+
+      // Assert
+      await waitFor(() =>
+        expect(AutomationService.createAutomationDraft).toHaveBeenCalled(),
+      );
+      expect(
+        vi.mocked(AutomationService.createAutomationDraft).mock.calls[0][0],
+      ).not.toHaveProperty("factory_id");
+    });
+
+    it("does not offer the picker when editing an existing automation", () => {
+      // Act
+      renderPanel(setupDraftFromAutomation(savedReviewer()));
+
+      // Assert
+      expect(
+        screen.queryByTestId("automation-setup-factory"),
+      ).not.toBeInTheDocument();
+    });
+
+    it("does not offer the picker while Factories is off", async () => {
+      // Arrange
+      vi.spyOn(
+        experimentalFeaturesService,
+        "listExperimentalFeatures",
+      ).mockResolvedValue([]);
+
+      // Act
+      renderPanel();
+      await screen.findByTestId("automation-setup-create");
+
+      // Assert
+      expect(
+        screen.queryByTestId("automation-setup-factory"),
+      ).not.toBeInTheDocument();
+    });
   });
 
   it("does not offer the run-as picker when editing an existing automation", () => {

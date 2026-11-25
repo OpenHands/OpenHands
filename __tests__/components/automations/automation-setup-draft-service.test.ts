@@ -114,6 +114,7 @@ describe("getDraftExecutionStatusText", () => {
 const baseForm: AutomationSetupFormValues = {
   name: "",
   runAsUserId: "",
+  factoryId: "",
   prompt: "",
   repository: "",
   pluginSource: "",
@@ -174,6 +175,36 @@ describe("setupDraftFromServerDraft", () => {
     expect(setupDraftFromServerDraft(baseSavedDraft)).not.toHaveProperty(
       "factoryId",
     );
+  });
+
+  it("reopens a saved draft with its factory selected", () => {
+    // Arrange
+    const saved = {
+      ...baseSavedDraft,
+      draft: { prompt: "Triage issues", factory_id: "factory-1" },
+    } satisfies AutomationDraftApiResponse;
+
+    // Act
+    const draft = setupDraftFromServerDraft(saved);
+    const form = formFromServerDraft(saved, {
+      ...baseForm,
+      factoryId: "stale-selection",
+    });
+
+    // Assert
+    expect(draft.form?.factoryId).toBe("factory-1");
+    expect(form.factoryId).toBe("factory-1");
+  });
+
+  it("clears the factory selection when a saved draft has none", () => {
+    // Act
+    const form = formFromServerDraft(baseSavedDraft, {
+      ...baseForm,
+      factoryId: "stale-selection",
+    });
+
+    // Assert
+    expect(form.factoryId).toBe("");
   });
 
   it("updates an existing form with repositories, event keys, and run-as", () => {
