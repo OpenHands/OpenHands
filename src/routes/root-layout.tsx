@@ -29,6 +29,7 @@ import {
 
 import { useTelemetryIdentity } from "#/hooks/use-telemetry-identity";
 import { useSyncDocumentLanguage } from "#/hooks/use-sync-document-language";
+import { useToggleSidebarShortcut } from "#/hooks/use-toggle-sidebar-shortcut";
 import { LoadingSpinner } from "#/components/shared/loading-spinner";
 import { CloudOrganizationBoundary } from "#/components/features/backends/cloud-organization-boundary";
 import { useAppTitle } from "#/hooks/use-app-title";
@@ -181,6 +182,8 @@ function MainAppContent() {
     }
   }, [settings?.language]);
   useSyncDocumentLanguage();
+  // Ctrl/Cmd+Shift+E toggles the conversation sidebar from anywhere.
+  useToggleSidebarShortcut();
 
   if (config.isLoading) {
     return (

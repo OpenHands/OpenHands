@@ -489,6 +489,46 @@ describe("Sidebar", () => {
     expect(getDesktopSidebar(true).dataset.collapsed).toBe("true");
   });
 
+  it("hands focus to the collapse toggle when the toggle unmounts the focused control", () => {
+    // The handoff this exists for: focus sat on a control the collapsed rail
+    // does not render, so it would otherwise fall to <body>.
+    renderSidebar("/conversations");
+    const versionTile = screen.getByTestId("agent-canvas-version-tile");
+    act(() => versionTile.focus());
+
+    // Act: collapse the rail the way the shortcut and the command menu do.
+    act(() => useSidebarStore.getState().setCollapsed(true));
+
+    // Assert: the user stays in the rail instead of losing their place.
+    expect(document.activeElement).toBe(
+      screen.getByTestId("sidebar-collapse-toggle"),
+    );
+  });
+
+  it("keeps focus where the user moved it when the rail is toggled afterwards", () => {
+    // Bug: the last focused in-rail control was recorded on focusin but never
+    // retired when focus left the aside, so toggling later saw a detached
+    // entry and pulled focus off the composer onto the collapse toggle.
+    renderSidebar("/conversations");
+    const versionTile = screen.getByTestId("agent-canvas-version-tile");
+    act(() => versionTile.focus());
+    expect(document.activeElement).toBe(versionTile);
+
+    const composer = document.createElement("button");
+    composer.type = "button";
+    document.body.appendChild(composer);
+    try {
+      act(() => composer.focus());
+      expect(document.activeElement).toBe(composer);
+
+      act(() => useSidebarStore.getState().setCollapsed(true));
+
+      expect(document.activeElement).toBe(composer);
+    } finally {
+      composer.remove();
+    }
+  });
+
   it("resizes the expanded sidebar by dragging its edge and remembers the width", () => {
     // Arrange: the sidebar starts at the left edge of the viewport.
     const { unmount } = renderSidebar("/conversations");
