@@ -14,7 +14,10 @@ import {
 
 import AutomationService from "#/api/automation-service/automation-service.api";
 import { experimentalFeaturesService } from "#/api/experimental-features-service/experimental-features-service.api";
-import { displayErrorToast } from "#/utils/custom-toast-handlers";
+import {
+  displayErrorToast,
+  displaySuccessToast,
+} from "#/utils/custom-toast-handlers";
 import {
   __resetActiveStoreForTests,
   setActiveSelection,
@@ -78,6 +81,7 @@ vi.mock("#/api/automation-service/automation-service.api", () => ({
     createFactory: vi.fn(),
     renameFactory: vi.fn(),
     deleteFactory: vi.fn(),
+    updateAutomation: vi.fn(),
     checkHealth: vi.fn(),
   },
 }));
@@ -494,6 +498,108 @@ describe("renaming a factory", () => {
     renderAt("/automate");
     await screen.findByTestId("automation-card-a-reviewer");
     expect(screen.getByTestId("automations-add-automation")).toBeVisible();
+  });
+});
+
+describe("assigning an automation to a factory from the Automate list", () => {
+  const orgDigest = createAutomation({ id: "a-org", name: "Org digest" });
+
+  beforeEach(() => {
+    vi.mocked(AutomationService.getAutomations).mockResolvedValue({
+      automations: [reviewer, orgDigest],
+      total: 2,
+    });
+    vi.mocked(AutomationService.updateAutomation).mockResolvedValue(orgDigest);
+  });
+
+  const openChangeFactory = async (
+    user: ReturnType<typeof userEvent.setup>,
+    cardId: string,
+  ) => {
+    const card = await screen.findByTestId(cardId);
+    await user.click(
+      within(card).getByLabelText(I18nKey.AUTOMATIONS$ACTIONS_MENU),
+    );
+    await user.click(
+      screen.getByRole("button", { name: I18nKey.AUTOMATIONS$CHANGE_FACTORY }),
+    );
+  };
+
+  it("puts an automation in a factory from its menu", async () => {
+    // Arrange
+    const user = userEvent.setup();
+    renderAt("/automate");
+    await openChangeFactory(user, "automation-card-a-org");
+    await screen.findByRole("option", { name: coreFactory.name });
+
+    // Act
+    await user.selectOptions(
+      screen.getByTestId("change-factory-target"),
+      coreFactory.name,
+    );
+    await user.click(screen.getByTestId("change-factory-confirm"));
+
+    // Assert
+    await waitFor(() =>
+      expect(AutomationService.updateAutomation).toHaveBeenCalledWith("a-org", {
+        factory_id: "f-core",
+      }),
+    );
+    await waitFor(() =>
+      expect(
+        screen.queryByTestId("change-factory-confirm"),
+      ).not.toBeInTheDocument(),
+    );
+    expect(displaySuccessToast).toHaveBeenCalledWith(
+      I18nKey.AUTOMATIONS$CHANGE_FACTORY_SUCCESS,
+    );
+  });
+
+  it("offers no factory change to those who cannot manage automations", async () => {
+    // Arrange
+    permissionMocks.canManage = false;
+    const user = userEvent.setup();
+    renderAt("/automate");
+    const card = await screen.findByTestId("automation-card-a-org");
+
+    // Act
+    await user.click(
+      within(card).getByLabelText(I18nKey.AUTOMATIONS$ACTIONS_MENU),
+    );
+
+    // Assert
+    expect(
+      screen.queryByRole("button", {
+        name: I18nKey.AUTOMATIONS$CHANGE_FACTORY,
+      }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("names the factory on an automation that is in one", async () => {
+    // Act
+    renderAt("/automate");
+    const card = await screen.findByTestId("automation-card-a-reviewer");
+
+    // Assert
+    expect(
+      await within(card).findByTestId("automation-factory-pill"),
+    ).toHaveTextContent(coreFactory.name);
+    expect(
+      within(screen.getByTestId("automation-card-a-org")).queryByTestId(
+        "automation-factory-pill",
+      ),
+    ).not.toBeInTheDocument();
+  });
+
+  it("leaves the factory name off the automations on that factory's own page", async () => {
+    // Act
+    renderAt("/factories/f-core");
+    const card = await screen.findByTestId("automation-card-a-reviewer");
+
+    // Assert
+    expect(
+      within(card).queryByTestId("automation-factory-pill"),
+    ).not.toBeInTheDocument();
   });
 });
 

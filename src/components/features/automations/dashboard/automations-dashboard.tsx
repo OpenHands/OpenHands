@@ -21,6 +21,7 @@ import {
   useImportAutomation,
 } from "#/hooks/query/use-automations";
 import { useAutomationHealth } from "#/hooks/query/use-automation-health";
+import { useFactoriesSupported } from "#/hooks/query/use-factories";
 import {
   PENDING_AUTOMATION_SETUP_ID,
   initializeAutomationFormSession,
@@ -53,6 +54,7 @@ import { EmptyState } from "#/components/features/automations/empty-state";
 import { FactoryAutomationsEmptyState } from "#/components/features/factories/factory-automations-empty-state";
 import { ErrorState } from "#/components/features/automations/error-state";
 import { BackendNotConfigured } from "#/components/features/automations/backend-not-configured";
+import { ChangeAutomationFactoryModal } from "#/components/features/automations/change-automation-factory-modal";
 import { DeleteConfirmationModal } from "#/components/features/automations/delete-confirmation-modal";
 import { useOpenAutomationEditor } from "#/hooks/use-open-automation-editor";
 import { useStartAutomationSetup } from "#/hooks/use-start-automation-setup";
@@ -352,6 +354,8 @@ export function AutomationsDashboard({
   } | null>(null);
   const [deleteDraftTarget, setDeleteDraftTarget] =
     useState<AutomationDraftApiResponse | null>(null);
+  const [changeFactoryTarget, setChangeFactoryTarget] =
+    useState<Automation | null>(null);
   const { openEditor } = useOpenAutomationEditor();
   const { startSetup } = useStartAutomationSetup({ factoryId });
   const [importSpec, setImportSpec] = useState<AutomationSpec | null>(null);
@@ -362,6 +366,10 @@ export function AutomationsDashboard({
   // Git Sync is org-level config, so its entry point requires
   // manage_automations (admins/owners) on every backend kind.
   const { canManage } = useAutomationPermissions();
+  // Moving an automation between factories needs manage_automations, even for
+  // the automation's owner.
+  const { isSupported: isFactoriesSupported } = useFactoriesSupported();
+  const canChangeFactory = isFactoriesSupported && canManage;
   const creatorFilterUserId = useAutomationCreatorFilterUserId();
   // The owner (run-as identity) the server filters by; undefined while the
   // filter is hidden or set to "all".
@@ -594,6 +602,11 @@ export function AutomationsDashboard({
     if (automation) {
       setDeleteTarget({ id, name: automation.name });
     }
+  };
+
+  const handleChangeFactoryRequest = (id: string) => {
+    const automation = data?.automations.find((a) => a.id === id);
+    if (automation) setChangeFactoryTarget(automation);
   };
 
   const handleEditRequest = (id: string) => {
@@ -975,6 +988,9 @@ export function AutomationsDashboard({
                   onDelete={handleDeleteRequest}
                   onExport={handleExport}
                   onEdit={handleEditRequest}
+                  onChangeFactory={
+                    canChangeFactory ? handleChangeFactoryRequest : undefined
+                  }
                   insights={groupInsights}
                 />
               ))}
@@ -1017,6 +1033,13 @@ export function AutomationsDashboard({
         onConfirm={handleDeleteConfirm}
         onCancel={() => setDeleteTarget(null)}
       />
+
+      {changeFactoryTarget ? (
+        <ChangeAutomationFactoryModal
+          automation={changeFactoryTarget}
+          onClose={() => setChangeFactoryTarget(null)}
+        />
+      ) : null}
 
       <DeleteConfirmationModal
         automationName={deleteDraftName}

@@ -14,7 +14,6 @@ import {
   useDeleteAutomation,
   useDispatchAutomation,
   useUpdateAutomationKeepAlive,
-  useChangeAutomationFactory,
   useChangeRunAs,
 } from "#/hooks/query/use-automations";
 import {
@@ -51,7 +50,7 @@ import { NotFoundState } from "#/components/features/automations/detail/not-foun
 import { ErrorState } from "#/components/features/automations/error-state";
 import { BackendNotConfigured } from "#/components/features/automations/backend-not-configured";
 import { DeleteConfirmationModal } from "#/components/features/automations/delete-confirmation-modal";
-import { ChangeFactoryModal } from "#/components/features/automations/change-factory-modal";
+import { ChangeAutomationFactoryModal } from "#/components/features/automations/change-automation-factory-modal";
 import { ChangeRunAsModal } from "#/components/features/automations/change-run-as-modal";
 import { useOpenAutomationEditor } from "#/hooks/use-open-automation-editor";
 import { useTracking } from "#/hooks/use-tracking";
@@ -159,9 +158,8 @@ export default function AutomationDetail() {
   const dispatchMutation = useDispatchAutomation();
   const keepAliveMutation = useUpdateAutomationKeepAlive();
   const changeRunAsMutation = useChangeRunAs();
-  const changeFactoryMutation = useChangeAutomationFactory();
   const { isSupported: isFactoriesSupported } = useFactoriesSupported();
-  const factoriesQuery = useFactories({ enabled: showChangeFactoryModal });
+  const factoriesQuery = useFactories({ enabled: isFactoriesSupported });
   // Change Runs As and the service-account name need the service account list,
   // which only managers on a cloud team workspace with the capability can read.
   const serviceAccountRunAsEnabled = useServiceAccountRunAsEnabled();
@@ -287,43 +285,11 @@ export default function AutomationDetail() {
     );
   };
 
-  const handleChangeFactory = (nextFactoryId: string | null) => {
-    changeFactoryMutation.mutate(
-      { id: automation.id, factoryId: nextFactoryId },
-      {
-        onSuccess: () => {
-          setShowChangeFactoryModal(false);
-          const nextFactory = factoriesQuery.data?.find(
-            (factory) => factory.id === nextFactoryId,
-          );
-          displaySuccessToast(
-            nextFactory
-              ? t(I18nKey.AUTOMATIONS$CHANGE_FACTORY_SUCCESS, {
-                  name: automation.name,
-                  factory: nextFactory.name,
-                })
-              : t(I18nKey.AUTOMATIONS$CHANGE_FACTORY_REMOVED, {
-                  name: automation.name,
-                }),
-          );
-          // The page's factory context follows the automation.
-          navigate?.(
-            withFactoryContext(
-              automationDetailPath(automation.id),
-              nextFactoryId,
-            ),
-            { replace: true },
-          );
-        },
-        onError: (error) => {
-          displayErrorToast(
-            getApiErrorMessage(
-              error,
-              t(I18nKey.AUTOMATIONS$CHANGE_FACTORY_ERROR),
-            ),
-          );
-        },
-      },
+  // The page's factory context follows the automation.
+  const handleFactoryChanged = (nextFactoryId: string | null) => {
+    navigate?.(
+      withFactoryContext(automationDetailPath(automation.id), nextFactoryId),
+      { replace: true },
     );
   };
 
@@ -480,21 +446,31 @@ export default function AutomationDetail() {
             runsAs={runsAs}
             runsAsServiceAccount={runsAsService}
             createdBy={createdBy}
+            factory={
+              isFactoriesSupported
+                ? {
+                    id: automation.factory_id ?? null,
+                    name: factoriesQuery.data?.find(
+                      (factory) => factory.id === automation.factory_id,
+                    )?.name,
+                    onChange: canChangeFactory
+                      ? () => setShowChangeFactoryModal(true)
+                      : undefined,
+                  }
+                : undefined
+            }
           />
           <ActivityLogSection
             automation={automation}
             highlightedRunId={highlightedRunId}
           />
-          <ChangeFactoryModal
-            automationName={automation.name}
-            isOpen={showChangeFactoryModal}
-            factories={factoriesQuery.data ?? []}
-            currentFactoryId={automation.factory_id}
-            isLoading={factoriesQuery.isLoading}
-            isPending={changeFactoryMutation.isPending}
-            onConfirm={handleChangeFactory}
-            onCancel={() => setShowChangeFactoryModal(false)}
-          />
+          {showChangeFactoryModal ? (
+            <ChangeAutomationFactoryModal
+              automation={automation}
+              onClose={() => setShowChangeFactoryModal(false)}
+              onChanged={handleFactoryChanged}
+            />
+          ) : null}
           <ChangeRunAsModal
             automationName={automation.name}
             isOpen={showChangeRunAsModal}

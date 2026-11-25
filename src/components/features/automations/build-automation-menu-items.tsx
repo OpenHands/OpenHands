@@ -1,4 +1,4 @@
-import { Download, FileText } from "lucide-react";
+import { Download, Factory, FileText } from "lucide-react";
 import PlayIcon from "#/icons/play.svg?react";
 import PowerIcon from "#/icons/power.svg?react";
 import TrashIcon from "#/icons/trash.svg?react";
@@ -20,6 +20,8 @@ interface BuildAutomationMenuItemsOptions {
   onView: () => void;
   onExport: (automation: Automation) => void;
   onEdit?: (id: string) => void;
+  /** When provided, the menu offers Change factory. */
+  onChangeFactory?: (id: string) => void;
   onToggle: (id: string, enabled: boolean) => void;
   onDelete: (id: string) => void;
 }
@@ -35,6 +37,7 @@ export function buildAutomationMenuItems({
   onView,
   onExport,
   onEdit,
+  onChangeFactory,
   onToggle,
   onDelete,
 }: BuildAutomationMenuItemsOptions): KebabMenuItem[] {
@@ -65,6 +68,15 @@ export function buildAutomationMenuItems({
             label: t(I18nKey.AUTOMATIONS$EDIT),
             icon: <EditIcon className="size-4" />,
             onClick: () => onEdit(automation.id),
+          },
+        ]
+      : []),
+    ...(onChangeFactory
+      ? [
+          {
+            label: t(I18nKey.AUTOMATIONS$CHANGE_FACTORY),
+            icon: <Factory className="size-4" aria-hidden />,
+            onClick: () => onChangeFactory(automation.id),
           },
         ]
       : []),

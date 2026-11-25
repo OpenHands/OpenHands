@@ -53,6 +53,8 @@ interface AutomationCardProps {
   onDelete: (id: string) => void;
   onExport: (automation: Automation) => void;
   onEdit?: (id: string) => void;
+  /** When provided, the menu offers Change factory. */
+  onChangeFactory?: (id: string) => void;
   insights?: AutomationInsightsProps;
 }
 
@@ -64,6 +66,7 @@ export function AutomationCard({
   onDelete,
   onExport,
   onEdit,
+  onChangeFactory,
   insights,
 }: AutomationCardProps) {
   const { navigate } = useNavigation();
@@ -75,9 +78,12 @@ export function AutomationCard({
   const scheduleLabel =
     describeSchedule(automation.trigger, t, i18n.language) ??
     automation.trigger.type;
+  // A factory's own page lists only its automations, so naming it there is noise.
+  const showFactory = automation.factory_id !== factoryContext;
   const pills = useMemo(
-    () => buildAutomationMetadataPills(automation, scheduleLabel),
-    [automation, scheduleLabel],
+    () =>
+      buildAutomationMetadataPills(automation, scheduleLabel, { showFactory }),
+    [automation, scheduleLabel, showFactory],
   );
 
   const handleView = () => {
@@ -97,6 +103,7 @@ export function AutomationCard({
     onView: handleView,
     onExport,
     onEdit,
+    onChangeFactory,
     onToggle,
     onDelete,
   });
