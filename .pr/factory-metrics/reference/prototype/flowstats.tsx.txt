@@ -1,0 +1,23 @@
+// Extract of FlowStats from pages/operations.tsx
+export function FlowStats() {
+  return (
+    <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
+      <Stat
+        label="Moved without a person"
+        value="87%"
+        hint="Never waited on a human this week"
+      />
+      <Stat label="Blocked right now" value="5" hint="Across 4 causes" />
+      <Stat
+        label="Auto-resolved by rules"
+        value="17"
+        hint="Last 7 days · up from 9"
+      />
+      <Stat
+        label="Escalated to people"
+        value="3"
+        hint="Each is a candidate for a rule"
+      />
+    </div>
+  );
+}
