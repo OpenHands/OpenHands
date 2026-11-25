@@ -1,7 +1,0 @@
-{
-  "workflow": "Home composer role locator -> Control+A/Backspace -> type prompt -> Enter",
-  "result": "Navigated to a new conversation and rendered the submitted user message without exposing secrets.",
-  "conversationUrlPattern": "/conversations/<id>",
-  "sendButtonBeforeEnter": "enabled",
-  "evidenceImage": "assets/after-enter-submitted.png"
-}
