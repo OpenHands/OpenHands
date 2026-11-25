@@ -239,6 +239,21 @@ describe("AgentProfilesLocalView save mapping", () => {
     expect(screen.queryByTestId("agents-skills-library")).toBeNull();
   });
 
+  it("shows migration guidance on the list without interrupting profile editing", async () => {
+    renderView();
+
+    const guidance = screen.getByRole("note");
+    expect(guidance).toHaveTextContent("SETTINGS$AGENT_SETUP_MOVED_TITLE");
+    expect(guidance).toHaveTextContent("SETTINGS$AGENT_SETUP_MOVED_MESSAGE");
+
+    const user = userEvent.setup();
+    await user.click(screen.getByTestId("add-agent-profile"));
+    expect(screen.queryByRole("note")).not.toBeInTheDocument();
+
+    await user.click(screen.getByTestId("back-to-agent-profiles"));
+    expect(screen.getByRole("note")).toBeInTheDocument();
+  });
+
   it("opens a new profile on the settings lists when there is no OpenHands default", async () => {
     settingsData = { enabled_skills: ["add-skill"], disabled_skills: ["mine"] };
 
