@@ -52,6 +52,58 @@ describe("conversation additions", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("keeps the secret form retryable after a conversation-scoped failure", async () => {
+    const requests: unknown[] = [];
+    server.use(
+      http.post("*/api/conversations/:id/secrets", async ({ request }) => {
+        requests.push(await request.json());
+        if (requests.length === 1) {
+          return HttpResponse.json({ detail: "Forbidden" }, { status: 403 });
+        }
+        return HttpResponse.json({ success: true });
+      }),
+    );
+    const user = userEvent.setup();
+    renderWithProviders(
+      <ConversationConfigurationModal
+        conversationId={conversationId}
+        section="secrets"
+        onClose={() => {}}
+      />,
+    );
+
+    await user.type(
+      screen.getByTestId("conversation-secret-name"),
+      "RETRY_TOKEN",
+    );
+    await user.type(
+      screen.getByTestId("conversation-secret-value"),
+      "retry-value",
+    );
+    const submit = screen.getByRole("button", {
+      name: I18nKey.SECRETS$ADD_SECRET,
+    });
+    await user.click(submit);
+
+    expect(await screen.findByRole("alert")).toBeInTheDocument();
+    expect(screen.getByTestId("conversation-secret-name")).toHaveValue(
+      "RETRY_TOKEN",
+    );
+    expect(screen.getByTestId("conversation-secret-value")).toHaveValue(
+      "retry-value",
+    );
+    expect(submit).toBeEnabled();
+
+    await user.click(submit);
+
+    await waitFor(() => expect(requests).toHaveLength(2));
+    expect(await screen.findByRole("status")).toBeInTheDocument();
+    expect(requests).toEqual([
+      { secrets: { RETRY_TOKEN: "retry-value" } },
+      { secrets: { RETRY_TOKEN: "retry-value" } },
+    ]);
+  });
+
   it("attaches only enabled, supported saved MCPs without updating settings", async () => {
     server.use(
       http.get("*/api/settings", () =>
