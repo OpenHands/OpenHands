@@ -217,7 +217,7 @@ table.t.dense{font-size:12px}table.t.dense td,table.t.dense th{padding:6px 7px}t
   <a href="#s01"><b>01</b>Reading guide</a>
   <a href="#s02"><b>02</b>Foundations</a>
   <a href="#s03"><b>03</b>Card anatomy</a>
-  <a href="#s04"><b>04</b>Sizes and grid</a>
+  <a href="#s04"><b>04</b>Size and grid</a>
   <a href="#s05"><b>05</b>Card types</a>
   <a href="#s06"><b>06</b>States</a>
   <a href="#s07"><b>07</b>Delta and status color</a>
@@ -242,7 +242,7 @@ table.t.dense{font-size:12px}table.t.dense td,table.t.dense th{padding:6px 7px}t
     <dl>
       <dt>Sheets</dt><dd>14</dd>
       <dt>Card types</dt><dd>9 (MC-01 to MC-09)</dd>
-      <dt>Sizes</dt><dd>S compact · M standard · W wide</dd>
+      <dt>Size</dt><dd>One standard card (M). The grid decides the rest.</dd>
       <dt>Theme</dt><dd>Agent Canvas dark tokens</dd>
       <dt>Sources</dt><dd>
         Notion: Software Factory Metrics, Examples, Metrics API proposal, Learnings<br>
@@ -315,8 +315,7 @@ table.t.dense{font-size:12px}table.t.dense td,table.t.dense th{padding:6px 7px}t
     <h3>Type</h3>
     <div class="tw"><table class="t">
       <tbody><tr><th>Role</th><th>Size / line</th><th>Weight</th><th>Token</th><th>Used for</th><th>Origin</th></tr>
-      <tr><td>Value, M and W</td><td class="n mono">30 / 36</td><td>600, tracking −0.025em, tabular</td><td><code>text-3xl</code></td><td>Headline number</td><td><span class="chip">existing</span> <code>Stat</code></td></tr>
-      <tr><td>Value, S</td><td class="n mono">20 / 28</td><td>600, tabular</td><td><code>text-xl</code></td><td>Headline in the compact KPI tile</td><td><span class="chip">existing</span> Overview KPI</td></tr>
+      <tr><td>Value</td><td class="n mono">30 / 36</td><td>600, tracking −0.025em, tabular</td><td><code>text-3xl</code></td><td>Headline number</td><td><span class="chip">existing</span> <code>Stat</code></td></tr>
       <tr><td>Title</td><td class="n mono">13 / 16</td><td>500</td><td><code>text-xs</code> (13 px in this app)</td><td>Card title</td><td><span class="chip">existing</span> <code>Stat</code> label</td></tr>
       <tr><td>Row label</td><td class="n mono">12 / 16</td><td>400</td><td>—</td><td>Breakdown row labels and values</td><td><span class="chip ext">new</span></td></tr>
       <tr><td>Meta, badge</td><td class="n mono">11 / 14 · 11 / 16</td><td>400 · 500</td><td><code>text-2xs</code></td><td>Compare label, <code>n</code>, <code>as_of</code>, badges</td><td><span class="chip">existing</span> <code>Badge</code>, <code>Muted</code></td></tr>
@@ -326,9 +325,9 @@ table.t.dense{font-size:12px}table.t.dense td,table.t.dense th{padding:6px 7px}t
     <h3>Space, shape and motion</h3>
     <div class="tw"><table class="t">
       <tbody><tr><th>Property</th><th>Value</th><th>Token</th><th>Origin</th></tr>
-      <tr><td>Card padding, M and W</td><td class="mono">16</td><td><code>p-4</code></td><td><span class="chip">existing</span></td></tr>
+      <tr><td>Card padding</td><td class="mono">16</td><td><code>p-4</code></td><td><span class="chip">existing</span></td></tr>
       <tr><td>Card padding, S</td><td class="mono">12 × 8 (x × y)</td><td><code>px-3 py-2</code></td><td><span class="chip">existing</span> Overview KPI tile</td></tr>
-      <tr><td>Card radius, M and W · S</td><td class="mono">12 · 8</td><td><code>rounded-xl</code> · <code>rounded-lg</code></td><td><span class="chip">existing</span></td></tr>
+      <tr><td>Card radius</td><td class="mono">12</td><td><code>rounded-xl</code></td><td><span class="chip">existing</span></td></tr>
       <tr><td>Card border</td><td class="mono">1 px <code>border</code></td><td><code>border-border</code></td><td><span class="chip">existing</span></td></tr>
       <tr><td>Gap between cards</td><td class="mono">16</td><td><code>gap-4</code></td><td><span class="chip">existing</span> <code>FlowStats</code></td></tr>
       <tr><td>Vertical rhythm inside a card</td><td class="mono">4 · 4 · 12 · 12</td><td>title→value, value→delta, delta→viz, viz→footer</td><td><span class="chip ext">new</span> (4 is the <code>my-1</code> in <code>Stat</code>)</td></tr>
@@ -413,22 +412,11 @@ table.t.dense{font-size:12px}table.t.dense td,table.t.dense th{padding:6px 7px}t
 
 <!-- ============ 04 ============ -->
 <section class="sheet" id="s04">
-  <header><span class="no">04</span><h2>Sizes and grid</h2><span class="sub">Three sizes. A card picks one. The grid decides the rest.</span></header>
+  <header><span class="no">04</span><h2>Size and grid</h2><span class="sub">One size. A card has no size or position field. The grid decides the rest.</span></header>
   <div class="body">
-    <div class="ab flat" style="padding:72px 56px 84px;min-height:430px">
-      <span class="cap">S · M · W — 1:1</span>
+    <div class="ab flat" style="padding:72px 56px 28px;min-height:0">
+      <span class="cap">M — 1:1</span>
       <div style="display:flex;gap:64px;align-items:flex-start;flex-wrap:wrap">
-        <div style="position:relative;width:200px">
-          <div class="mc s" style="width:200px;height:84px">
-            <div class="t"><span class="tx">Issues → merged PR</span></div>
-            <div class="v">27<svg class="spark" data-v="3,4,3,5,6,5,7,8,7,9" style="width:80px;height:26px" viewBox="0 0 80 26" preserveAspectRatio="none" role="img" aria-label="Trend, 10 points, first 3, last 9"><polyline points="3,23 11.222222222222221,19.666666666666668 19.444444444444443,23 27.666666666666664,16.333333333333336 35.888888888888886,13 44.111111111111114,16.333333333333336 52.33333333333333,9.666666666666668 60.55555555555556,6.333333333333332 68.77777777777777,9.666666666666668 77,3" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"></polyline><circle cx="77" cy="3" r="3" fill="currentColor"></circle></svg></div>
-            <div class="foot"><span class="b warn">target 30 / month</span></div>
-          </div>
-          <div class="rl-box" style="left:0;top:0;width:200px;height:84px"></div>
-          <i class="tick-h" style="left:0;top:-18px;width:200px"></i><span class="dim-l" style="left:0;top:-34px;width:200px">fluid, min 160</span>
-          <i class="tick-v" style="left:-18px;top:0;height:84px"></i><span class="dim-l" style="left:-46px;top:38px">≈84</span>
-          <div style="position:absolute;top:104px;left:0;width:200px;font-size:11.5px;color:#aab3c5;line-height:1.5"><b style="color:#fff">S · compact</b><br>Inside the Goal card's KPI strip. Padding 12 × 8, radius 8, value 20/28. Sparkline 80 × 26 sits right of the value. No delta chip, no viz row, no meta.</div>
-        </div>
         <div style="position:relative;width:260px">
           <div class="mc" style="width:260px;height:128px">
             <div class="t"><span class="tx">Blocked right now</span></div>
@@ -438,17 +426,7 @@ table.t.dense{font-size:12px}table.t.dense td,table.t.dense th{padding:6px 7px}t
           <div class="rl-box" style="left:0;top:0;width:260px;height:128px"></div>
           <i class="tick-h" style="left:0;top:-18px;width:260px"></i><span class="dim-l" style="left:0;top:-34px;width:260px">fluid, min 220</span>
           <i class="tick-v" style="left:-18px;top:0;height:128px"></i><span class="dim-l" style="left:-54px;top:58px">min 104</span>
-          <div style="position:absolute;top:148px;left:0;width:300px;font-size:11.5px;color:#aab3c5;line-height:1.5"><b style="color:#fff">M · standard</b><br>One grid cell. Padding 16, radius 12, value 30/36. Height is set by content. All cards in one grid row stretch to the tallest. A card with a viz row is about 186 high.</div>
-        </div>
-        <div style="position:relative;width:420px">
-          <div class="mc" style="width:420px;height:186px">
-            <div class="t"><span class="tx">Throughput · merged PRs per week</span></div>
-            <div class="v">27<small>last 12 weeks</small></div>
-            <div class="viz" style="margin-top:8px"><svg class="bars" data-v="14,18,16,21,19,24,22,26,23,27,29,17" data-partial="1" data-prev="21" style="display:block;width:100%;height:84px" viewBox="0 0 386 84" role="img" aria-label="Bar chart, 12 buckets, first 14, last 17, max 29"><defs><pattern id="ht0" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="6" height="6" fill="rgba(255,255,255,.12)"></rect><rect width="3" height="6" fill="rgba(255,255,255,.5)"></rect></pattern></defs><line x1="26" x2="386" y1="82" y2="82" stroke="#383f50" stroke-width="1"></line><text x="20" y="85.5" text-anchor="end" fill="#7e8a9e" font-size="10">0</text><line x1="26" x2="386" y1="44" y2="44" stroke="#383f50" stroke-width="1"></line><text x="20" y="47.5" text-anchor="end" fill="#7e8a9e" font-size="10">15</text><line x1="26" x2="386" y1="6" y2="6" stroke="#383f50" stroke-width="1"></line><text x="20" y="9.5" text-anchor="end" fill="#7e8a9e" font-size="10">30</text><rect x="26" y="46.53333333333333" width="26.333333333333332" height="35.46666666666667" rx="2" fill="rgba(255,255,255,.7)" stroke="none" stroke-width="0"></rect><rect x="56.33333333333333" y="36.4" width="26.333333333333332" height="45.6" rx="2" fill="rgba(255,255,255,.7)" stroke="none" stroke-width="0"></rect><rect x="86.66666666666666" y="41.46666666666667" width="26.333333333333332" height="40.53333333333333" rx="2" fill="rgba(255,255,255,.7)" stroke="none" stroke-width="0"></rect><rect x="117" y="28.799999999999997" width="26.333333333333332" height="53.2" rx="2" fill="rgba(255,255,255,.7)" stroke="none" stroke-width="0"></rect><rect x="147.33333333333331" y="33.86666666666667" width="26.333333333333332" height="48.13333333333333" rx="2" fill="rgba(255,255,255,.7)" stroke="none" stroke-width="0"></rect><rect x="177.66666666666666" y="21.200000000000003" width="26.333333333333332" height="60.8" rx="2" fill="rgba(255,255,255,.7)" stroke="none" stroke-width="0"></rect><rect x="208" y="26.266666666666666" width="26.333333333333332" height="55.733333333333334" rx="2" fill="rgba(255,255,255,.7)" stroke="none" stroke-width="0"></rect><rect x="238.33333333333331" y="16.13333333333334" width="26.333333333333332" height="65.86666666666666" rx="2" fill="rgba(255,255,255,.7)" stroke="none" stroke-width="0"></rect><rect x="268.66666666666663" y="23.733333333333334" width="26.333333333333332" height="58.266666666666666" rx="2" fill="rgba(255,255,255,.7)" stroke="none" stroke-width="0"></rect><rect x="299" y="13.599999999999994" width="26.333333333333332" height="68.4" rx="2" fill="rgba(255,255,255,.7)" stroke="none" stroke-width="0"></rect><rect x="329.3333333333333" y="8.533333333333331" width="26.333333333333332" height="73.46666666666667" rx="2" fill="rgba(255,255,255,.7)" stroke="none" stroke-width="0"></rect><rect x="359.66666666666663" y="38.93333333333333" width="26.333333333333332" height="43.06666666666667" rx="2" fill="url(#ht0)" stroke="rgba(255,255,255,.6)" stroke-width="1"></rect><line x1="26" x2="386" y1="28.799999999999997" y2="28.799999999999997" stroke="#a3b0c4" stroke-width="1" stroke-dasharray="4 3"></line></svg></div>
-          </div>
-          <div class="rl-box" style="left:0;top:0;width:420px;height:186px"></div>
-          <i class="tick-h" style="left:0;top:-18px;width:420px"></i><span class="dim-l" style="left:0;top:-34px;width:420px">2 columns + 16 gap</span>
-          <div style="position:absolute;top:206px;left:0;width:420px;font-size:11.5px;color:#aab3c5;line-height:1.5"><b style="color:#fff">W · wide</b><br>Spans two grid columns. Used by the series chart (MC-09) and the variant comparison (MC-07). On a one-column layout, W becomes full width and the chart keeps its aspect.</div>
+          <div style="position:absolute;top:148px;left:0;width:300px;font-size:11.5px;color:#aab3c5;line-height:1.5"><b style="color:#fff">M · standard, the only size</b><br>One grid cell. Padding 16, radius 12, value 30/36. Height is set by content. All cards in one grid row stretch to the tallest. A card with a viz row is about 186 high.</div>
         </div>
       </div>
     </div>
@@ -456,11 +434,11 @@ table.t.dense{font-size:12px}table.t.dense td,table.t.dense th{padding:6px 7px}t
     <h3>Grid</h3>
     <div class="tw"><table class="t">
       <tbody><tr><th>Container width</th><th>Columns</th><th>Gap</th><th>Rule</th><th>Origin</th></tr>
-      <tr><td class="n">&lt; 640 px</td><td>1</td><td class="mono">16</td><td>Cards stack. W becomes full width.</td><td><span class="chip ext">new</span></td></tr>
+      <tr><td class="n">&lt; 640 px</td><td>1</td><td class="mono">16</td><td>Cards stack.</td><td><span class="chip ext">new</span></td></tr>
       <tr><td class="n">640 – 1279 px</td><td>2</td><td class="mono">16</td><td><code>grid-cols-2</code></td><td><span class="chip">existing</span> <code>FlowStats</code></td></tr>
-      <tr><td class="n">≥ 1280 px (<code>xl</code>)</td><td>4</td><td class="mono">16</td><td><code>xl:grid-cols-4</code>. A wide card takes 2 of 4.</td><td><span class="chip">existing</span> <code>FlowStats</code></td></tr>
-      <tr><td class="n">Goal-card KPI strip</td><td>3 (<code>sm</code>), 3 of 5 (<code>xl</code>)</td><td class="mono">8</td><td>Size S only. Maximum 3.</td><td><span class="chip">existing</span> Overview</td></tr>
+      <tr><td class="n">≥ 1280 px (<code>xl</code>)</td><td>4</td><td class="mono">16</td><td><code>xl:grid-cols-4</code></td><td><span class="chip">existing</span> <code>FlowStats</code></td></tr>
     </tbody></table></div>
+    <div class="note">Page layout (which cards, their order, sections, the Goal card strip) is a separate dashboard ticket. This sheet defines the card only.</div>
     <div class="note warn">Cap a Factory overview at <b>8 cards</b> (the Notion page takes this from Velocity's metric bar). Operator cards live in their own section and are not counted in the 8.</div>
   </div>
 </section>
@@ -472,24 +450,23 @@ table.t.dense{font-size:12px}table.t.dense td,table.t.dense th{padding:6px 7px}t
     <h3>Index</h3>
     <div class="tw"><table class="t">
       <tbody><tr><th>ID</th><th>Type</th><th><code>display</code> / <code>group_by</code></th><th>Size</th><th>Answers</th><th>Backend today</th></tr>
-      <tr><td class="mono">MC-01</td><td>Count</td><td><code>number</code></td><td>S · M</td><td>How many right now, or in total?</td><td><span class="chip merged">merged</span> <span class="chip gap">gap: <code>last</code></span></td></tr>
+      <tr><td class="mono">MC-01</td><td>Count</td><td><code>number</code></td><td>M</td><td>How many right now, or in total?</td><td><span class="chip merged">merged</span> <span class="chip gap">gap: <code>last</code></span></td></tr>
       <tr><td class="mono">MC-02</td><td>Number with trend</td><td><code>number_trend</code></td><td>M</td><td>Is it getting better or worse?</td><td><span class="chip merged">merged</span> two calls · <span class="chip open">open PR #811</span></td></tr>
-      <tr><td class="mono">MC-03</td><td>Sparkline</td><td><code>sparkline</code></td><td>S · M</td><td>What is the shape over the window?</td><td><span class="chip merged">merged</span> day · week · month</td></tr>
+      <tr><td class="mono">MC-03</td><td>Sparkline</td><td><code>sparkline</code></td><td>M</td><td>What is the shape over the window?</td><td><span class="chip merged">merged</span> day · week · month</td></tr>
       <tr><td class="mono">MC-04</td><td>Percent</td><td><code>percent</code></td><td>M</td><td>What share succeeded?</td><td><span class="chip merged">merged</span> boolean key</td></tr>
       <tr><td class="mono">MC-05</td><td>Progress to target</td><td><code>progress</code></td><td>M</td><td>How close to the limit or goal?</td><td><span class="chip gap">gap: <code>target</code></span></td></tr>
       <tr><td class="mono">MC-06</td><td>Breakdown</td><td><code>group_by</code> any dimension</td><td>M</td><td>Where does it come from?</td><td><span class="chip gap">gap: dimensions</span></td></tr>
-      <tr><td class="mono">MC-07</td><td>Variant comparison</td><td><code>group_by: variant</code></td><td>W</td><td>Which version is better, and is it safe to say?</td><td><span class="chip gap">gap: dimensions</span></td></tr>
+      <tr><td class="mono">MC-07</td><td>Variant comparison</td><td><code>group_by: variant</code></td><td>later</td><td>Which version is better, and is it safe to say?</td><td><span class="chip gap">gap: dimensions</span></td></tr>
       <tr><td class="mono">MC-08</td><td>Duration split</td><td><code>group_by: stage</code>, p50 and p90</td><td>M</td><td>Where does the time go?</td><td><span class="chip gap">gap: percentiles, dimensions</span></td></tr>
-      <tr><td class="mono">MC-09</td><td>Series chart</td><td><code>series</code> extension</td><td>W</td><td>How did each period compare?</td><td><span class="chip merged">merged</span> <span class="chip ext">not in Notion enum</span></td></tr>
+      <tr><td class="mono">MC-09</td><td>Series chart</td><td><code>series</code> extension</td><td>later</td><td>How did each period compare?</td><td><span class="chip merged">merged</span> <span class="chip ext">not in Notion enum</span></td></tr>
     </tbody></table></div>
 
     <article class="spec" id="mc-01" style="margin-top:20px">
       <div class="ab flat" style="padding:36px 28px 28px">
-        <span class="cap">MC-01 · M and S · 1:1</span>
+        <span class="cap">MC-01 · M · 1:1</span>
         <div class="abgrid">
           <div class="mc link" style="height:128px"><div class="t"><span class="tx">Blocked right now</span></div><div class="v">5<span class="chev">›</span></div><div class="m" style="margin-top:4px">Across 4 causes · Open attention list</div></div>
           <div class="mc" style="height:104px"><div class="t"><span class="tx">Escalated to people</span></div><div class="v">3</div><div class="m" style="margin-top:4px">Each is a candidate for a rule</div></div>
-          <div class="mc s" style="width:200px"><div class="t"><span class="tx">Open PRs</span></div><div class="v">12</div></div>
         </div>
       </div>
       <div>
@@ -539,10 +516,9 @@ table.t.dense{font-size:12px}table.t.dense td,table.t.dense th{padding:6px 7px}t
 
     <article class="spec" id="mc-03">
       <div class="ab flat" style="padding:36px 28px 28px">
-        <span class="cap">MC-03 · M and S · 1:1</span>
+        <span class="cap">MC-03 · M · 1:1</span>
         <div class="abgrid">
           <div class="mc link" style="height:186px"><div class="t"><span class="tx">Issues → merged PR</span></div><div class="v">27<span class="chev">›</span></div><div class="dl"><span class="b good">▲ 4 · +17.4%</span><span class="m">vs prev 30d · 23</span></div><div class="viz"><svg class="spark" data-v="1,0,2,1,1,0,0,2,1,1,3,1,0,1,2,2,1,1,0,2,1,3,2,1,1,2,1,2,0,1" data-dash="1,1,0,1,1,1,0,0,1,1,2,1,1,0,1,1,1,0,1,1,2,1,1,1,0,1,1,1,1,0" viewBox="0 0 330 32" preserveAspectRatio="none" role="img" aria-label="Trend, 30 points, first 1, last 1"><polyline points="3,20.333333333333336 14.172413793103448,20.333333333333336 25.344827586206897,29 36.51724137931034,20.333333333333336 47.689655172413794,20.333333333333336 58.862068965517246,20.333333333333336 70.03448275862068,29 81.20689655172414,29 92.37931034482759,20.333333333333336 103.55172413793103,20.333333333333336 114.72413793103449,11.666666666666668 125.89655172413792,20.333333333333336 137.06896551724137,20.333333333333336 148.24137931034483,29 159.41379310344828,20.333333333333336 170.58620689655174,20.333333333333336 181.75862068965517,20.333333333333336 192.9310344827586,29 204.10344827586206,20.333333333333336 215.27586206896552,20.333333333333336 226.44827586206898,11.666666666666668 237.6206896551724,20.333333333333336 248.79310344827584,20.333333333333336 259.9655172413793,20.333333333333336 271.13793103448273,29 282.31034482758616,20.333333333333336 293.48275862068965,20.333333333333336 304.6551724137931,20.333333333333336 315.82758620689657,20.333333333333336 327,29" fill="none" stroke="#7e8a9e" stroke-width="1" stroke-dasharray="3 3"></polyline><polyline points="3,20.333333333333336 14.172413793103448,29 25.344827586206897,11.666666666666668 36.51724137931034,20.333333333333336 47.689655172413794,20.333333333333336 58.862068965517246,29 70.03448275862068,29 81.20689655172414,11.666666666666668 92.37931034482759,20.333333333333336 103.55172413793103,20.333333333333336 114.72413793103449,3 125.89655172413792,20.333333333333336 137.06896551724137,29 148.24137931034483,20.333333333333336 159.41379310344828,11.666666666666668 170.58620689655174,11.666666666666668 181.75862068965517,20.333333333333336 192.9310344827586,20.333333333333336 204.10344827586206,29 215.27586206896552,11.666666666666668 226.44827586206898,20.333333333333336 237.6206896551724,3 248.79310344827584,11.666666666666668 259.9655172413793,20.333333333333336 271.13793103448273,20.333333333333336 282.31034482758616,11.666666666666668 293.48275862068965,20.333333333333336 304.6551724137931,11.666666666666668 315.82758620689657,29 327,20.333333333333336" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"></polyline><circle cx="327" cy="20.333333333333336" r="3" fill="currentColor"></circle></svg></div><div class="foot"><span class="b warn">target 30 / month</span><span class="m">n = 27 · as of 09:05 UTC</span></div></div>
-          <div class="mc s" style="width:220px"><div class="t"><span class="tx">Issues → merged PR</span></div><div class="v">27<svg class="spark" data-v="3,4,3,5,6,5,7,8,7,9" style="width:80px;height:26px" viewBox="0 0 80 26" preserveAspectRatio="none" role="img" aria-label="Trend, 10 points, first 3, last 9"><polyline points="3,23 11.222222222222221,19.666666666666668 19.444444444444443,23 27.666666666666664,16.333333333333336 35.888888888888886,13 44.111111111111114,16.333333333333336 52.33333333333333,9.666666666666668 60.55555555555556,6.333333333333332 68.77777777777777,9.666666666666668 77,3" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"></polyline><circle cx="77" cy="3" r="3" fill="currentColor"></circle></svg></div><div class="foot"><span class="b warn">target 30 / month</span></div></div>
         </div>
       </div>
       <div>
@@ -648,7 +624,7 @@ table.t.dense{font-size:12px}table.t.dense td,table.t.dense th{padding:6px 7px}t
 
     <article class="spec wide" id="mc-07">
       <div class="ab flat" style="padding:36px 28px 28px">
-        <span class="cap">MC-07 · W · 1:1</span>
+        <span class="cap">MC-07 · later · 1:1</span>
         <div class="mc" style="width:100%;height:226px"><div class="t"><span class="tx">Run success rate by variant · 7d</span></div>
           <div class="viz" style="margin-top:10px">
             <div class="brow" style="grid-template-columns:minmax(0,1fr) 40px 56px 84px 68px;min-height:20px;border-bottom:1px solid var(--border-subtle)"><span class="m">Variant</span><span class="m" style="text-align:right">n</span><span class="m" style="text-align:right">Value</span><span class="m">vs control</span><span class="m">Guardrails</span></div>
@@ -660,6 +636,7 @@ table.t.dense{font-size:12px}table.t.dense td,table.t.dense th{padding:6px 7px}t
         </div>
       </div>
       <div>
+        <div class="note warn">Later. This card needs more than one grid cell, and wide layouts belong to the dashboard ticket. Kept here as a reference only.</div>
         <span class="id">MC-07 · <code>group_by: "variant"</code></span><h3>Variant comparison</h3>
         <p class="lead">For A/B tests of agent definitions, models, skills, plugins, MCP sets and prompts. It shows the sample size on every row and never declares a winner.</p>
         <div class="kv">
@@ -709,18 +686,19 @@ table.t.dense{font-size:12px}table.t.dense td,table.t.dense th{padding:6px 7px}t
 
     <article class="spec wide" id="mc-09">
       <div class="ab flat" style="padding:36px 28px 28px">
-        <span class="cap">MC-09 · W · 1:1</span>
+        <span class="cap">MC-09 · later · 1:1</span>
         <div class="mc" style="width:100%;height:262px"><div class="t"><span class="tx">Throughput · merged PRs per week</span></div><div class="v">27<small>last week · 12 weeks shown</small></div>
-          <div class="viz" style="margin-top:8px"><svg class="bars" data-v="14,18,16,21,19,24,22,26,23,27,29,17" data-partial="1" data-prev="21" data-labels="Sep 1,Nov 17" style="display:block;width:100%;height:128px" viewBox="0 0 510 128" role="img" aria-label="Bar chart, 12 buckets, first 14, last 17, max 29"><defs><pattern id="ht1" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="6" height="6" fill="rgba(255,255,255,.12)"></rect><rect width="3" height="6" fill="rgba(255,255,255,.5)"></rect></pattern></defs><line x1="26" x2="510" y1="112" y2="112" stroke="#383f50" stroke-width="1"></line><text x="20" y="115.5" text-anchor="end" fill="#7e8a9e" font-size="10">0</text><line x1="26" x2="510" y1="59" y2="59" stroke="#383f50" stroke-width="1"></line><text x="20" y="62.5" text-anchor="end" fill="#7e8a9e" font-size="10">15</text><line x1="26" x2="510" y1="6" y2="6" stroke="#383f50" stroke-width="1"></line><text x="20" y="9.5" text-anchor="end" fill="#7e8a9e" font-size="10">30</text><rect x="26" y="62.53333333333333" width="36.666666666666664" height="49.46666666666667" rx="2" fill="rgba(255,255,255,.7)" stroke="none" stroke-width="0"></rect><rect x="66.66666666666666" y="48.4" width="36.666666666666664" height="63.6" rx="2" fill="rgba(255,255,255,.7)" stroke="none" stroke-width="0"></rect><rect x="107.33333333333333" y="55.46666666666667" width="36.666666666666664" height="56.53333333333333" rx="2" fill="rgba(255,255,255,.7)" stroke="none" stroke-width="0"></rect><rect x="148" y="37.8" width="36.666666666666664" height="74.2" rx="2" fill="rgba(255,255,255,.7)" stroke="none" stroke-width="0"></rect><rect x="188.66666666666666" y="44.86666666666666" width="36.666666666666664" height="67.13333333333334" rx="2" fill="rgba(255,255,255,.7)" stroke="none" stroke-width="0"></rect><rect x="229.33333333333331" y="27.200000000000003" width="36.666666666666664" height="84.8" rx="2" fill="rgba(255,255,255,.7)" stroke="none" stroke-width="0"></rect><rect x="270" y="34.266666666666666" width="36.666666666666664" height="77.73333333333333" rx="2" fill="rgba(255,255,255,.7)" stroke="none" stroke-width="0"></rect><rect x="310.66666666666663" y="20.13333333333334" width="36.666666666666664" height="91.86666666666666" rx="2" fill="rgba(255,255,255,.7)" stroke="none" stroke-width="0"></rect><rect x="351.3333333333333" y="30.733333333333334" width="36.666666666666664" height="81.26666666666667" rx="2" fill="rgba(255,255,255,.7)" stroke="none" stroke-width="0"></rect><rect x="392" y="16.599999999999994" width="36.666666666666664" height="95.4" rx="2" fill="rgba(255,255,255,.7)" stroke="none" stroke-width="0"></rect><rect x="432.66666666666663" y="9.533333333333331" width="36.666666666666664" height="102.46666666666667" rx="2" fill="rgba(255,255,255,.7)" stroke="none" stroke-width="0"></rect><rect x="473.3333333333333" y="51.93333333333333" width="36.666666666666664" height="60.06666666666667" rx="2" fill="url(#ht1)" stroke="rgba(255,255,255,.6)" stroke-width="1"></rect><line x1="26" x2="510" y1="37.8" y2="37.8" stroke="#a3b0c4" stroke-width="1" stroke-dasharray="4 3"></line><text x="26" y="125" text-anchor="start" fill="#7e8a9e" font-size="10">Sep 1</text><text x="510" y="125" text-anchor="end" fill="#7e8a9e" font-size="10">Nov 17</text></svg></div>
+          <div class="viz" style="margin-top:8px"><svg class="bars" data-v="14,18,16,21,19,24,22,26,23,27,29,17" data-partial="1" data-prev="21" data-labels="Sep 1,Nov 17" style="display:block;width:100%;height:128px" viewBox="0 0 510 128" role="img" aria-label="Bar chart, 12 buckets, first 14, last 17, max 29"><defs><pattern id="ht0" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="6" height="6" fill="rgba(255,255,255,.12)"></rect><rect width="3" height="6" fill="rgba(255,255,255,.5)"></rect></pattern></defs><line x1="26" x2="510" y1="112" y2="112" stroke="#383f50" stroke-width="1"></line><text x="20" y="115.5" text-anchor="end" fill="#7e8a9e" font-size="10">0</text><line x1="26" x2="510" y1="59" y2="59" stroke="#383f50" stroke-width="1"></line><text x="20" y="62.5" text-anchor="end" fill="#7e8a9e" font-size="10">15</text><line x1="26" x2="510" y1="6" y2="6" stroke="#383f50" stroke-width="1"></line><text x="20" y="9.5" text-anchor="end" fill="#7e8a9e" font-size="10">30</text><rect x="26" y="62.53333333333333" width="36.666666666666664" height="49.46666666666667" rx="2" fill="rgba(255,255,255,.7)" stroke="none" stroke-width="0"></rect><rect x="66.66666666666666" y="48.4" width="36.666666666666664" height="63.6" rx="2" fill="rgba(255,255,255,.7)" stroke="none" stroke-width="0"></rect><rect x="107.33333333333333" y="55.46666666666667" width="36.666666666666664" height="56.53333333333333" rx="2" fill="rgba(255,255,255,.7)" stroke="none" stroke-width="0"></rect><rect x="148" y="37.8" width="36.666666666666664" height="74.2" rx="2" fill="rgba(255,255,255,.7)" stroke="none" stroke-width="0"></rect><rect x="188.66666666666666" y="44.86666666666666" width="36.666666666666664" height="67.13333333333334" rx="2" fill="rgba(255,255,255,.7)" stroke="none" stroke-width="0"></rect><rect x="229.33333333333331" y="27.200000000000003" width="36.666666666666664" height="84.8" rx="2" fill="rgba(255,255,255,.7)" stroke="none" stroke-width="0"></rect><rect x="270" y="34.266666666666666" width="36.666666666666664" height="77.73333333333333" rx="2" fill="rgba(255,255,255,.7)" stroke="none" stroke-width="0"></rect><rect x="310.66666666666663" y="20.13333333333334" width="36.666666666666664" height="91.86666666666666" rx="2" fill="rgba(255,255,255,.7)" stroke="none" stroke-width="0"></rect><rect x="351.3333333333333" y="30.733333333333334" width="36.666666666666664" height="81.26666666666667" rx="2" fill="rgba(255,255,255,.7)" stroke="none" stroke-width="0"></rect><rect x="392" y="16.599999999999994" width="36.666666666666664" height="95.4" rx="2" fill="rgba(255,255,255,.7)" stroke="none" stroke-width="0"></rect><rect x="432.66666666666663" y="9.533333333333331" width="36.666666666666664" height="102.46666666666667" rx="2" fill="rgba(255,255,255,.7)" stroke="none" stroke-width="0"></rect><rect x="473.3333333333333" y="51.93333333333333" width="36.666666666666664" height="60.06666666666667" rx="2" fill="url(#ht0)" stroke="rgba(255,255,255,.6)" stroke-width="1"></rect><line x1="26" x2="510" y1="37.8" y2="37.8" stroke="#a3b0c4" stroke-width="1" stroke-dasharray="4 3"></line><text x="26" y="125" text-anchor="start" fill="#7e8a9e" font-size="10">Sep 1</text><text x="510" y="125" text-anchor="end" fill="#7e8a9e" font-size="10">Nov 17</text></svg></div>
           <div class="foot" style="margin-top:8px"><span class="m"><span style="display:inline-block;width:14px;border-top:1px dashed var(--dim);vertical-align:middle;margin-right:4px"></span>previous 12-week average</span><span class="m">n = 267 · as of 09:05 UTC</span></div>
         </div>
       </div>
       <div>
+        <div class="note warn">Later. This card needs more than one grid cell, and wide layouts belong to the dashboard ticket. Kept here as a reference only.</div>
         <span class="id">MC-09 · <code>series</code> (extension) <span class="chip ext">not in the Notion enum</span></span><h3>Series chart</h3>
         <p class="lead">Bars per bucket. The Notion <code>display</code> list has no full chart, but the merged aggregate already returns buckets by day, week and month, and Warp and Laminar both show bucketed charts. Proposed as an addition.</p>
         <div class="kv">
           <div>Required</div><div>Everything in MC-02, <code>display: "series"</code>, <code>bucket</code></div>
-          <div>Plot</div><div>Bars with 2 px radius, 4 px gap, <code>primary</code> at 70%. Plot height 128 inside a W card (min 96). Three horizontal grid lines at 0, mid, max in <code>border-subtle</code>.</div>
+          <div>Plot</div><div>Bars with 2 px radius, 4 px gap, <code>primary</code> at 70%. Plot height 128 (min 96). Three horizontal grid lines at 0, mid, max in <code>border-subtle</code>.</div>
           <div>Axis</div><div>Y labels 11/14 <code>text-dim</code> at the left of the grid lines. X labels: first and last bucket only.</div>
           <div>Current bucket</div><div>The bucket still in progress is hatched and labelled "in progress" in the tooltip. It is never used for the headline.</div>
           <div>Compare</div><div>Dashed 1 px line at the previous window's average. Not a second series, to keep the chart readable.</div>
@@ -921,7 +899,7 @@ table.t.dense{font-size:12px}table.t.dense td,table.t.dense th{padding:6px 7px}t
     </div>
     <div class="tw" style="margin-top:12px"><table class="t">
       <tbody><tr><th></th><th>Region</th><th>Today in the prototype</th><th>Becomes</th></tr>
-      <tr><td><span class="pinref">A</span></td><td>Goal card KPI strip</td><td><code>factory.kpis</code> (<code>label, value, target, onTrack</code> strings). Only the first tile has a sparkline.</td><td>Up to 3 size S cards. Each KPI becomes a reference to a card (<code>card_id</code>). The <code>onTrack</code> boolean is replaced by <code>status</code>. Empty state keeps "+ Add a KPI".</td></tr>
+      <tr><td><span class="pinref">A</span></td><td>Goal card KPI strip</td><td><code>factory.kpis</code> (<code>label, value, target, onTrack</code> strings). Only the first tile has a sparkline.</td><td>Stays as in the prototype. It is not a metric card, and binding its tiles to cards belongs to the dashboard ticket.</td></tr>
       <tr><td><span class="pinref">B</span></td><td>Flow row (<code>FlowStats</code>)</td><td>Four hard-coded <code>Stat</code> cards, <code>grid-cols-2 xl:grid-cols-4</code>.</td><td>Four size M cards, MC-01 or MC-02. Same grid. These are operator-facing flow numbers and do not count toward the 8.</td></tr>
       <tr><td><span class="pinref">C</span></td><td>Metrics section header</td><td>New.</td><td>Segmented control Leaders · Operators filters by <code>metric.audience</code>. The window selector sets the default <code>window</code> for cards that did not pin one. Both are open questions (sheet 14).</td></tr>
       <tr><td><span class="pinref">D</span></td><td>Card grid</td><td>New.</td><td>Grid from sheet 04. Order by <code>card.order</code>. Template default set, capped at 8 for Leaders. Operators show their own set, with no cap, in a scrolling section.</td></tr>
@@ -1037,6 +1015,7 @@ Limits: key [a-zA-Z0-9_.-], ≤100 chars · ≤50 values per submission · paylo
           <tr><td class="n"><b>D6</b></td><td>Status never shows <code>ok</code> or <code>critical</code> on thin data.</td></tr>
           <tr><td class="n"><b>D7</b></td><td>A series chart (MC-09) is added, though the Notion <code>display</code> list has none.</td></tr>
           <tr><td class="n"><b>D8</b></td><td>Color goes on badges, ticks and bar fills. Never on the headline number.</td></tr>
+          <tr><td class="n"><b>D9</b></td><td>One card size (M). A card has no size or position field. Layout belongs to the dashboard ticket.</td></tr>
         </tbody></table>
       </div>
       <div>
