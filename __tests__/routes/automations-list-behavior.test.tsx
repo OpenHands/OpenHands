@@ -14,8 +14,7 @@ const mocks = vi.hoisted(() => ({
   },
   automationsState: {
     data: { automations: [], total: 0 } as
-      | { automations: Automation[]; total: number }
-      | undefined,
+      { automations: Automation[]; total: number } | undefined,
     isLoading: false,
     isError: false,
     refetch: vi.fn(),
@@ -99,6 +98,14 @@ vi.mock("#/hooks/query/use-automation-run-summaries", () => ({
 vi.mock("#/hooks/query/use-cloud-integrations-config", () => ({
   useCloudIntegrationsConfig: () => ({ data: undefined }),
 }));
+
+// Owner sections need org members, and this plain list is never grouped by owner.
+vi.mock(
+  "#/components/features/automations/dashboard/use-owner-sections",
+  () => ({
+    useOwnerSections: () => [],
+  }),
+);
 
 vi.mock("#/hooks/query/use-automation-health", () => ({
   useAutomationHealth: () => mocks.healthState,

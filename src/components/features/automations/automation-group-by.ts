@@ -1,7 +1,7 @@
 import type { Automation } from "#/types/automation";
 
 /** How the list page sections its automations; the first is the default. */
-export const AUTOMATION_GROUP_BY_VALUES = ["status", "tag"] as const;
+export const AUTOMATION_GROUP_BY_VALUES = ["status", "tag", "owner"] as const;
 
 export type AutomationGroupBy = (typeof AUTOMATION_GROUP_BY_VALUES)[number];
 
@@ -14,7 +14,9 @@ export function readStoredAutomationGroupBy(): AutomationGroupBy {
   }
 
   const stored = window.localStorage.getItem(AUTOMATIONS_GROUP_BY_STORAGE_KEY);
-  return stored === "tag" ? "tag" : "status";
+  return (
+    AUTOMATION_GROUP_BY_VALUES.find((value) => value === stored) ?? "status"
+  );
 }
 
 export function writeStoredAutomationGroupBy(groupBy: AutomationGroupBy): void {
@@ -59,4 +61,37 @@ export function groupAutomationsByTag(
     })).sort((a, b) => a.tag.localeCompare(b.tag)),
     untagged,
   };
+}
+
+export interface AutomationOwnerGroup {
+  /** The person or service account the automations run as; null when unknown. */
+  ownerId: string | null;
+  isServiceAccount: boolean;
+  automations: Automation[];
+}
+
+/**
+ * Sections automations by the identity they run as. Groups, and the automations
+ * in each, are in the order they first came in.
+ */
+export function groupAutomationsByOwner(
+  automations: readonly Automation[],
+): AutomationOwnerGroup[] {
+  const byOwner = new Map<string | null, AutomationOwnerGroup>();
+
+  automations.forEach((automation) => {
+    const ownerId = automation.user_id ?? null;
+    const group = byOwner.get(ownerId);
+    if (group) {
+      group.automations.push(automation);
+    } else {
+      byOwner.set(ownerId, {
+        ownerId,
+        isServiceAccount: automation.run_as_kind === "service",
+        automations: [automation],
+      });
+    }
+  });
+
+  return Array.from(byOwner.values());
 }

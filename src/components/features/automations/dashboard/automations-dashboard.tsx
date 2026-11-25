@@ -98,6 +98,7 @@ import type {
   DashboardTriggerValue,
 } from "#/manifests/types";
 import { useAutomationRunSummaries } from "#/hooks/query/use-automation-run-summaries";
+import { useOwnerSections } from "#/components/features/automations/dashboard/use-owner-sections";
 import { useAutomationSubPageNav } from "#/components/features/automations/dashboard/use-automation-sub-page-nav";
 import { AutomationsDashboardControls } from "#/components/features/automations/dashboard/automations-dashboard-controls";
 import { AutomationsFilteredEmptyState } from "#/components/features/automations/dashboard/automations-filtered-empty-state";
@@ -120,6 +121,7 @@ const NO_SAVED_DRAFTS: AutomationDraftListResponse = { drafts: [], total: 0 };
 const GROUP_BY_LABEL_KEYS: Record<AutomationGroupBy, I18nKey> = {
   status: I18nKey.AUTOMATIONS$GROUP_BY_STATUS,
   tag: I18nKey.AUTOMATIONS$GROUP_BY_TAG,
+  owner: I18nKey.AUTOMATIONS$GROUP_BY_OWNER,
 };
 
 function withoutDraftAutomations(
@@ -419,9 +421,20 @@ export function AutomationsDashboard({
     [tagCounts],
   );
   // Grouping by tag is offered where the tag filter is: only when the org has
-  // tags. Without them a stored choice falls back to the status sections.
+  // tags. Grouping by owner is offered where the creator filter is: a team
+  // workspace. Without either, a stored choice falls back to the status sections.
   const canGroupByTag = tagOptions.length > 0;
-  const isGroupedByTag = canGroupByTag && groupBy === "tag";
+  const canGroupByOwner = creatorFilterUserId !== null;
+  const groupByOptions = AUTOMATION_GROUP_BY_VALUES.filter(
+    (value) =>
+      value === "status" ||
+      (value === "tag" && canGroupByTag) ||
+      (value === "owner" && canGroupByOwner),
+  );
+  const canChooseGroupBy = groupByOptions.length > 1;
+  const activeGroupBy = groupByOptions.includes(groupBy) ? groupBy : "status";
+  const isGroupedByTag = activeGroupBy === "tag";
+  const isGroupedByOwner = activeGroupBy === "owner";
   const {
     data: orgDraftsData,
     isLoading: isDraftsLoading,
@@ -509,7 +522,11 @@ export function AutomationsDashboard({
     [visible],
   );
   const inactive = useMemo(() => visible.filter((a) => !a.enabled), [visible]);
+  const ownerSections = useOwnerSections(visible, {
+    enabled: isGroupedByOwner,
+  });
   const sections = useMemo(() => {
+    if (isGroupedByOwner) return ownerSections;
     if (!isGroupedByTag) {
       return [
         {
@@ -537,7 +554,15 @@ export function AutomationsDashboard({
         automations: untagged,
       },
     ];
-  }, [isGroupedByTag, visible, activeAutomations, inactive, t]);
+  }, [
+    isGroupedByOwner,
+    ownerSections,
+    isGroupedByTag,
+    visible,
+    activeAutomations,
+    inactive,
+    t,
+  ]);
 
   const handleToggle = (id: string, currentEnabled: boolean) => {
     const willEnable = !currentEnabled;
@@ -866,7 +891,7 @@ export function AutomationsDashboard({
           onChange={setSearchQuery}
           // Beside the group-by control the search keeps a basis, so a narrow
           // row wraps its controls instead of squeezing the search to its icon.
-          className={canGroupByTag ? "basis-40" : undefined}
+          className={canChooseGroupBy ? "basis-40" : undefined}
         />
         {dashboard && (
           <AutomationsDashboardControls
@@ -886,12 +911,12 @@ export function AutomationsDashboard({
             onSortChange={setSortValue}
           />
         )}
-        {canGroupByTag && (
+        {canChooseGroupBy && (
           <EnumFilterDropdown
             testId="automations-group-by"
-            value={groupBy}
+            value={activeGroupBy}
             onChange={handleGroupByChange}
-            options={AUTOMATION_GROUP_BY_VALUES}
+            options={groupByOptions}
             labelKeyByValue={GROUP_BY_LABEL_KEYS}
             ariaLabel={t(I18nKey.AUTOMATIONS$GROUP_BY)}
             triggerClassName="h-9 py-0"
