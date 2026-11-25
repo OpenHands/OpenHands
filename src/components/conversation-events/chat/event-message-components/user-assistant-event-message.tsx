@@ -37,12 +37,14 @@ interface UserAssistantEventMessageProps {
   suppressReasoning?: boolean;
   isLastMessage: boolean;
   isFromPlanningAgent: boolean;
+  processingTimeMs?: number;
 }
 
 function UserAssistantEventMessageComponent({
   event,
   suppressReasoning = false,
   isFromPlanningAgent,
+  processingTimeMs,
 }: UserAssistantEventMessageProps) {
   const { t } = useTranslation("openhands");
   const { conversationId } = useOptionalConversationId();
@@ -181,6 +183,7 @@ function UserAssistantEventMessageComponent({
         isFromPlanningAgent={isFromPlanningAgent}
         actions={actions}
         timestamp={event.timestamp}
+        processingTimeMs={processingTimeMs}
       >
         {imageUrls.length > 0 && (
           <ImageCarousel size="small" images={imageUrls} />

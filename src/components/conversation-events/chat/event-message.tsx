@@ -69,6 +69,10 @@ interface EventMessageProps {
    */
   suppressThought?: boolean;
   suppressReasoning?: boolean;
+  /** How long this message's request took to process, in milliseconds. */
+  processingTimeMs?: number;
+  /** Start time for the live elapsed timer on a streaming reply. */
+  liveStartTimestamp?: string;
 }
 
 interface CommonProps {
@@ -157,6 +161,8 @@ function EventMessageComponent({
   showPlanPreview,
   suppressThought = false,
   suppressReasoning = false,
+  processingTimeMs,
+  liveStartTimestamp,
 }: EventMessageProps) {
   const { data: config } = useConfig();
   const planContent = useConversationStore((state) => state.planContent);
@@ -240,8 +246,8 @@ function EventMessageComponent({
             type="agent"
             message={message}
             isFromPlanningAgent={isFromPlanningAgent}
-            timestamp={event.timestamp}
             isStreaming
+            liveStartTimestamp={liveStartTimestamp}
           />
         )}
       </>
@@ -406,6 +412,7 @@ function EventMessageComponent({
         suppressReasoning={suppressReasoning}
         {...commonProps}
         isLastMessage={isLastMessage}
+        processingTimeMs={processingTimeMs}
       />
     );
   }

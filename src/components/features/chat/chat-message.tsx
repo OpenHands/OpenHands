@@ -8,6 +8,7 @@ import { StyledTooltip } from "#/components/shared/buttons/styled-tooltip";
 import { I18nKey } from "#/i18n/declaration";
 import { TextShimmer } from "#/components/shared/text-shimmer";
 import { MessageTimestamp } from "./message-timestamp";
+import { LiveElapsedClock } from "./live-elapsed-clock";
 import { MarkdownRenderer } from "../markdown/markdown-renderer";
 import { PendingStopIcon } from "./pending-stop-icon";
 import { useEventExpansionKey } from "./row-expansion-context";
@@ -18,6 +19,7 @@ import {
   USER_MESSAGE_LINE_HEIGHT_PX,
 } from "./user-message-body";
 import { copyToClipboard } from "#/utils/copy-to-clipboard";
+import { formatDurationMs } from "#/utils/format-duration";
 import { displayErrorToast } from "#/utils/custom-toast-handlers";
 
 export type ChatMessagePendingStatus = "sending" | "error";
@@ -38,6 +40,10 @@ interface ChatMessageProps {
   onDismiss?: () => void;
   onStop?: () => void;
   timestamp?: string;
+  /** How long this reply took to process, in milliseconds (agent replies only). */
+  processingTimeMs?: number;
+  /** Start time for the live elapsed timer shown while the reply streams. */
+  liveStartTimestamp?: string;
   /** The message is a reply still being streamed in. */
   isStreaming?: boolean;
 }
@@ -55,6 +61,8 @@ export function ChatMessage({
   onDismiss,
   onStop,
   timestamp,
+  processingTimeMs,
+  liveStartTimestamp,
   isStreaming = false,
 }: React.PropsWithChildren<ChatMessageProps>) {
   const { t } = useTranslation("openhands");
@@ -276,12 +284,26 @@ export function ChatMessage({
       ) : null}
 
       {children}
-      {timestamp && !isPendingUserMessage && (
-        <MessageTimestamp
-          timestamp={timestamp}
-          active={isHovering}
+      {isStreaming && liveStartTimestamp ? (
+        <LiveElapsedClock
+          startTimestamp={liveStartTimestamp}
           align={type === "user" ? "right" : "left"}
         />
+      ) : (
+        timestamp &&
+        !isPendingUserMessage && (
+          <MessageTimestamp
+            timestamp={timestamp}
+            align={type === "user" ? "right" : "left"}
+            suffix={
+              type === "agent" && processingTimeMs != null
+                ? t(I18nKey.CHAT_INTERFACE$TOOK, {
+                    time: formatDurationMs(processingTimeMs),
+                  })
+                : undefined
+            }
+          />
+        )
       )}
     </article>
   );

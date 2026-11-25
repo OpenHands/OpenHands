@@ -17,6 +17,7 @@ import { useAgentState, usePlanningAgentState } from "#/hooks/use-agent-state";
 import { AgentState } from "#/types/agent-state";
 import {
   isActionEvent,
+  isMessageEvent,
   isObservationEvent,
   isPlanningFileEditorObservationEvent,
   isStreamingDeltaEvent,
@@ -41,12 +42,15 @@ import { getStepKey, StepDisclosureContext } from "./step-disclosure-context";
 import { useModelStore } from "#/stores/model-store";
 import { ModelMessages } from "#/components/features/chat/model-messages";
 import { useOptionalConversationId } from "#/hooks/use-conversation-id";
+import { useElapsedSeconds } from "#/hooks/use-elapsed-seconds";
 import { ConversationConfirmationButtons } from "#/components/shared/buttons/conversation-confirmation-buttons";
 import {
   EventExpansionContext,
   RowExpansionContext,
 } from "#/components/features/chat/row-expansion-context";
 import { cn } from "#/utils/utils";
+import { computeAssistantProcessingTimes } from "#/utils/compute-message-processing-times";
+import { formatClock } from "#/utils/format-clock";
 import { useMessageExpansionStore } from "#/stores/message-expansion-store";
 import {
   applyBufferedScrollCorrection,
@@ -253,6 +257,25 @@ export const Messages: React.FC<MessagesProps> = React.memo(
       [allEvents],
     );
 
+    // How long each assistant reply took, keyed by event id. Derived from the
+    // timestamps already on the events, so no extra backend data is needed.
+    const processingTimeByEventId = React.useMemo(
+      () => computeAssistantProcessingTimes(messages),
+      [messages],
+    );
+
+    // The current turn's start: the timestamp of the most recent user message.
+    // Drives the live elapsed timer while the agent works on that turn.
+    const turnStartTimestamp = React.useMemo(() => {
+      for (let i = messages.length - 1; i >= 0; i -= 1) {
+        const event = messages[i];
+        if (isMessageEvent(event) && event.source === "user") {
+          return event.timestamp;
+        }
+      }
+      return undefined;
+    }, [messages]);
+
     // Set of event ids that have a /model entry anchored to them — used to
     // avoid mounting <ModelMessages> for every event (the component would
     // otherwise early-return null).
@@ -444,6 +467,10 @@ export const Messages: React.FC<MessagesProps> = React.memo(
         messages.length && isStreamingDeltaEvent(messages[messages.length - 1])
       );
 
+    const thinkingElapsedSeconds = useElapsedSeconds(
+      showThinkingLine ? turnStartTimestamp : undefined,
+    );
+
     const renderEventMessage = (
       event: OHEvent,
       index: number,
@@ -498,6 +525,12 @@ export const Messages: React.FC<MessagesProps> = React.memo(
                 event.id ? planPreviewEventIds.has(event.id) : false
               }
               suppressThought={suppressThought}
+              processingTimeMs={
+                event.id ? processingTimeByEventId.get(event.id) : undefined
+              }
+              liveStartTimestamp={
+                isAgentRunning ? turnStartTimestamp : undefined
+              }
               suppressReasoning={groupedReasoningIds.has(
                 isObservationEvent(event) || isUserRejectObservation(event)
                   ? event.action_id
@@ -1171,6 +1204,11 @@ export const Messages: React.FC<MessagesProps> = React.memo(
           >
             <span>{t(I18nKey.ACTION_MESSAGE$THINK)}</span>
             <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
+            {turnStartTimestamp && (
+              <span className="tabular-nums" data-testid="live-thinking-clock">
+                {formatClock(thinkingElapsedSeconds)}
+              </span>
+            )}
           </div>
         )}
         {(shouldVirtualize
