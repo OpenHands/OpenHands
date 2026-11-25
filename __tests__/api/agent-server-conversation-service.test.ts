@@ -34,6 +34,7 @@ const {
   mockSettingsClient,
   mockSwitchProfile,
   mockSwitchLLM,
+  mockGetModelRouter,
   mockAddModelRouterRoute,
   mockSwitchModelRouter,
   mockSendEvent,
@@ -59,6 +60,7 @@ const {
   mockSettingsClient: vi.fn(),
   mockSwitchProfile: vi.fn(),
   mockSwitchLLM: vi.fn(),
+  mockGetModelRouter: vi.fn(),
   mockAddModelRouterRoute: vi.fn(),
   mockSwitchModelRouter: vi.fn(),
   mockSendEvent: vi.fn(),
@@ -226,6 +228,7 @@ describe("AgentServerConversationService", () => {
     mockListProfiles.mockReset();
     mockSwitchProfile.mockReset();
     mockSwitchLLM.mockReset();
+    mockGetModelRouter.mockReset();
     mockAddModelRouterRoute.mockReset();
     mockSwitchModelRouter.mockReset();
     mockSendEvent.mockReset();
@@ -269,6 +272,7 @@ describe("AgentServerConversationService", () => {
       switchAcpModel: mockSwitchAcpModel,
       switchProfile: mockSwitchProfile,
       switchLLM: mockSwitchLLM,
+      getModelRouter: mockGetModelRouter,
       addModelRouterRoute: mockAddModelRouterRoute,
       switchModelRouter: mockSwitchModelRouter,
     });
@@ -1702,6 +1706,7 @@ describe("AgentServerConversationService", () => {
     beforeEach(() => {
       window.localStorage.clear();
       __resetActiveStoreForTests();
+      mockGetModelRouter.mockResolvedValue({ enabled: true, routes: [] });
     });
 
     afterEach(() => {
@@ -1718,6 +1723,7 @@ describe("AgentServerConversationService", () => {
 
       await AgentServerConversationService.switchProfile("conv-1", "haiku");
 
+      expect(mockGetModelRouter).toHaveBeenCalledWith("conv-1");
       expect(mockAddModelRouterRoute).toHaveBeenCalledWith(
         "conv-1",
         "haiku",
@@ -1730,12 +1736,16 @@ describe("AgentServerConversationService", () => {
       expect(mockSwitchProfile).not.toHaveBeenCalled();
     });
 
-    it("falls back to the requested profile name when the add-route response omits routes", async () => {
-      mockAddModelRouterRoute.mockResolvedValue({ enabled: true });
+    it("reuses an existing model-router route when switching to the same profile again", async () => {
+      mockGetModelRouter.mockResolvedValue({
+        enabled: true,
+        routes: [{ name: "haiku" }],
+      });
       mockSwitchModelRouter.mockResolvedValue({ enabled: true });
 
       await AgentServerConversationService.switchProfile("conv-1", "haiku");
 
+      expect(mockAddModelRouterRoute).not.toHaveBeenCalled();
       expect(mockSwitchModelRouter).toHaveBeenCalledWith("conv-1", "haiku");
       expect(mockGetProfile).not.toHaveBeenCalled();
       expect(mockSwitchLLM).not.toHaveBeenCalled();

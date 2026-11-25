@@ -333,6 +333,7 @@ export function ConversationConfigurationModal({
     try {
       const llm: SaveProfileRequest["llm"] = {
         model: model.trim(),
+        stream: true,
         ...(apiKey ? { api_key: apiKey } : {}),
         ...(baseUrl.trim() ? { base_url: baseUrl.trim() } : {}),
       };

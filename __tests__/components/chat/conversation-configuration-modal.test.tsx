@@ -266,10 +266,16 @@ describe("conversation additions", () => {
     const actions: string[] = [];
     server.use(
       http.post("*/api/profiles/:name", async ({ request }) => {
-        const body = (await request.json()) as { llm: { model: string } };
-        actions.push(`save:${body.llm.model}`);
+        const body = (await request.json()) as {
+          llm: { model: string; stream: boolean };
+        };
+        actions.push(`save:${body.llm.model}:${body.llm.stream}`);
         return HttpResponse.json({ name: "test-model", message: "Saved" });
       }),
+      http.get("*/api/conversations/:id/model_router", () =>
+        HttpResponse.json({ enabled: true, routes: [] }),
+      ),
+
       http.post(
         "*/api/conversations/:id/model_router/routes",
         async ({ request }) => {
@@ -315,7 +321,7 @@ describe("conversation additions", () => {
 
     await waitFor(() =>
       expect(actions).toEqual([
-        "save:openai/gpt-4o",
+        "save:openai/gpt-4o:true",
         "add-route:test-model",
         "switch-route:test-model",
       ]),

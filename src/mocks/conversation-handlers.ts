@@ -139,6 +139,11 @@ const CONVERSATIONS = new Map<string, MockConversation>(
   conversations.map((conversation) => [conversation.id, conversation]),
 );
 
+const MODEL_ROUTER_ROUTES = new Map<
+  string,
+  Array<{ name: string; profile_name?: string }>
+>();
+
 const paginationEventsByConversation = new Map<string, OpenHandsEvent[]>([
   [
     PAGINATION_LOCAL_CONVERSATION_ID,
@@ -466,10 +471,28 @@ export const CONVERSATION_HANDLERS = [
     },
   ),
 
+  http.get(
+    "*/api/conversations/:conversationId/model_router",
+    async ({ params }) => {
+      const conversationId = params.conversationId as string;
+      if (!CONVERSATIONS.has(conversationId)) {
+        return HttpResponse.json(
+          { detail: "Conversation not found" },
+          { status: 404 },
+        );
+      }
+      return HttpResponse.json({
+        enabled: true,
+        routes: MODEL_ROUTER_ROUTES.get(conversationId) ?? [],
+      });
+    },
+  ),
+
   http.post(
     "*/api/conversations/:conversationId/model_router/routes",
     async ({ params, request }) => {
-      if (!CONVERSATIONS.has(params.conversationId as string)) {
+      const conversationId = params.conversationId as string;
+      if (!CONVERSATIONS.has(conversationId)) {
         return HttpResponse.json(
           { detail: "Conversation not found" },
           { status: 404 },
@@ -486,9 +509,21 @@ export const CONVERSATION_HANDLERS = [
           { status: 400 },
         );
       }
+      const routes = MODEL_ROUTER_ROUTES.get(conversationId) ?? [];
+      if (routes.some((route) => route.name === routeName)) {
+        return HttpResponse.json(
+          { detail: "Conversation cannot add this model router route" },
+          { status: 400 },
+        );
+      }
+      const nextRoutes = [
+        ...routes,
+        { name: routeName, profile_name: body.profile_name },
+      ];
+      MODEL_ROUTER_ROUTES.set(conversationId, nextRoutes);
       return HttpResponse.json({
         enabled: true,
-        routes: [{ name: routeName, profile_name: body.profile_name }],
+        routes: nextRoutes,
       });
     },
   ),
@@ -496,7 +531,8 @@ export const CONVERSATION_HANDLERS = [
   http.patch(
     "*/api/conversations/:conversationId/model_router",
     async ({ params, request }) => {
-      if (!CONVERSATIONS.has(params.conversationId as string)) {
+      const conversationId = params.conversationId as string;
+      if (!CONVERSATIONS.has(conversationId)) {
         return HttpResponse.json(
           { detail: "Conversation not found" },
           { status: 404 },
@@ -507,6 +543,7 @@ export const CONVERSATION_HANDLERS = [
       };
       return HttpResponse.json({
         enabled: true,
+        routes: MODEL_ROUTER_ROUTES.get(conversationId) ?? [],
         selection: body.selection ?? { mode: "auto" },
       });
     },

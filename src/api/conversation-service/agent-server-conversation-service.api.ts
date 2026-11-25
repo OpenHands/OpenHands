@@ -1434,8 +1434,9 @@ class AgentServerConversationService {
 
   /**
    * Switches the LLM profile for the running conversation when one is open.
-   * Local conversations add the saved profile as a Model Router route, then pin
-   * the router to that route. This keeps secrets and provider fixups on the
+   * Local conversations reuse an existing Model Router route for the saved
+   * profile, or add one when missing, then pin the router to that route. This
+   * keeps secrets and provider fixups on the
    * agent-server side and avoids direct client round-trips through /switch_llm.
    *
    * Without a conversationId (home page), this still activates the profile
@@ -1475,15 +1476,15 @@ class AgentServerConversationService {
     const conversationClient = new ConversationClient(
       getAgentServerClientOptions(),
     );
-    const status = await conversationClient.addModelRouterRoute(
-      conversationId,
-      profileName,
-      profileName,
-    );
-    const routeName =
-      status.routes?.find((route) => route.name === profileName)?.name ??
-      profileName;
-    await conversationClient.switchModelRouter(conversationId, routeName);
+    const router = await conversationClient.getModelRouter(conversationId);
+    if (!router.routes?.some((route) => route.name === profileName)) {
+      await conversationClient.addModelRouterRoute(
+        conversationId,
+        profileName,
+        profileName,
+      );
+    }
+    await conversationClient.switchModelRouter(conversationId, profileName);
   }
 
   /**
