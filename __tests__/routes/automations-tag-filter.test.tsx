@@ -178,6 +178,7 @@ describe("AutomationsList — tag filter", () => {
       undefined,
       "software-factory",
       undefined,
+      undefined,
     );
   });
 });
