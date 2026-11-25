@@ -1,0 +1,595 @@
+<section class="sheet" id="s01">
+  <header><span class="no">01</span><h2>Count (MC-01)</h2><span class="sub">How a plugin manifest sets up a Count card. Four examples.</span></header>
+  <div class="body">
+    <p>Left is the card as the factory page shows it, drawn 1:1. Right is the part of the plugin manifest that sets it up. The <a href="{{overview}}">overview</a> explains the pins and the labels. <a href="{{to:declarations/metrics.html}}">Metrics</a> explains what a key counts.</p>
+
+    <div class="plate first">
+      <div class="plate-h"><b>A · A sum over all time</b><span class="chips"><span class="chip merged">merged</span><span class="chip ext">new: manifest</span></span></div>
+      <div class="plate-g">
+        <div class="ab flat"><span class="cap">A · card · 1:1</span><div style="position:relative;width:300px"><div class="mc"><div class="t"><span class="tx">Reviews posted</span></div><div class="v">148</div><div class="m" style="margin-top:4px">Reviews the agent has posted</div></div><span class="pin" style="left:0;top:24px">1</span><span class="pin" style="left:0;top:54px">2</span><span class="pin" style="left:0;top:83px">3</span></div></div>
+        <div><div class="mf-cap">.plugin/plugin.json · automation.outcomes</div><pre class="json">"outcomes": {
+  "keys": {
+    "reviews_posted": {
+      "type": "number",
+      "semantics": "increment",
+      "label": "Reviews posted",
+      <span class="hl">"description": "Reviews the agent has posted",</span><span class="pinref">3</span>
+      "unit": "count",
+      "direction": "up_is_good",
+      <span class="hl">"aggregation": "sum"</span><span class="pinref">2</span>
+    }
+  },
+  "suggested_cards": [{
+    "key": "reviews-total",
+    <span class="hl">"title": "Reviews posted",</span><span class="pinref">1</span>
+    "source": { "type": "outcomes", "metric": "reviews_posted" },
+    "display": "number",
+    <span class="hl">"window": "all"</span><span class="pinref">2</span>
+  }]
+}</pre></div>
+      </div>
+      <p class="why">The simplest Count card. The plugin declares one metric and one suggested card. <span class="pinref">1</span> The title comes from the card. <span class="pinref">2</span> The value is the sum of <code>reviews_posted</code> over the window, and here the window is <code>all</code>. <span class="pinref">3</span> The hint line is the metric <code>description</code>. <code>label</code> names the metric in lists and menus, and the card does not use it. The plugin sends one fact for each review it posts. <a href="{{to:declarations/metrics.html}}">Metrics</a> shows the request. The card has no <code>link</code>, so it shows no chevron and no hover style.</p>
+    </div>
+
+    <div class="plate">
+      <div class="plate-h"><b>B · A latest value, with a link</b><span class="chips"><span class="chip gap">gap: last</span><span class="chip ext">new: manifest</span></span></div>
+      <div class="plate-g">
+        <div class="ab flat"><span class="cap">B · card · 1:1</span><div style="position:relative;width:300px"><div class="mc link"><div class="t"><span class="tx">PRs awaiting review</span></div><div class="v">12<span class="chev">↗</span></div><div class="m" style="margin-top:4px">As of the last scan</div></div><span class="pin" style="left:0;top:24px">1</span><span class="pin" style="left:0;top:54px">2</span><span class="pin" style="left:0;top:83px">3</span><span class="pin" style="left:100%;top:54px">4</span></div></div>
+        <div><div class="mf-cap">.plugin/plugin.json · automation.outcomes</div><pre class="json">"outcomes": {
+  "keys": {
+    "open_prs": {
+      "type": "number",
+      "semantics": "total",
+      "grain": "hour",
+      "label": "PRs awaiting review",
+      <span class="hl">"description": "As of the last scan",</span><span class="pinref">3</span>
+      "unit": "count",
+      "direction": "down_is_good",
+      <span class="hl">"aggregation": "last"</span><span class="pinref">2</span>
+    }
+  },
+  "suggested_cards": [{
+    "key": "open-prs",
+    <span class="hl">"title": "PRs awaiting review",</span><span class="pinref">1</span>
+    "source": { "type": "outcomes", "metric": "open_prs" },
+    "display": "number",
+    <span class="hl">"window": "all",</span><span class="pinref">2</span>
+    <span class="hl">"link": { "url": "https://github.com/acme/api/pulls?q=is%3Aopen+review%3Arequired" }</span><span class="pinref">4</span>
+  }]
+}</pre></div>
+      </div>
+      <p class="why">A level, such as the number of open PRs, is a total with an hourly grain: each scan replaces the last one (<a href="{{to:declarations/metrics.html}}">metrics</a>, sheet 02 E). <span class="pinref">2</span> <code>aggregation: last</code> makes the card show the latest period's value and not a sum. <span class="pinref">4</span> <code>link</code> makes the whole card a link. A URL outside the app opens in a new tab and shows ↗ in place of ›. The service cannot compute <code>last</code> yet, so this card is not available until that gap closes.</p>
+    </div>
+
+    <div class="plate">
+      <div class="plate-h"><b>C · A count of true values in a window</b><span class="chips"><span class="chip merged">merged</span><span class="chip ext">new: manifest</span></span></div>
+      <div class="plate-g">
+        <div class="ab flat"><span class="cap">C · card · 1:1</span><div style="position:relative;width:300px"><div class="mc"><div class="t"><span class="tx">Passed review, 7 days</span></div><div class="v">31</div><div class="m" style="margin-top:4px">Reviews the author accepted</div></div><span class="pin" style="left:0;top:24px">1</span><span class="pin" style="left:0;top:54px">2</span><span class="pin" style="left:0;top:83px">3</span></div></div>
+        <div><div class="mf-cap">.plugin/plugin.json · automation.outcomes</div><pre class="json">"outcomes": {
+  "keys": {
+    "review_passed": {
+      "type": "boolean",
+      "semantics": "increment",
+      "label": "Reviews passed",
+      <span class="hl">"description": "Reviews the author accepted",</span><span class="pinref">3</span>
+      "unit": "count",
+      "direction": "up_is_good",
+      <span class="hl">"aggregation": "count_true"</span><span class="pinref">2</span>
+    }
+  },
+  "suggested_cards": [{
+    "key": "passed-7d",
+    <span class="hl">"title": "Passed review, 7 days",</span><span class="pinref">1</span>
+    "source": { "type": "outcomes", "metric": "review_passed" },
+    "display": "number",
+    <span class="hl">"window": "7d"</span><span class="pinref">2</span>
+  }]
+}</pre></div>
+      </div>
+      <p class="why">A boolean metric can drive a Count card. <span class="pinref">2</span> <code>count_true</code> counts the true values inside the window. The card <code>window</code> of <code>7d</code> sets the period, and the metric does not change. The card does not add the window to its title, so the title says it: <code>Passed review, 7 days</code>.</p>
+    </div>
+
+    <div class="plate">
+      <div class="plate-h"><b>D · One metric, two cards</b><span class="chips"><span class="chip merged">merged</span><span class="chip ext">new: manifest</span></span></div>
+      <div class="plate-g">
+        <div class="ab flat"><span class="cap">D · card · 1:1</span><div style="position:relative;width:300px"><div class="mc"><div class="t"><span class="tx">Reviews posted</span></div><div class="v">148</div><div class="m" style="margin-top:4px">Reviews the agent has posted</div></div><span class="pin" style="left:0;top:24px">a</span></div><div style="position:relative;width:300px"><div class="mc"><div class="t"><span class="tx">Reviews posted, 7 days</span></div><div class="v">23</div><div class="m" style="margin-top:4px">Reviews the agent has posted</div></div><span class="pin" style="left:0;top:24px">b</span></div></div>
+        <div><div class="mf-cap">.plugin/plugin.json · automation.outcomes</div><pre class="json">"outcomes": {
+  "keys": {
+    "reviews_posted": {
+      "type": "number",
+      "semantics": "increment",
+      "label": "Reviews posted",
+      "description": "Reviews the agent has posted",
+      "unit": "count",
+      "direction": "up_is_good",
+      "aggregation": "sum"
+    }
+  },
+  "suggested_cards": [
+    <span class="hl">{ "key": "reviews-total", "title": "Reviews posted",</span><span class="pinref">a</span>
+      "source": { "type": "outcomes", "metric": "reviews_posted" },
+      "display": "number", "window": "all" },
+    <span class="hl">{ "key": "reviews-7d", "title": "Reviews posted, 7 days",</span><span class="pinref">b</span>
+      "source": { "type": "outcomes", "metric": "reviews_posted" },
+      "display": "number", "window": "7d" }
+  ]
+}</pre></div>
+      </div>
+      <p class="why">One metric, two cards. The metric says what the number is. A card says how to show it. Cards <span class="pinref">a</span> and <span class="pinref">b</span> read the same metric with different windows. Remove card <span class="pinref">b</span> and the metric and card <span class="pinref">a</span> stay. Remove the metric while a card uses it, and the service refuses with 409.</p>
+    </div>
+    <div class="note">Card keys are unique in a factory. Install adds a suggested card only when its key is free, and never overwrites a card an admin has edited. A manifest that declares <code>outcomes</code> fails to install on a service that does not support it.</div>
+  </div>
+</section>
+<section class="sheet" id="s02">
+  <header><span class="no">02</span><h2>Aggregations</h2><span class="sub">How the facts in a window become the number on a card. Eight examples.</span></header>
+  <div class="body">
+    <p>An aggregation turns the facts in the window into one number. The metric names a default, and a card can set its own. Each example below is a card on the left and the manifest lines that set it up on the right. The two metrics come first, with their facts. The facts do not change from one example to the next.</p>
+
+    <div class="plate first">
+      <div class="plate-h"><b>The metrics · a number metric</b><span class="chips"><span class="chip ext">new: manifest</span></span></div>
+      <div class="plate-g">
+        <div class="ab flat"><span class="cap">facts</span><div class="fl">pr_lines · facts in the last 30 days, oldest first</div><div class="fp"><span class="b n">100</span><span class="b n">40</span><span class="b n">300</span><span class="b n">60</span></div></div>
+        <div><div class="mf-cap">.plugin/plugin.json · automation.outcomes</div><pre class="json">"outcomes": {
+  "keys": {
+    "pr_lines": {
+      "type": "number",
+      "semantics": "increment",
+      "label": "Lines changed per PR",
+      "description": "Lines changed in one merged PR",
+      "unit": "count",
+      "direction": "neutral",
+      <span class="hl">"aggregation": "sum"</span>
+    }
+  }
+}</pre></div>
+      </div>
+      <p class="why">A metric holds facts. This one gets one fact for each merged PR. The window holds four facts. The highlighted <code>aggregation</code> is the default for cards that do not set their own. Every number on this sheet comes from these four facts, so you can check each one by hand.</p>
+    </div>
+    <div class="plate">
+      <div class="plate-h"><b>The metrics · a boolean metric</b><span class="chips"><span class="chip ext">new: manifest</span></span></div>
+      <div class="plate-g">
+        <div class="ab flat"><span class="cap">facts</span><div class="fl">review_passed · facts in the last 30 days</div><div class="fp"><span class="b good">true</span><span class="b good">true</span><span class="b bad">false</span><span class="b good">true</span><span class="b bad">false</span></div></div>
+        <div><div class="mf-cap">.plugin/plugin.json · automation.outcomes</div><pre class="json">"outcomes": {
+  "keys": {
+    "review_passed": {
+      "type": "boolean",
+      "semantics": "increment",
+      "label": "Review passed",
+      "description": "True when the author accepted the review",
+      "unit": "count",
+      "direction": "up_is_good",
+      <span class="hl">"aggregation": "count_true"</span>
+    }
+  }
+}</pre></div>
+      </div>
+      <p class="why">A second metric, for the boolean examples. It has five facts: three true and two false.</p>
+    </div>
+    <div class="plate">
+      <div class="plate-h"><b>A · sum</b><span class="chips"><span class="chip merged">merged</span><span class="chip ext">new: manifest</span></span></div>
+      <div class="plate-g">
+        <div class="ab flat"><span class="cap">A · card · 1:1</span><div style="position:relative;width:300px"><div class="mc"><div class="t"><span class="tx">Lines changed, 30 days</span></div><div class="v">500</div></div><span class="pin" style="left:0;top:54px">2</span></div><div class="facts">100 + 40 + 300 + 60 = 500</div></div>
+        <div><div class="mf-cap">.plugin/plugin.json · automation.outcomes.suggested_cards[ ]</div><pre class="json">{ "key": "lines-changed-30-days",
+  "title": "Lines changed, 30 days",
+  "source": { "type": "outcomes", "metric": "pr_lines" },
+  "display": "number",
+  <span class="hl">"window": "30d" }</span><span class="pinref">2</span></pre></div>
+      </div>
+      <p class="why">Adds the numbers. This is the metric default, so the card has no <code>aggregation</code> line. <span class="pinref">2</span> The value is the default aggregation over the <code>30d</code> window.</p>
+    </div>
+    <div class="plate">
+      <div class="plate-h"><b>B · avg</b><span class="chips"><span class="chip merged">merged</span><span class="chip ext">new: manifest</span></span></div>
+      <div class="plate-g">
+        <div class="ab flat"><span class="cap">B · card · 1:1</span><div style="position:relative;width:300px"><div class="mc"><div class="t"><span class="tx">Average PR size</span></div><div class="v">125</div></div><span class="pin" style="left:0;top:54px">2</span></div><div class="facts">(100 + 40 + 300 + 60) ÷ 4 = 125</div></div>
+        <div><div class="mf-cap">.plugin/plugin.json · automation.outcomes.suggested_cards[ ]</div><pre class="json">{ "key": "average-pr-size",
+  "title": "Average PR size",
+  "source": { "type": "outcomes", "metric": "pr_lines" },
+  "display": "number",
+  <span class="hl">"aggregation": "avg",</span><span class="pinref">2</span>
+  <span class="hl">"window": "30d" }</span><span class="pinref">2</span></pre></div>
+      </div>
+      <p class="why">The mean of the numbers. <span class="pinref">2</span> The card sets <code>aggregation: avg</code>, which overrides the metric default. The metric does not change.</p>
+    </div>
+    <div class="plate">
+      <div class="plate-h"><b>C · min</b><span class="chips"><span class="chip merged">merged</span><span class="chip ext">new: manifest</span></span></div>
+      <div class="plate-g">
+        <div class="ab flat"><span class="cap">C · card · 1:1</span><div style="position:relative;width:300px"><div class="mc"><div class="t"><span class="tx">Smallest PR</span></div><div class="v">40</div></div><span class="pin" style="left:0;top:54px">2</span></div><div class="facts">smallest of 100, 40, 300, 60 = 40</div></div>
+        <div><div class="mf-cap">.plugin/plugin.json · automation.outcomes.suggested_cards[ ]</div><pre class="json">{ "key": "smallest-pr",
+  "title": "Smallest PR",
+  "source": { "type": "outcomes", "metric": "pr_lines" },
+  "display": "number",
+  <span class="hl">"aggregation": "min",</span><span class="pinref">2</span>
+  <span class="hl">"window": "30d" }</span><span class="pinref">2</span></pre></div>
+      </div>
+      <p class="why">The lowest number in the window. It needs a number metric.</p>
+    </div>
+    <div class="plate">
+      <div class="plate-h"><b>D · max</b><span class="chips"><span class="chip merged">merged</span><span class="chip ext">new: manifest</span></span></div>
+      <div class="plate-g">
+        <div class="ab flat"><span class="cap">D · card · 1:1</span><div style="position:relative;width:300px"><div class="mc"><div class="t"><span class="tx">Largest PR</span></div><div class="v">300</div></div><span class="pin" style="left:0;top:54px">2</span></div><div class="facts">largest of 100, 40, 300, 60 = 300</div></div>
+        <div><div class="mf-cap">.plugin/plugin.json · automation.outcomes.suggested_cards[ ]</div><pre class="json">{ "key": "largest-pr",
+  "title": "Largest PR",
+  "source": { "type": "outcomes", "metric": "pr_lines" },
+  "display": "number",
+  <span class="hl">"aggregation": "max",</span><span class="pinref">2</span>
+  <span class="hl">"window": "30d" }</span><span class="pinref">2</span></pre></div>
+      </div>
+      <p class="why">The highest number in the window. It needs a number metric.</p>
+    </div>
+    <div class="plate">
+      <div class="plate-h"><b>E · count</b><span class="chips"><span class="chip merged">merged</span><span class="chip ext">new: manifest</span></span></div>
+      <div class="plate-g">
+        <div class="ab flat"><span class="cap">E · card · 1:1</span><div style="position:relative;width:300px"><div class="mc"><div class="t"><span class="tx">PRs merged, 30 days</span></div><div class="v">4</div></div><span class="pin" style="left:0;top:54px">2</span></div><div class="facts">four facts = 4</div></div>
+        <div><div class="mf-cap">.plugin/plugin.json · automation.outcomes.suggested_cards[ ]</div><pre class="json">{ "key": "prs-merged-30-days",
+  "title": "PRs merged, 30 days",
+  "source": { "type": "outcomes", "metric": "pr_lines" },
+  "display": "number",
+  <span class="hl">"aggregation": "count",</span><span class="pinref">2</span>
+  <span class="hl">"window": "30d" }</span><span class="pinref">2</span></pre></div>
+      </div>
+      <p class="why">Counts the facts and ignores their values. It works on a metric of any type. Here each fact is one merged PR.</p>
+    </div>
+    <div class="plate">
+      <div class="plate-h"><b>F · count_true</b><span class="chips"><span class="chip merged">merged</span><span class="chip ext">new: manifest</span></span></div>
+      <div class="plate-g">
+        <div class="ab flat"><span class="cap">F · card · 1:1</span><div style="position:relative;width:300px"><div class="mc"><div class="t"><span class="tx">Reviews that passed</span></div><div class="v">3</div></div><span class="pin" style="left:0;top:54px">2</span></div><div class="facts">true, true, false, true, false → 3 true</div></div>
+        <div><div class="mf-cap">.plugin/plugin.json · automation.outcomes.suggested_cards[ ]</div><pre class="json">{ "key": "reviews-that-passed",
+  "title": "Reviews that passed",
+  "source": { "type": "outcomes", "metric": "review_passed" },
+  "display": "number",
+  <span class="hl">"aggregation": "count_true",</span><span class="pinref">2</span>
+  <span class="hl">"window": "30d" }</span><span class="pinref">2</span></pre></div>
+      </div>
+      <p class="why">Counts the true values. It needs a boolean metric.</p>
+    </div>
+    <div class="plate">
+      <div class="plate-h"><b>G · count_false</b><span class="chips"><span class="chip merged">merged</span><span class="chip ext">new: manifest</span></span></div>
+      <div class="plate-g">
+        <div class="ab flat"><span class="cap">G · card · 1:1</span><div style="position:relative;width:300px"><div class="mc"><div class="t"><span class="tx">Reviews that needed changes</span></div><div class="v">2</div></div><span class="pin" style="left:0;top:54px">2</span></div><div class="facts">true, true, false, true, false → 2 false</div></div>
+        <div><div class="mf-cap">.plugin/plugin.json · automation.outcomes.suggested_cards[ ]</div><pre class="json">{ "key": "reviews-that-needed-changes",
+  "title": "Reviews that needed changes",
+  "source": { "type": "outcomes", "metric": "review_passed" },
+  "display": "number",
+  <span class="hl">"aggregation": "count_false",</span><span class="pinref">2</span>
+  <span class="hl">"window": "30d" }</span><span class="pinref">2</span></pre></div>
+      </div>
+      <p class="why">Counts the false values. It needs a boolean metric.</p>
+    </div>
+    <div class="plate">
+      <div class="plate-h"><b>H · last</b><span class="chips"><span class="chip gap">gap: last</span><span class="chip ext">new: manifest</span></span></div>
+      <div class="plate-g">
+        <div class="ab flat"><span class="cap">H · card · 1:1</span><div style="position:relative;width:300px"><div class="mc"><div class="t"><span class="tx">Size of the latest PR</span></div><div class="v">60</div></div><span class="pin" style="left:0;top:54px">2</span></div><div class="facts">the newest of 100, 40, 300, 60 = 60</div></div>
+        <div><div class="mf-cap">.plugin/plugin.json · automation.outcomes.suggested_cards[ ]</div><pre class="json">{ "key": "size-of-the-latest-pr",
+  "title": "Size of the latest PR",
+  "source": { "type": "outcomes", "metric": "pr_lines" },
+  "display": "number",
+  <span class="hl">"aggregation": "last",</span><span class="pinref">2</span>
+  <span class="hl">"window": "30d" }</span><span class="pinref">2</span></pre></div>
+      </div>
+      <p class="why">The most recent fact by time. Use it for a level, such as open PRs. The service has no <code>last</code> yet, so this card is not available until that gap closes.</p>
+    </div>
+
+    <h3>Which aggregation fits which metric type</h3>
+    <table class="t">
+      <tr><th>Metric type</th><th>Aggregations</th></tr>
+      <tr><td class="n"><code>number</code></td><td><code>sum</code> <code>avg</code> <code>min</code> <code>max</code> <code>count</code> <span class="chip gap">gap</span> <code>last</code> <code>rate</code></td></tr>
+      <tr><td class="n"><code>boolean</code></td><td><code>count_true</code> <code>count_false</code> <code>count</code></td></tr>
+      <tr><td class="n"><code>string</code> <code>datetime</code> <code>json</code></td><td><code>count</code></td></tr>
+    </table>
+    <div class="note">With no facts in the window, <code>sum</code>, <code>avg</code>, <code>min</code> and <code>max</code> have no value and the card shows —. <code>count</code>, <code>count_true</code> and <code>count_false</code> give 0. A card never shows 0 for a number that is missing. A card whose aggregation does not fit its metric type is refused with 422. This is a proposed rule. Percentiles such as <code>p50</code> and <code>p90</code> are a gap and are not on this sheet.</div>
+  </div>
+</section>
+
+<section class="sheet" id="s03">
+  <header><span class="no">03</span><h2>Windows</h2><span class="sub">The span a card reads. Five examples.</span></header>
+  <div class="body">
+    <p>A card <code>window</code> sets the <code>since</code> and <code>until</code> of the read. <code>all</code> sends neither. <code>7d</code> and <code>30d</code> end now and start that long before. The service counts a fact at its <code>effective_at</code>: the time it happened, the time it was received, or, for a total, the start of its period.</p>
+    <p>That rule is simple for increments. It cuts a period for totals. The examples below show the problem and a proposed rule: a window over a total is the last whole periods that have <em>ended</em>.</p>
+
+    <div class="plate first">
+      <div class="plate-h"><b>A · A rolling window over increments</b><span class="chips"><span class="chip open">open PR #818</span><span class="chip ext">new: manifest</span></span></div>
+      <div class="plate-g">
+        <div class="ab flat"><span class="cap">A · card · 1:1</span>
+          <div style="position:relative;width:300px"><div class="mc"><div class="t"><span class="tx">PRs merged, 7 days</span></div><div class="v">6</div></div><span class="pin" style="left:0;top:54px">2</span></div>
+          <div class="fnote">now = 25 Nov 17:30 UTC<br>since = 18 Nov 17:30<br>until = 25 Nov 17:30</div></div>
+        <div>
+          <div class="mf-cap">.plugin/plugin.json · automation.outcomes.suggested_cards[ ]</div>
+          <pre class="json">{ "key": "prs-merged-7d", "title": "PRs merged, 7 days",
+  "source": { "type": "outcomes", "metric": "prs_merged" },
+  "display": "number",
+  <span class="hl">"window": "7d"</span><span class="pinref">2</span> }</pre>
+        </div>
+      </div>
+      <p class="why">An increment counts at the time it happened, so a rolling window is exact. A PR merged 7 days and 1 minute ago is out, and one merged 6 days 23 hours ago is in. Nothing is cut in half. This is the case the <code>window</code> field was drawn for. The key is the increment <code>prs_merged</code> from the <a href="{{to:declarations/metrics.html}}">metrics</a> page.</p>
+    </div>
+
+    <div class="plate">
+      <div class="plate-h"><b>B · A rolling window over daily totals cuts a day</b><span class="chips"><span class="chip open">open PR #818</span></span></div>
+      <div class="plate-g">
+        <div class="ab flat"><span class="cap">B · card · 1:1</span>
+          <div style="position:relative;width:300px"><div class="mc"><div class="t"><span class="tx">PRs merged, 7 days</span></div><div class="v">23</div></div></div>
+          <table class="ft"><caption>daily totals, read at 25 Nov 17:30</caption>
+            <tr><th>period</th><th class="r">value</th></tr>
+            <tr class="gone"><td>18 Nov (starts before the window)</td><td class="r">4</td></tr>
+            <tr><td>19 to 24 Nov</td><td class="r">23</td></tr>
+            <tr class="sum"><td class="lbl">sum</td><td class="r">23</td></tr></table></div>
+        <div>
+          <div class="mf-cap">The card reads · window 7d at 25 Nov 17:30</div>
+          <pre class="json">GET .../outcomes/aggregate?key=merged_daily&amp;operation=sum
+    &amp;since=2026-11-18T17:30:00Z&amp;until=2026-11-25T17:30:00Z
+<span class="c">→ {"value": 23.0, "count": 6}</span>
+<span class="c">  the same seven days, whole: 27, count 7</span>  <span class="chip ok">checked</span></pre>
+        </div>
+      </div>
+      <p class="why">A day total counts at 00:00 of its day. The window starts at 17:30 a week ago. The day 18 Nov begins before that, so it falls out. The card shows 23 and misses 4 PRs. The window also reaches into today, which has no report yet or an incomplete one. The result moves each time the card is read. For totals this is a bug, not a rounding error.</p>
+    </div>
+
+    <div class="plate">
+      <div class="plate-h"><b>C · The same card, with whole periods</b><span class="chips"><span class="chip gap">gap: whole-period window</span><span class="chip ext">new: manifest</span></span></div>
+      <div class="plate-g">
+        <div class="ab flat"><span class="cap">C · card · 1:1</span>
+          <div style="position:relative;width:300px"><div class="mc"><div class="t"><span class="tx">PRs merged, 7 days</span></div><div class="v">27</div><div class="m" style="margin-top:4px">18 to 24 Nov</div></div></div></div>
+        <div>
+          <div class="mf-cap">.plugin/plugin.json · automation.outcomes.suggested_cards[ ] · unchanged</div>
+          <pre class="json">{ "key": "prs-merged-7d", "title": "PRs merged, 7 days",
+  "source": { "type": "outcomes", "metric": "merged_daily" },
+  "display": "number",
+  <span class="hl">"window": "7d"</span> }</pre>
+          <div class="mf-cap">The rule · what the read would send</div>
+          <pre class="json"><span class="c">key has grain day, window 7d, now 25 Nov 17:30
+since = start of the current day − 7 days = 18 Nov 00:00
+until = start of the current day          = 25 Nov 00:00</span>
+GET .../outcomes/aggregate?key=merged_daily&amp;operation=sum
+    &amp;since=2026-11-18T00:00:00Z&amp;until=2026-11-25T00:00:00Z
+<span class="c">→ {"value": 27.0, "count": 7}</span>  <span class="chip ok">checked</span></pre>
+        </div>
+      </div>
+      <p class="why">The manifest does not change. The read changes: for a total, <code>7d</code> means the last seven whole days that have ended. The service already gives the right answer when it is asked for whole days. Only the choice of <code>since</code> and <code>until</code> is new, and it can live in the client. The hint line then shows the dates the card covers.</p>
+    </div>
+
+    <div class="plate">
+      <div class="plate-h"><b>D · A one-day window over a daily total</b><span class="chips"><span class="chip open">open PR #818</span><span class="chip gap">gap: whole-period window</span></span></div>
+      <div class="plate-g">
+        <div class="ab flat"><span class="cap">D · card · 1:1</span>
+          <div style="position:relative;width:300px"><div class="mc"><div class="t"><span class="tx">PRs merged yesterday</span></div><div class="v">7</div></div></div>
+          <div class="fnote">rolling window today: —<br>whole-period window: 7</div></div>
+        <div>
+          <div class="mf-cap">The card reads · rolling 1d at 25 Nov 02:30, after the nightly job</div>
+          <pre class="json">GET .../outcomes/aggregate?key=merged_daily&amp;operation=sum
+    &amp;since=2026-11-24T02:30:00Z&amp;until=2026-11-25T02:30:00Z
+<span class="c">→ {"value": null, "count": 0}   the card shows —</span>  <span class="chip ok">checked</span></pre>
+        </div>
+      </div>
+      <p class="why">A rolling day window never holds a day total: 24 Nov counts at 00:00, and the window starts at 02:30. The card is empty all day. "Yesterday" is a useful card, and a whole-period window gives it: the last one whole day, 7.</p>
+    </div>
+
+    <div class="plate">
+      <div class="plate-h"><b>E · A window shorter than the grain</b><span class="chips"><span class="chip gap">gap: manifest check</span><span class="chip ext">new: manifest</span></span></div>
+      <div class="plate-g">
+        <div class="ab flat"><span class="cap">E · refused at install</span><div class="fnote">key: merged_weekly (grain week)<br>card window: 1d<br>no whole week fits in one day</div></div>
+        <div>
+          <div class="mf-cap">.plugin/plugin.json · rejected</div>
+          <pre class="json">{ "key": "merged-today", "title": "Merged today",
+  "source": { "type": "outcomes", "metric": "merged_weekly" },
+  "display": "number",
+  <span class="hl">"window": "1d"</span> }
+<span class="c">→ install fails: window 1d is shorter than the week grain of merged_weekly</span></pre>
+        </div>
+      </div>
+      <p class="why">A window over a total must be a whole number of periods. <code>7d</code> and <code>28d</code> fit a week grain. <code>1d</code> and <code>10d</code> do not. The plugin author learns this at install, not from a card that is empty or wrong later. <code>all</code> always fits.</p>
+    </div>
+  </div>
+</section>
+
+<section class="sheet" id="s04">
+  <header><span class="no">04</span><h2>Rates</h2><span class="sub">A Count card that shows an amount for each hour, day, week or month. Eight examples.</span></header>
+  <div class="body">
+    <p>A rate is a Count card with <code>aggregation: rate</code> and a <code>per</code>. It does not depend on how often the plugin runs. It divides what happened in the window by how long the window is.</p>
+    <table class="t">
+      <tr><th style="width:150px">The key is</th><th>The card shows</th><th style="width:210px">Window</th></tr>
+      <tr><td class="n"><b>increment</b></td><td>The <code>sum</code> of the facts in the window, divided by the window length in <code>per</code> units. With <code>"of": "count"</code>, the number of facts instead of their sum.</td><td>Rolling, ends now</td></tr>
+      <tr><td class="n"><b>total</b></td><td>The <code>sum</code> of the latest report of each period, divided by the length of those periods in <code>per</code> units.</td><td>Whole periods that have ended</td></tr>
+    </table>
+    <div class="note warn">Nothing on this sheet exists in the service. <code>rate</code>, <code>per</code>, <code>of</code> and the whole-period window are proposals. The sums and counts under each card are real: the #818 code produced them. The division is by hand. The service or the client would divide the same two numbers.</div>
+
+    <div class="plate first">
+      <div class="plate-h"><b>A · Events for each week</b><span class="chips"><span class="chip gap">gap: rate</span><span class="chip open">open PR #818</span><span class="chip ext">new: manifest</span></span></div>
+      <div class="plate-g">
+        <div class="ab flat"><span class="cap">A · card · 1:1</span>
+          <div style="position:relative;width:300px"><div class="mc"><div class="t"><span class="tx">PRs merged per week</span></div><div class="v">6<small>/ week</small></div><div class="m" style="margin-top:4px">24 PRs in 28 days</div></div><span class="pin" style="left:0;top:24px">1</span><span class="pin" style="left:0;top:54px">2</span><span class="pin" style="left:0;top:83px">3</span></div>
+          <div class="fnote">24 ÷ (28 days ÷ 7 days) = 6</div></div>
+        <div>
+          <div class="mf-cap">.plugin/plugin.json · automation.outcomes.suggested_cards[ ]</div>
+          <pre class="json">{ "key": "prs-per-week",
+  <span class="hl">"title": "PRs merged per week",</span><span class="pinref">1</span>
+  "source": { "type": "outcomes", "metric": "prs_merged" },
+  "display": "number",
+  <span class="hl">"aggregation": "rate",</span><span class="pinref">2</span>
+  <span class="hl">"per": "week",</span><span class="pinref">2</span>
+  <span class="hl">"window": "28d"</span><span class="pinref">2</span> }</pre>
+          <div class="mf-cap">The card reads · the key is the increment <code>prs_merged</code> from the metrics page</div>
+          <pre class="json">GET .../outcomes/aggregate?key=prs_merged&amp;operation=sum
+    &amp;since=2026-10-28T17:30:00Z&amp;until=2026-11-25T17:30:00Z
+<span class="c">→ {"value": 24.0, "count": 24}   rate = 24 ÷ 4 = 6 per week</span>  <span class="chip ok">checked</span></pre>
+        </div>
+      </div>
+      <p class="why">One fact for each merged PR, each sent with <code>occurred_at</code>. The card does not care when the plugin ran. A plugin that scans every 5 minutes and one that scans nightly give the same number, as long as the facts have the right <code>occurred_at</code> and <code>dedupe_key</code>. <span class="pinref">3</span> The hint line shows the fact count from the answer, so a reader sees how much data stands behind the rate.</p>
+    </div>
+
+    <div class="plate">
+      <div class="plate-h"><b>B · The same facts, for each day</b><span class="chips"><span class="chip gap">gap: rate</span><span class="chip ext">new: manifest</span></span></div>
+      <div class="plate-g">
+        <div class="ab flat"><span class="cap">B · card · 1:1</span>
+          <div style="position:relative;width:300px"><div class="mc"><div class="t"><span class="tx">PRs merged per day</span></div><div class="v">0.86<small>/ day</small></div><div class="m" style="margin-top:4px">24 PRs in 28 days</div></div></div>
+          <div class="fnote">24 ÷ 28 = 0.857</div></div>
+        <div>
+          <div class="mf-cap">.plugin/plugin.json · automation.outcomes.suggested_cards[ ]</div>
+          <pre class="json">{ "key": "prs-per-day", "title": "PRs merged per day",
+  "source": { "type": "outcomes", "metric": "prs_merged" },
+  "display": "number",
+  "aggregation": "rate",
+  <span class="hl">"per": "day",</span>
+  "window": "28d" }</pre>
+        </div>
+      </div>
+      <p class="why">Only <code>per</code> changes. The window and the facts are the same as in example A. A card can show the rate in the unit that reads best: a busy repository in "per day", a quiet one in "per week". How many decimals to show is a formatting rule for the card design sheet.</p>
+    </div>
+
+    <div class="plate">
+      <div class="plate-h"><b>C · An amount for each day</b><span class="chips"><span class="chip gap">gap: rate</span><span class="chip ext">new: manifest</span></span></div>
+      <div class="plate-g">
+        <div class="ab flat"><span class="cap">C · card · 1:1</span>
+          <div style="position:relative;width:300px"><div class="mc"><div class="t"><span class="tx">Lines changed per day</span></div><div class="v">17.9<small>/ day</small></div><div class="m" style="margin-top:4px">4 PRs in 28 days</div></div></div>
+          <div class="fnote">500 ÷ 28 = 17.86</div></div>
+        <div>
+          <div class="mf-cap">.plugin/plugin.json · automation.outcomes.suggested_cards[ ]</div>
+          <pre class="json">{ "key": "lines-per-day", "title": "Lines changed per day",
+  "source": { "type": "outcomes", "metric": "pr_lines" },
+  "display": "number",
+  "aggregation": "rate",
+  "per": "day",
+  "window": "28d" }
+<span class="c">no "of": the rate is of the sum, the default</span></pre>
+          <div class="mf-cap">The card reads · the key <code>pr_lines</code>, four facts: 100, 40, 300, 60</div>
+          <pre class="json">operation=sum <span class="c">→ {"value": 500.0, "count": 4}</span>  <span class="chip ok">checked</span></pre>
+        </div>
+      </div>
+      <p class="why">The rate is of the <em>amounts</em>, not of the facts. Four PRs changed 500 lines in 28 days. That is 17.9 lines a day. Example D shows the other choice.</p>
+    </div>
+
+    <div class="plate">
+      <div class="plate-h"><b>D · Facts for each week, whatever their value</b><span class="chips"><span class="chip gap">gap: rate</span><span class="chip ext">new: manifest</span></span></div>
+      <div class="plate-g">
+        <div class="ab flat"><span class="cap">D · card · 1:1</span>
+          <div style="position:relative;width:300px"><div class="mc"><div class="t"><span class="tx">Reviews per week</span></div><div class="v">1.25<small>/ week</small></div><div class="m" style="margin-top:4px">5 reviews in 28 days</div></div></div>
+          <div class="fp"><span class="b good">true</span><span class="b good">true</span><span class="b bad">false</span><span class="b good">true</span><span class="b bad">false</span></div>
+          <div class="fnote">5 ÷ 4 = 1.25</div></div>
+        <div>
+          <div class="mf-cap">.plugin/plugin.json · automation.outcomes.suggested_cards[ ]</div>
+          <pre class="json">{ "key": "reviews-per-week", "title": "Reviews per week",
+  "source": { "type": "outcomes", "metric": "review_passed" },
+  "display": "number",
+  "aggregation": "rate",
+  <span class="hl">"of": "count",</span>
+  "per": "week",
+  "window": "28d" }</pre>
+          <div class="mf-cap">The card reads</div>
+          <pre class="json">operation=count <span class="c">→ {"value": 5, "count": 5}   rate = 5 ÷ 4 = 1.25 per week</span>  <span class="chip ok">checked</span></pre>
+        </div>
+      </div>
+      <p class="why"><code>"of": "count"</code> counts the facts and ignores the values. It works on a key of any type, including a boolean key such as <code>review_passed</code>, which has no amount to sum. The default, <code>"of": "sum"</code>, needs a number. On a <em>total</em>, <code>of: count</code> would count period facts, which is meaningless, so the install refuses it.</p>
+    </div>
+
+    <div class="plate">
+      <div class="plate-h"><b>E · From daily totals</b><span class="chips"><span class="chip gap">gap: rate</span><span class="chip gap">gap: whole-period window</span><span class="chip open">open PR #818</span></span></div>
+      <div class="plate-g">
+        <div class="ab flat"><span class="cap">E · card · 1:1</span>
+          <div style="position:relative;width:300px"><div class="mc"><div class="t"><span class="tx">Shipped per week</span></div><div class="v">14<small>/ week</small></div><div class="m" style="margin-top:4px">28 of 28 days · 28 Oct to 24 Nov</div></div></div>
+          <div class="fnote">28 daily totals of 2 = 56<br>56 ÷ (28 days ÷ 7 days) = 14<br>24 Nov was reported twice, 1 then 2:<br>only the 2 counts</div></div>
+        <div>
+          <div class="mf-cap">.plugin/plugin.json · automation.outcomes</div>
+          <pre class="json">"shipped": {
+  "type": "number",
+  <span class="hl">"semantics": "total",</span>
+  <span class="hl">"grain": "day",</span>
+  "label": "Shipped per day"
+},
+...
+{ "key": "shipped-per-week", "title": "Shipped per week",
+  "source": { "type": "outcomes", "metric": "shipped" },
+  "display": "number",
+  <span class="hl">"aggregation": "rate",</span>
+  <span class="hl">"per": "week",</span>
+  <span class="hl">"window": "28d"</span> }</pre>
+          <div class="mf-cap">The card reads · 28 whole days, 28 Oct to 24 Nov</div>
+          <pre class="json">GET .../outcomes/aggregate?key=shipped&amp;operation=sum
+    &amp;since=2026-10-28T00:00:00Z&amp;until=2026-11-25T00:00:00Z
+<span class="c">→ {"value": 56.0, "count": 28}   rate = 56 ÷ 4 = 14 per week</span>  <span class="chip ok">checked</span></pre>
+        </div>
+      </div>
+      <p class="why">The plugin reports a daily total as often as it likes. The card takes the last report of each of the 28 days and divides by 4 weeks. That is the point of a total: the plugin does not have to run exactly once for each day, and the rate does not change if it runs twice.</p>
+    </div>
+
+    <div class="plate">
+      <div class="plate-h"><b>F · From weekly totals, in two units</b><span class="chips"><span class="chip gap">gap: rate</span><span class="chip gap">gap: whole-period window</span><span class="chip open">open PR #818</span></span></div>
+      <div class="plate-g">
+        <div class="ab flat"><span class="cap">F · cards · 1:1</span>
+          <div style="position:relative;width:300px"><div class="mc"><div class="t"><span class="tx">PRs merged per week</span></div><div class="v">24<small>/ week</small></div><div class="m" style="margin-top:4px">4 of 4 weeks</div></div><span class="pin" style="left:0;top:24px">a</span></div>
+          <div style="position:relative;width:300px"><div class="mc"><div class="t"><span class="tx">PRs merged per day</span></div><div class="v">3.43<small>/ day</small></div><div class="m" style="margin-top:4px">4 of 4 weeks</div></div><span class="pin" style="left:0;top:24px">b</span></div>
+          <table class="ft"><caption>weekly totals, W44 to W47</caption><tr><td>W44</td><td class="r">22</td></tr><tr><td>W45</td><td class="r">26</td></tr><tr><td>W46</td><td class="r">24</td></tr><tr><td>W47</td><td class="r">24</td></tr><tr class="sum"><td class="lbl">sum</td><td class="r">96</td></tr></table></div>
+        <div>
+          <div class="mf-cap">.plugin/plugin.json · automation.outcomes.suggested_cards[ ]</div>
+          <pre class="json">[ { "key": "merged-per-week", "title": "PRs merged per week",
+    "source": { "type": "outcomes", "metric": "merged_weekly" },
+    "display": "number", "aggregation": "rate", <span class="hl">"per": "week"</span>, "window": "28d" },<span class="pinref">a</span>
+  { "key": "merged-per-day", "title": "PRs merged per day",
+    "source": { "type": "outcomes", "metric": "merged_weekly" },
+    "display": "number", "aggregation": "rate", <span class="hl">"per": "day"</span>, "window": "28d" } ]<span class="pinref">b</span></pre>
+          <div class="mf-cap">The card reads · the last 4 whole weeks, 26 Oct to 22 Nov</div>
+          <pre class="json">GET .../outcomes/aggregate?key=merged_weekly&amp;operation=sum
+    &amp;since=2026-10-26T00:00:00Z&amp;until=2026-11-23T00:00:00Z
+<span class="c">→ {"value": 96.0, "count": 4}   a: 96 ÷ 4 = 24 per week · b: 96 ÷ 28 = 3.43 per day</span>  <span class="chip ok">checked</span></pre>
+        </div>
+      </div>
+      <p class="why">The grain of the key and the <code>per</code> of the card are separate. A key that is reported by the week can still be shown as a rate for each day. The week of 23 to 29 Nov is not finished, so the whole-period window leaves it out.</p>
+    </div>
+
+    <div class="plate">
+      <div class="plate-h"><b>G · Why the window must be whole periods</b><span class="chips"><span class="chip gap">gap: whole-period window</span><span class="chip open">open PR #818</span></span></div>
+      <div class="plate-g">
+        <div class="ab flat"><span class="cap">G · the same facts, read two ways</span>
+          <table class="ft"><caption>shipped (daily totals of 2), per week</caption>
+            <tr><th>window</th><th class="r">sum</th><th class="r">days</th><th class="r">rate</th></tr>
+            <tr><td>rolling, no report today</td><td class="r">54</td><td class="r">27</td><td class="r">13.5</td></tr>
+            <tr><td>rolling, today reported</td><td class="r">55</td><td class="r">28</td><td class="r">13.75</td></tr>
+            <tr class="sum"><td class="lbl">whole days</td><td class="r">56</td><td class="r">28</td><td class="r">14</td></tr></table>
+          <table class="ft"><caption>merged_weekly, 28 days</caption>
+            <tr><th>window</th><th class="r">sum</th><th class="r">weeks</th><th class="r">rate</th></tr>
+            <tr><td>rolling 28d</td><td class="r">74</td><td class="r">3</td><td class="r">18.5</td></tr>
+            <tr class="sum"><td class="lbl">whole weeks</td><td class="r">96</td><td class="r">4</td><td class="r">24</td></tr></table></div>
+        <div>
+          <div class="mf-cap">The card reads · rolling 28d at 25 Nov 17:30</div>
+          <pre class="json">key=shipped        since=2026-10-28T17:30:00Z until=2026-11-25T17:30:00Z
+<span class="c">→ {"value": 54.0, "count": 27}   after the 25 Nov report: {"value": 55.0, "count": 28}</span>
+key=merged_weekly  same window
+<span class="c">→ {"value": 74.0, "count": 3}    the week of 26 Oct starts before the window</span>  <span class="chip ok">checked</span></pre>
+        </div>
+      </div>
+      <p class="why">A rolling window, divided by 28 days, gives 13.5, 13.75 or 14 for the same data, depending on the time of the read. On a weekly key it drops a whole week and gives 18.5 for a true 24. A rate over a total must read whole periods that have ended. Then the same data gives the same rate all day.</p>
+    </div>
+
+    <div class="plate">
+      <div class="plate-h"><b>H · A day with no report</b><span class="chips"><span class="chip gap">gap: rate</span><span class="chip ext">open question R1</span></span></div>
+      <div class="plate-g">
+        <div class="ab flat"><span class="cap">H · card · 1:1</span>
+          <div style="position:relative;width:300px"><div class="mc"><div class="t"><span class="tx">Shipped per week</span></div><div class="v">13.5<small>/ week</small></div><div class="m" style="margin-top:4px"><span style="color:var(--warning-fg)">27 of 28 days reported</span></div></div></div>
+          <div class="fnote">proposed: 54 ÷ (28 ÷ 7) = 13.5<br>other choice: 54 ÷ 27 × 7 = 14</div></div>
+        <div>
+          <div class="mf-cap">The card reads · one day has no fact</div>
+          <pre class="json"><span class="c">27 facts of 2, for 28 whole days → sum 54, count 27</span></pre>
+        </div>
+      </div>
+      <p class="why">If the plugin skipped a day, there are two honest answers. Count the missing day as zero and divide by the window: 13.5. Or divide by the days that have a report: 14. The proposal is the window, because a rate that moves with the number of reports is the thing a rate should avoid. The hint line says "27 of 28 days reported" in the warning colour, so a gap shows. A plugin that means zero must report a zero. The numbers here are worked by hand: 27 days of 2.</p>
+    </div>
+
+    <h3>Rules at install</h3>
+    <p>These checks keep a bad card from reaching the factory page. A plugin author sees them when the plugin is installed. They are proposed, with the card resource that would run them.</p>
+    <div class="tw"><table class="t dense">
+      <tr><th>Card</th><th>Install</th></tr>
+      <tr><td><code>rate</code> on a string, datetime or json key</td><td>Refused. With <code>"of": "count"</code> it is allowed.</td></tr>
+      <tr><td><code>rate</code> with no <code>per</code></td><td>Refused. A rate with no unit has no meaning.</td></tr>
+      <tr><td><code>rate</code> with <code>"of": "count"</code> on a total</td><td>Refused. It would count period facts.</td></tr>
+      <tr><td><code>rate</code> with <code>window: all</code></td><td>Refused. The key does not say when counting began, so the length of the window is unknown.</td></tr>
+      <tr><td><code>rate</code> over a total with a window that is not whole periods</td><td>Refused (windows, example E).</td></tr>
+    </table></div>
+
+    <h3>Open questions about rates</h3>
+    <table class="t">
+      <tr><td style="width:36px" class="n">R1</td><td>A day with no report counts as zero (proposed), or is skipped (example H).</td></tr>
+      <tr><td class="n">R2</td><td>A rate over a total uses whole periods that have ended (proposed), or the period in progress is included and shown as partial.</td></tr>
+      <tr><td class="n">R3</td><td><code>per: month</code> needs a rule. A month is 28 to 31 days. Proposed: allow it only with a window of whole months (<code>3m</code>, <code>6m</code>), which the window list does not have yet.</td></tr>
+      <tr><td class="n">R4</td><td>The name <code>of</code> for the sum or count choice. <code>of: sum</code> is the default, so most cards leave it out.</td></tr>
+      <tr><td class="n">R5</td><td>Who divides: the service (one call, a <code>rate</code> operation on the aggregate route) or the client (two numbers it already gets). The sums and counts above work today either way.</td></tr>
+    </table>
+  </div>
+</section>

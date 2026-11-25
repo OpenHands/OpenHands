@@ -1,0 +1,671 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Factory metric cards: Metrics: how a key counts</title>
+<style>
+/* Metric card spec sheet. Doc chrome is light; artboards use the real Agent Canvas dark tokens. */
+:root{
+  --doc:#e8eaf0; --paper:#fff; --ink:#12151c; --ink2:#4a5263; --ink3:#7a8294; --rule:#c9ced9; --rule2:#e3e6ed;
+  --rl:#e0245e; --rl-soft:rgba(224,36,94,.17); --ann:#2563eb; --ann-soft:rgba(37,99,235,.1);
+  --ok:#157f3b; --warnc:#a15c00; --badc:#b42318;
+
+  --base:#0b0e14; --base2:#21252f; --raised:#2c313f; --border:#4b5468; --border-subtle:#383f50;
+  --content:#eef2f7; --muted:#a3b0c4; --dim:#7e8a9e; --primary:#fff;
+  --success:#a5e75e; --warning:#c9b974; --danger:#e76a5e; --info:oklch(62.3% .214 259.815);
+  --success-soft:color-mix(in srgb,var(--success) 10%,transparent); --success-fg:color-mix(in srgb,var(--success) 55%,#fff);
+  --warning-soft:color-mix(in srgb,var(--warning) 10%,transparent); --warning-fg:color-mix(in srgb,var(--warning) 55%,#fff);
+  --danger-soft:color-mix(in srgb,var(--danger) 10%,transparent);  --danger-fg:color-mix(in srgb,var(--danger) 55%,#fff);
+  --info-soft:color-mix(in srgb,var(--info) 10%,transparent);      --info-fg:color-mix(in srgb,var(--info) 55%,#fff);
+  --sans:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+  --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;scroll-padding-top:16px}
+body{margin:0;background:var(--doc);color:var(--ink);font:14px/1.5 var(--sans)}
+code,.mono{font-family:var(--mono);font-size:.88em}
+code{background:#eef0f5;border:1px solid var(--rule2);border-radius:4px;padding:0 4px;color:#27304a;white-space:nowrap}
+a{color:var(--ann)}
+.shell{display:grid;grid-template-columns:210px minmax(0,1fr);gap:28px;max-width:1520px;margin:0 auto;padding:24px}
+nav.toc{position:sticky;top:16px;align-self:start;max-height:calc(100vh - 32px);overflow:auto;font-size:12.5px;padding-right:4px}
+nav.toc h2{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink3);margin:0 0 8px}
+nav.toc a{display:flex;gap:8px;padding:4px 8px;border-radius:6px;color:var(--ink2);text-decoration:none}
+nav.toc a:hover{background:#dde0e8;color:var(--ink)}
+nav.toc a b{font-family:var(--mono);font-weight:500;color:var(--ink3);min-width:26px}
+main{min-width:0}
+
+/* title block */
+.cover{background:var(--paper);border:1px solid var(--rule);border-radius:10px;padding:28px 32px;display:grid;grid-template-columns:1fr auto;gap:24px}
+.cover h1{margin:0 0 6px;font-size:30px;letter-spacing:-.02em;line-height:1.15}
+.cover p{margin:6px 0;color:var(--ink2);max-width:76ch}
+.tb{border-left:1px solid var(--rule);padding-left:24px;font-size:12px;color:var(--ink2);min-width:300px}
+.tb dl{margin:0;display:grid;grid-template-columns:auto 1fr;gap:4px 14px}
+.tb dt{color:var(--ink3);text-transform:uppercase;letter-spacing:.06em;font-size:10.5px;padding-top:2px}
+.tb dd{margin:0}
+.chip{display:inline-block;font-size:11px;font-weight:600;border-radius:999px;padding:1px 9px;border:1px solid var(--rule);background:#f4f5f8;color:var(--ink2);white-space:nowrap}
+.chip.merged{background:#e6f5ec;border-color:#b4dcc3;color:#0f6b31}
+.chip.open{background:#fff4de;border-color:#efd199;color:#8a5200}
+.chip.gap{background:#fde8e6;border-color:#f3b8b1;color:#a02318}
+.chip.ext{background:#eaeefe;border-color:#c3cdf6;color:#2c3f9c}
+.chip.ok{background:#e6f5ec;border-color:#b4dcc3;color:#0f6b31}
+
+/* sheets */
+.sheet{background:var(--paper);border:1px solid var(--rule);border-radius:10px;margin-top:24px;overflow:hidden}
+.sheet>header{display:flex;align-items:baseline;gap:14px;padding:14px 24px;border-bottom:1px solid var(--rule);background:#f7f8fb}
+.sheet>header .no{font-family:var(--mono);font-size:12px;color:var(--ink3);border:1px solid var(--rule);border-radius:4px;padding:1px 7px;background:#fff}
+.sheet>header h2{margin:0;font-size:18px;letter-spacing:-.01em}
+.sheet>header .sub{margin-left:auto;font-size:12px;color:var(--ink3);text-align:right;max-width:54ch}
+.body{padding:22px 24px 26px}
+.body h3{font-size:14px;margin:26px 0 8px;letter-spacing:-.005em}
+.body h3:first-child{margin-top:0}
+.body p{margin:8px 0;color:var(--ink2);max-width:92ch}
+.cols{display:grid;gap:24px}
+.cols.c2{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
+.cols.sidebyside{grid-template-columns:auto minmax(0,1fr);align-items:start}
+.note{border-left:3px solid var(--ann);background:var(--ann-soft);padding:8px 12px;border-radius:0 6px 6px 0;font-size:13px;color:#233156;margin:12px 0}
+.note.warn{border-color:#d97706;background:#fff6e6;color:#6b3f00}
+.note.rl{border-color:var(--rl);background:#fdebf1;color:#7a1537}
+
+/* tables */
+table.t{width:100%;border-collapse:collapse;font-size:12.5px;margin:6px 0}
+table.t th{background:#f2f4f8;text-align:left;font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink3);padding:7px 10px;border-bottom:1px solid var(--rule);white-space:nowrap}
+table.t td{padding:7px 10px;border-bottom:1px solid var(--rule2);vertical-align:top}
+table.t tr:last-child td{border-bottom:0}
+table.t tr.hl,table.t tr:hover{background:#f6f8ff}
+table.t tr.hl td:first-child{box-shadow:inset 3px 0 0 var(--rl)}
+table.t td.n{white-space:nowrap}
+.tw{border:1px solid var(--rule);border-radius:8px;overflow:auto}
+.tw table.t{margin:0}
+.pinref{display:inline-grid;place-items:center;width:18px;height:18px;border-radius:50%;background:var(--rl);color:#fff;font:600 10.5px/1 var(--sans)}
+
+/* artboard */
+.ab{position:relative;background:#14181f;border-radius:10px;padding:28px;background-image:radial-gradient(#242a36 1px,transparent 1px);background-size:16px 16px;color:var(--content)}
+.ab.flat{background-image:none;background:var(--base)}
+.ab .cap{position:absolute;left:12px;top:8px;font:10.5px var(--mono);color:#6d788d;letter-spacing:.04em}
+.ab.pad-lg{padding:44px 56px}
+.abgrid{display:grid;gap:16px}
+
+/* ---- metric card component (what is being specified) ---- */
+.mc{position:relative;background:var(--base);border:1px solid var(--border);border-radius:12px;padding:16px;color:var(--content);font:400 13px/16px var(--sans);min-width:0;text-align:left}
+.mc.link{cursor:pointer}
+.mc.link:hover,.mc.hover{border-color:color-mix(in srgb,var(--primary) 30%,transparent);background:color-mix(in srgb,var(--raised) 40%,transparent)}
+.mc .t{font-size:13px;line-height:16px;font-weight:500;color:var(--muted);display:flex;align-items:center;gap:6px;min-width:0}
+.mc .t span.tx{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0}
+.mc .t .ico{flex:none;width:14px;height:14px;color:var(--dim);display:inline-grid;place-items:center}
+.mc .v{margin-top:4px;font-size:30px;line-height:36px;font-weight:600;letter-spacing:-.025em;font-variant-numeric:tabular-nums;color:var(--content);display:flex;align-items:baseline;gap:8px}
+.mc .v small{font-size:13px;line-height:16px;font-weight:500;letter-spacing:0;color:var(--muted)}
+.mc .v .chev{margin-left:auto;color:var(--dim);font-size:18px;font-weight:400}
+.mc .dl{margin-top:4px;display:flex;align-items:center;gap:8px;min-height:20px}
+.mc .m{font-size:11px;line-height:14px;color:var(--muted)}
+.mc .viz{margin-top:12px}
+.mc .foot{margin-top:12px;display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:18px}
+.mc .foot .m{white-space:nowrap}
+.mc.s{border-radius:8px;padding:8px 12px}
+.mc.s .t{font-size:11px}
+.mc.s .v{font-size:20px;line-height:28px;margin-top:0;justify-content:space-between}
+.mc.s .foot{margin-top:4px;min-height:0}
+.b{display:inline-flex;align-items:center;gap:4px;padding:2px 6px;border-radius:4px;font-size:11px;line-height:16px;font-weight:500;white-space:nowrap;background:var(--raised);color:var(--muted)}
+.b.good{background:var(--success-soft);color:var(--success-fg)}
+.b.warn{background:var(--warning-soft);color:var(--warning-fg)}
+.b.bad{background:var(--danger-soft);color:var(--danger-fg)}
+.b.info{background:var(--info-soft);color:var(--info-fg)}
+.b.n{background:transparent;border:1px dashed var(--border);color:var(--muted)}
+.dot{display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--muted)}
+.dot.good{background:var(--success)}.dot.warn{background:var(--warning)}.dot.bad{background:var(--danger)}
+svg.spark{display:block;width:100%;height:32px;color:var(--primary);overflow:visible}
+.track{height:6px;border-radius:3px;background:var(--raised);position:relative}
+.track>i{position:absolute;left:0;top:0;bottom:0;border-radius:3px;background:color-mix(in srgb,var(--primary) 75%,transparent)}
+.track>i.good{background:var(--success)}.track>i.warn{background:var(--warning)}.track>i.bad{background:var(--danger)}
+.track>u{position:absolute;top:-3px;bottom:-3px;width:1px;background:var(--dim);text-decoration:none}
+.track.lg{height:8px;border-radius:4px}
+.brow{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(0,1.2fr) auto;gap:10px;align-items:center;min-height:22px}
+.brow .l{font-size:12px;color:var(--content);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.brow .l.dim{color:var(--dim);font-style:italic}
+.brow .r{font-size:12px;font-variant-numeric:tabular-nums;color:var(--content);text-align:right;min-width:64px}
+.brow .r em{font-style:normal;color:var(--muted);margin-left:6px;font-size:11px}
+.skel{background:linear-gradient(90deg,var(--raised),#353b4b,var(--raised));background-size:200% 100%;border-radius:4px;animation:sk 1.4s linear infinite}
+@keyframes sk{to{background-position:-200% 0}}
+.hatch{background-image:repeating-linear-gradient(135deg,rgba(255,255,255,.1) 0 3px,transparent 3px 6px)!important}
+
+/* redline overlays */
+.rl-box{position:absolute;outline:1px dashed var(--rl);outline-offset:0;pointer-events:none}
+.rl-sp{position:absolute;background:var(--rl-soft);pointer-events:none;display:grid;place-items:center;font:600 9.5px/1 var(--mono);color:#ff7aa3}
+.rl-line{position:absolute;background:var(--rl);pointer-events:none}
+.pin{position:absolute;width:18px;height:18px;margin:-9px 0 0 -9px;border-radius:50%;background:var(--rl);color:#fff;font:600 10.5px/18px var(--sans);text-align:center;z-index:3;cursor:default;transition:transform .12s}
+.pin:hover,.pin.on{transform:scale(1.3);box-shadow:0 0 0 3px rgba(224,36,94,.35)}
+.dim-l{position:absolute;color:#ff7aa3;font:10px/1 var(--mono);white-space:nowrap;text-align:center}
+.tick-h{position:absolute;height:1px;background:var(--rl)}
+.tick-v{position:absolute;width:1px;background:var(--rl)}
+.tick-h::before,.tick-h::after{content:"";position:absolute;top:-3px;width:1px;height:7px;background:var(--rl)}
+.tick-h::before{left:0}.tick-h::after{right:0}
+.tick-v::before,.tick-v::after{content:"";position:absolute;left:-3px;height:1px;width:7px;background:var(--rl)}
+.tick-v::before{top:0}.tick-v::after{bottom:0}
+
+/* spec blocks */
+.spec{display:grid;grid-template-columns:minmax(330px,420px) minmax(0,1fr);gap:24px;padding:20px 0;border-top:1px solid var(--rule2)}
+.spec:first-of-type{border-top:0;padding-top:0}
+.spec>.ab{align-self:start}
+.spec.wide{grid-template-columns:minmax(520px,600px) minmax(0,1fr)}
+.spec h3{margin:0 0 2px;font-size:16px}
+.spec .id{font-family:var(--mono);font-size:11.5px;color:var(--ink3)}
+.spec .lead{margin:4px 0 10px;color:var(--ink2);font-size:13px}
+.kv{display:grid;grid-template-columns:132px 1fr;gap:0;font-size:12.5px;border:1px solid var(--rule);border-radius:8px;overflow:hidden}
+.kv>div{padding:6px 10px;border-bottom:1px solid var(--rule2)}
+.kv>div:nth-last-child(-n+2){border-bottom:0}
+.kv>div:nth-child(odd){background:#f4f6fa;color:var(--ink3);font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;padding-top:8px}
+pre.json{margin:10px 0 0;background:#10141c;color:#d5dcea;border-radius:8px;padding:12px 14px;font:11.5px/1.55 var(--mono);overflow:auto;white-space:pre-wrap;word-break:break-word}
+.swatches{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
+.sw{border:1px solid var(--rule);border-radius:8px;overflow:hidden;font-size:11.5px}
+.sw i{display:block;height:34px;border-bottom:1px solid var(--rule)}
+.sw div{padding:6px 8px}.sw b{display:block;font-size:12px}.sw span{color:var(--ink3);font-family:var(--mono);font-size:10.5px}
+.type-row{display:grid;grid-template-columns:150px 1fr 220px;gap:12px;align-items:center;padding:8px 0;border-bottom:1px solid var(--rule2);font-size:12px}
+.type-row .sample{background:var(--base);color:var(--content);border-radius:6px;padding:8px 12px;overflow:hidden;white-space:nowrap}
+.states{display:grid;grid-template-columns:repeat(auto-fill,minmax(310px,1fr));gap:16px}
+.state h4{margin:0 0 6px;font-size:12px;display:flex;gap:8px;align-items:center}
+.state p{margin:6px 0 0;font-size:12px;color:var(--ink2)}
+.state .ab{padding:14px}
+.glyph{display:inline-block;vertical-align:middle;width:44px;height:30px;background:var(--base);border-radius:5px;padding:4px}
+.mini{display:grid;gap:8px;grid-template-columns:repeat(4,1fr)}
+.mini div{background:var(--base);border:1px solid var(--border);border-radius:8px;padding:8px 10px;min-height:60px;color:var(--content);font-size:11px;line-height:14px}
+.mini div b{display:block;color:var(--muted);font-weight:500;font-size:10.5px;margin-bottom:3px}
+.mini div span{font-size:10px;color:var(--dim);font-family:var(--mono)}
+.mini .w2{grid-column:span 2}
+footer.doc{margin:28px 0 8px;font-size:12px;color:var(--ink3);text-align:center}
+@media (max-width:1100px){.shell{grid-template-columns:1fr}nav.toc{display:none}.spec{grid-template-columns:1fr}.cover{grid-template-columns:1fr}.tb{border-left:0;padding-left:0}.cols.c2{grid-template-columns:1fr}}
+@media print{nav.toc{display:none}.shell{display:block}.sheet{break-inside:avoid}}
+
+table.t.dense{font-size:12px}table.t.dense td,table.t.dense th{padding:6px 7px}table.t.dense th{white-space:normal}table.t.dense td.n{white-space:normal}table.t.dense .chip{white-space:normal;margin:1px 0}
+/* plugin declaration plates (sheet 15) */
+.plate{padding:20px 0;border-top:1px solid var(--rule2)}
+.plate.first{border-top:0;padding-top:4px}
+.plate-h{display:flex;align-items:baseline;gap:10px;margin:0 0 10px}
+.plate-h b{font-size:14px}
+.plate-h .chips{margin-left:auto;display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+.plate-g{display:grid;grid-template-columns:minmax(330px,400px) minmax(0,1fr);gap:24px;align-items:stretch}
+.plate-g .ab{display:flex;flex-direction:column;justify-content:center;gap:16px;padding:40px 36px 32px}
+.mf-cap{font:11px var(--mono);color:var(--ink3);margin:0 0 4px}
+.plate pre.json{margin:0;overflow:visible}
+pre.json .hl{background:rgba(224,36,94,.16);border-radius:3px;padding:0 3px}
+pre.json .pinref{margin-left:8px;vertical-align:1px}
+.plate .why{margin:12px 0 0;font-size:13px;color:var(--ink2);max-width:104ch;line-height:1.6}
+.plate .why .pinref{vertical-align:-3px;margin:0 2px}
+.ab .facts{font:11.5px/1.5 var(--mono);color:var(--muted);width:300px}
+.ab .fp{display:flex;gap:8px;flex-wrap:wrap;width:300px}
+.ab .fp .b{font-size:13px;line-height:20px;padding:3px 10px}
+.ab .fl{font:11.5px/1.5 var(--mono);color:var(--muted);width:300px}
+@media (max-width:1100px){.plate-g{grid-template-columns:1fr}}
+
+/* declaration pages: facts tables, stacked code blocks, request lines */
+.plate-g>div:last-child>.mf-cap~.mf-cap{margin-top:14px}
+.plate-g>div:last-child pre.json+.mf-cap{margin-top:14px}
+.ab .ft{width:300px;border-collapse:collapse;font:11.5px/1.4 var(--mono);color:var(--muted)}
+.ab .ft caption{text-align:left;padding:0 0 6px;color:var(--muted)}
+.ab .ft th{text-align:left;font-weight:500;color:var(--dim);padding:2px 6px 4px 0;border-bottom:1px solid var(--border-subtle)}
+.ab .ft td{padding:3px 6px 3px 0;border-bottom:1px solid var(--border-subtle);color:var(--content)}
+.ab .ft td.r,.ab .ft th.r{text-align:right;padding-right:0}
+.ab .ft tr.gone td{color:var(--dim);text-decoration:line-through}
+.ab .ft tr.sum td{border-bottom:0;color:var(--success-fg);font-weight:600}
+.ab .ft tr.sum td.lbl{text-decoration:none}
+.ab .fnote{width:300px;font:11.5px/1.5 var(--mono);color:var(--muted)}
+pre.json .c{color:#7e8a9e}
+pre.json .k{color:#a3b0c4}
+.pagenav{display:flex;flex-wrap:wrap;gap:6px 14px;margin:0 0 10px;font-size:12px}
+.filelist{width:100%;border-collapse:collapse;font-size:13px}
+.filelist td,.filelist th{padding:9px 10px;border-bottom:1px solid var(--rule2);vertical-align:top;text-align:left}
+.filelist th{font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink3);background:#f2f4f8}
+nav.toc .grp{font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink3);margin:14px 0 4px}
+nav.toc a.cur{background:#dde0e8;color:var(--ink);font-weight:600}
+.tb{max-width:420px}
+.ab code{background:none;border:0;color:inherit;padding:0}
+</style>
+</head>
+<body>
+<div class="shell">
+<nav class="toc" aria-label="Pages and sheets">
+  <h2>Pages</h2>
+  <a href="../declarations.html">Overview</a>
+  <a class="cur" href="metrics.html">Metrics: how a key counts</a>
+  <div class="grp">Card types</div>
+  <a href="count.html">Count (MC-01)</a>
+  <div class="grp">On this page</div>
+  <a href="#s01"><b>01</b>Increments</a>
+  <a href="#s02"><b>02</b>Totals</a>
+  <a href="#s03"><b>03</b>Dimensions</a>
+  <a href="#s04"><b>04</b>Requests the service refuses</a>
+  <a href="#s05"><b>05</b>Increment or total</a>
+</nav>
+<main>
+<section class="cover">
+  <div>
+    <h1>Metrics: how a key counts</h1>
+    <p>A metric is a key a plugin reports. Before any card, the key decides what a fact means and when it counts. This page shows the two kinds of key, the fields a plugin must send for each, and what the service refuses.</p>
+    <p>Every card type reads these keys. A rate card is only correct if the key counts the way the plugin expects.</p>
+  </div>
+  <div class="tb"><dl>
+    <dt>Needs</dt><dd>PR #818 (open, stacked on #817)</dd>
+    <dt>Answers</dt><dd>Marked <span class="chip ok">checked</span> when produced by running the request against the #818 code on SQLite. Facts use the dates 2026-11-18 to 2026-11-25.</dd>
+    <dt>Back</dt><dd><a href="../declarations.html">Overview and reading guide</a></dd>
+  </dl></div>
+</section>
+
+<section class="sheet" id="s01">
+  <header><span class="no">01</span><h2>Increments</h2><span class="sub">Every fact counts. The default. Five examples.</span></header>
+  <div class="body">
+    <p>An increment is an amount that happened: a PR merged, 300 lines changed, a review that passed. Each fact is one thing that happened once. The facts add up.</p>
+
+    <div class="plate first">
+      <div class="plate-h"><b>A · One fact for each event</b><span class="chips"><span class="chip open">open PR #818</span><span class="chip ext">new: manifest</span></span></div>
+      <div class="plate-g">
+        <div class="ab flat"><span class="cap">A · card · 1:1</span>
+          <div style="position:relative;width:300px"><div class="mc"><div class="t"><span class="tx">PRs merged, 7 days</span></div><div class="v">6</div><div class="m" style="margin-top:4px">One fact for each merged PR</div></div><span class="pin" style="left:0;top:24px">1</span><span class="pin" style="left:0;top:54px">2</span><span class="pin" style="left:0;top:83px">3</span></div>
+          <table class="ft"><caption>facts in the window</caption>
+            <tr><th>counts at</th><th>dedupe_key</th><th class="r">value</th></tr>
+            <tr><td>19 Nov 09:10</td><td>acme/api#1420</td><td class="r">1</td></tr>
+            <tr><td>20 Nov 15:30</td><td>acme/api#1421</td><td class="r">1</td></tr>
+            <tr><td>21 Nov 11:00</td><td>acme/api#1422</td><td class="r">1</td></tr>
+            <tr><td>23 Nov 08:45</td><td>acme/api#1423</td><td class="r">1</td></tr>
+            <tr><td>24 Nov 14:05</td><td>acme/api#1424</td><td class="r">1</td></tr>
+            <tr><td>24 Nov 16:20</td><td>acme/api#1425</td><td class="r">1</td></tr>
+            <tr class="sum"><td class="lbl" colspan="2">sum</td><td class="r">6</td></tr></table></div>
+        <div>
+          <div class="mf-cap">.plugin/plugin.json · automation.outcomes</div>
+          <pre class="json">"outcomes": {
+  "keys": {
+    "prs_merged": {
+      "type": "number",
+      <span class="hl">"semantics": "increment",</span>
+      "label": "PRs merged",
+      <span class="hl">"description": "One fact for each merged PR",</span><span class="pinref">3</span>
+      "unit": "count",
+      "direction": "up_is_good",
+      <span class="hl">"aggregation": "sum"</span><span class="pinref">2</span>
+    }
+  },
+  "suggested_cards": [{
+    "key": "prs-merged-7d",
+    <span class="hl">"title": "PRs merged, 7 days",</span><span class="pinref">1</span>
+    "source": { "type": "outcomes", "metric": "prs_merged" },
+    "display": "number",
+    "window": "7d"
+  }]
+}</pre>
+          <div class="mf-cap">The plugin sends · once for each merged PR</div>
+          <pre class="json">curl -X POST "$AUTOMATION_OUTCOME_URL" \
+  -H "Authorization: Bearer $AUTOMATION_OUTCOME_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "values": [{ "key": "prs_merged", "type": "number", "value": 1 }],
+    <span class="hl">"occurred_at": "2026-11-24T16:20:00Z",</span>
+    <span class="hl">"dedupe_key": "acme/api#1425"</span>
+  }'
+<span class="c">→ 201 {"stored": 1, "duplicates": 0}</span>  <span class="chip ok">checked</span></pre>
+          <div class="mf-cap">The card reads</div>
+          <pre class="json">GET /v1/factories/{id}/outcomes/aggregate
+    ?key=prs_merged&amp;operation=sum
+    &amp;since=2026-11-18T00:00:00Z&amp;until=2026-11-25T00:00:00Z
+<span class="c">→ {"value": 6.0, "count": 6}   window 7d, drawn as whole days</span>  <span class="chip ok">checked</span></pre>
+        </div>
+      </div>
+      <p class="why">The simplest increment. The plugin sends the value <code>1</code> for each merged PR. <span class="pinref">2</span> The card sums the facts in the window. <span class="pinref">1</span> <span class="pinref">3</span> Title and hint come from the card and the key, as on the Count page. The two highlighted fields in the request are what make the count right. <code>occurred_at</code> says when the PR merged. <code>dedupe_key</code> names the event, so that a retry does not count it twice (example B).</p>
+    </div>
+
+    <div class="plate">
+      <div class="plate-h"><b>B · A retry counts once</b><span class="chips"><span class="chip open">open PR #818</span></span></div>
+      <div class="plate-g">
+        <div class="ab flat"><span class="cap">B · card · 1:1</span>
+          <div style="position:relative;width:300px"><div class="mc"><div class="t"><span class="tx">PRs merged, 7 days</span></div><div class="v">6</div></div></div>
+          <div class="fnote">The same request is sent twice. The card still shows 6.</div></div>
+        <div>
+          <div class="mf-cap">The plugin sends · the same request as example A, a second time</div>
+          <pre class="json">curl -X POST "$AUTOMATION_OUTCOME_URL" ... \
+  -d '{
+    "values": [{ "key": "prs_merged", "type": "number", "value": 1 }],
+    "occurred_at": "2026-11-24T16:20:00Z",
+    <span class="hl">"dedupe_key": "acme/api#1425"</span>
+  }'
+<span class="c">→ 201 {"stored": 0, "duplicates": 1}</span>  <span class="chip ok">checked</span></pre>
+        </div>
+      </div>
+      <p class="why">A <code>dedupe_key</code> is unique for a factory and a key, across all automations. The second request is not an error. The answer says <code>duplicates: 1</code> and stores nothing. So a script can send again after a timeout, and a run that is retried cannot count a PR twice. Use a name that belongs to the event, such as the repository and PR number. A run id is wrong: a retried run has a new id.</p>
+    </div>
+
+    <div class="plate">
+      <div class="plate-h"><b>C · When the fact counts</b><span class="chips"><span class="chip open">open PR #818</span></span></div>
+      <div class="plate-g">
+        <div class="ab flat"><span class="cap">C · card · 1:1</span>
+          <div style="position:relative;width:300px"><div class="mc"><div class="t"><span class="tx">PRs merged, 24 Nov</span></div><div class="v">2</div></div></div>
+          <table class="ft"><caption>two ways to send the 16:20 PR</caption>
+            <tr><th>sent with</th><th>counts at</th></tr>
+            <tr><td>occurred_at</td><td>24 Nov 16:20</td></tr>
+            <tr><td>no occurred_at</td><td>when received</td></tr></table></div>
+        <div>
+          <div class="mf-cap">The plugin sends · no occurred_at</div>
+          <pre class="json">curl -X POST "$AUTOMATION_OUTCOME_URL" ... \
+  -d '{
+    "values": [{ "key": "prs_merged", "type": "number", "value": 1 }],
+    <span class="hl">"dedupe_key": "acme/api#1426"</span>
+  }'
+<span class="c">→ the fact counts at the time the service received it</span>  <span class="chip ok">checked</span></pre>
+          <div class="mf-cap">The card reads · a day card, 24 Nov</div>
+          <pre class="json">GET .../outcomes/aggregate?key=prs_merged&amp;operation=sum
+    &amp;group_by=day&amp;since=2026-11-18T00:00:00Z&amp;until=2026-11-25T00:00:00Z
+<span class="c">→ buckets: ... {"bucket": "2026-11-24", "value": 2.0, "count": 2}</span>  <span class="chip ok">checked</span></pre>
+        </div>
+      </div>
+      <p class="why">Without <code>occurred_at</code> a fact counts when the service gets it. That is right for a plugin that runs when the event happens. It is wrong for a nightly scan that finds yesterday's PRs: they would all count on the day of the scan, and a day or week card would show a false spike. A scan must send <code>occurred_at</code>. A time more than five minutes in the future is refused (sheet 04).</p>
+    </div>
+
+    <div class="plate">
+      <div class="plate-h"><b>D · An amount, not a count</b><span class="chips"><span class="chip merged">merged</span><span class="chip ext">new: manifest</span></span></div>
+      <div class="plate-g">
+        <div class="ab flat"><span class="cap">D · card · 1:1</span>
+          <div style="position:relative;width:300px"><div class="mc"><div class="t"><span class="tx">Lines changed, 30 days</span></div><div class="v">500</div></div></div>
+          <div class="fnote">100 + 40 + 300 + 60 = 500</div></div>
+        <div>
+          <div class="mf-cap">.plugin/plugin.json · automation.outcomes.keys</div>
+          <pre class="json">"pr_lines": {
+  "type": "number",
+  "semantics": "increment",
+  "label": "Lines changed per PR",
+  "unit": "count",
+  "direction": "neutral",
+  "aggregation": "sum"
+}</pre>
+          <div class="mf-cap">The card reads</div>
+          <pre class="json">GET .../outcomes/aggregate?key=pr_lines&amp;operation=sum
+<span class="c">→ {"value": 500.0, "count": 4}</span>  <span class="chip ok">checked</span></pre>
+        </div>
+      </div>
+      <p class="why">The value does not have to be 1. Each fact carries an amount, and <code>sum</code> adds the amounts. <code>count</code> would give 4 and ignore them. The same key can feed a total card (<code>sum</code>), an average card (<code>avg</code>) and a count card (<code>count</code>).</p>
+    </div>
+
+    <div class="plate">
+      <div class="plate-h"><b>E · True or false</b><span class="chips"><span class="chip merged">merged</span><span class="chip ext">new: manifest</span></span></div>
+      <div class="plate-g">
+        <div class="ab flat"><span class="cap">E · card · 1:1</span>
+          <div style="position:relative;width:300px"><div class="mc"><div class="t"><span class="tx">Reviews that passed</span></div><div class="v">3</div></div></div>
+          <div class="fp"><span class="b good">true</span><span class="b good">true</span><span class="b bad">false</span><span class="b good">true</span><span class="b bad">false</span></div></div>
+        <div>
+          <div class="mf-cap">.plugin/plugin.json · automation.outcomes.keys</div>
+          <pre class="json">"review_passed": {
+  <span class="hl">"type": "boolean",</span>
+  "label": "Review passed",
+  "unit": "count",
+  "direction": "up_is_good",
+  "aggregation": "count_true"
+}</pre>
+          <div class="mf-cap">The card reads · three requests, same window</div>
+          <pre class="json">operation=count_true <span class="c">→ {"value": 3, "count": 5}</span>
+operation=count_false <span class="c">→ {"value": 2, "count": 5}</span>
+operation=count <span class="c">→ {"value": 5, "count": 5}</span>  <span class="chip ok">checked</span></pre>
+        </div>
+      </div>
+      <p class="why">A boolean key is always an increment. A total must be a number, and the registry refuses <code>semantics: total</code> on any other type. The percent card (a later page) divides <code>count_true</code> by <code>count</code>.</p>
+    </div>
+  </div>
+</section>
+
+<section class="sheet" id="s02">
+  <header><span class="no">02</span><h2>Totals</h2><span class="sub">One number for each period. The latest report wins. Five examples.</span></header>
+  <div class="body">
+    <p>A total is the number for a whole period, such as "PRs merged on 24 Nov". The plugin may report it once, or again and again as it learns more. For each automation, set of dimensions and period, only the last report counts. The earlier ones stay in the history and drop out of every card.</p>
+    <p>A total counts at the <em>start</em> of its period. It needs a number type and a <code>grain</code>: hour, day, week or month. The plugin sends <code>period</code> in the format of the grain. It must not send <code>occurred_at</code> or <code>dedupe_key</code>.</p>
+
+    <div class="plate first">
+      <div class="plate-h"><b>A · A daily total, once a day</b><span class="chips"><span class="chip open">open PR #818</span><span class="chip ext">new: manifest</span></span></div>
+      <div class="plate-g">
+        <div class="ab flat"><span class="cap">A · card · 1:1</span>
+          <div style="position:relative;width:300px"><div class="mc"><div class="t"><span class="tx">PRs merged, 7 days</span></div><div class="v">27</div></div><span class="pin" style="left:0;top:54px">2</span></div>
+          <table class="ft"><caption>one fact for each day</caption>
+            <tr><th>period</th><th class="r">value</th></tr>
+            <tr><td>18 Nov</td><td class="r">4</td></tr><tr><td>19 Nov</td><td class="r">6</td></tr><tr><td>20 Nov</td><td class="r">5</td></tr><tr><td>21 Nov</td><td class="r">2</td></tr><tr><td>22 Nov</td><td class="r">0</td></tr><tr><td>23 Nov</td><td class="r">3</td></tr><tr><td>24 Nov</td><td class="r">7</td></tr>
+            <tr class="sum"><td class="lbl">sum</td><td class="r">27</td></tr></table></div>
+        <div>
+          <div class="mf-cap">.plugin/plugin.json · automation.outcomes.keys</div>
+          <pre class="json">"merged_daily": {
+  "type": "number",
+  <span class="hl">"semantics": "total",</span>
+  <span class="hl">"grain": "day",</span>
+  "label": "PRs merged per day",
+  "unit": "count",
+  "direction": "up_is_good",
+  <span class="hl">"aggregation": "sum"</span><span class="pinref">2</span>
+}</pre>
+          <div class="mf-cap">The plugin sends · a nightly job, once for yesterday</div>
+          <pre class="json">curl -X POST "$AUTOMATION_OUTCOME_URL" ... \
+  -d '{
+    "values": [{ "key": "merged_daily", "type": "number", "value": 7 }],
+    <span class="hl">"period": "2026-11-24"</span>
+  }'
+<span class="c">→ 201 {"stored": 1, "duplicates": 0}</span>  <span class="chip ok">checked</span></pre>
+          <div class="mf-cap">The card reads · whole days, 18 to 24 Nov</div>
+          <pre class="json">GET .../outcomes/aggregate?key=merged_daily&amp;operation=sum
+    &amp;since=2026-11-18T00:00:00Z&amp;until=2026-11-25T00:00:00Z
+<span class="c">→ {"value": 27.0, "count": 7}</span>  <span class="chip ok">checked</span></pre>
+        </div>
+      </div>
+      <p class="why">The plugin counts for itself and reports the answer. That suits a job that queries GitHub once a day: it does not have to track which PRs it has seen. <span class="pinref">2</span> <code>sum</code> adds the latest total of each day. <code>count</code> here would be 7, the number of days with a fact, not the number of PRs. The window is drawn as whole days. A rolling <code>7d</code> window cuts the first day off, as the Count page shows.</p>
+    </div>
+
+    <div class="plate">
+      <div class="plate-h"><b>B · The same period, reported again</b><span class="chips"><span class="chip open">open PR #818</span></span></div>
+      <div class="plate-g">
+        <div class="ab flat"><span class="cap">B · card · 1:1</span>
+          <div style="position:relative;width:300px"><div class="mc"><div class="t"><span class="tx">PRs merged, 24 Nov</span></div><div class="v">7</div></div></div>
+          <table class="ft"><caption>three reports for 24 Nov, oldest first</caption>
+            <tr><th>received</th><th class="r">value</th></tr>
+            <tr class="gone"><td>09:00</td><td class="r">4</td></tr>
+            <tr class="gone"><td>13:00</td><td class="r">6</td></tr>
+            <tr class="sum"><td class="lbl">18:00 (counts)</td><td class="r">7</td></tr></table></div>
+        <div>
+          <div class="mf-cap">The plugin sends · three times in the day, the same period</div>
+          <pre class="json">... "values": [{ "key": "merged_daily", "type": "number", "value": 4 }], "period": "2026-11-24"
+... "values": [{ "key": "merged_daily", "type": "number", "value": 6 }], "period": "2026-11-24"
+... "values": [{ "key": "merged_daily", "type": "number", "value": 7 }], "period": "2026-11-24"</pre>
+          <div class="mf-cap">The card reads</div>
+          <pre class="json">GET .../outcomes/aggregate?key=merged_daily&amp;operation=sum
+<span class="c">→ {"value": 7.0, "count": 1}</span>
+GET .../outcomes/values?key=merged_daily
+<span class="c">→ {"total": 3, ...}   the history keeps every report</span>  <span class="chip ok">checked</span></pre>
+        </div>
+      </div>
+      <p class="why">This is why a rate does not depend on how often the plugin runs. A plugin that reports every hour, or three times a day, gives the same card as one that reports once. Only the last report of the period counts. "Last" means last <em>received</em>, never the plugin's own clock. An older report that arrives late does not undo a newer one.</p>
+    </div>
+
+    <div class="plate">
+      <div class="plate-h"><b>C · A weekly total</b><span class="chips"><span class="chip open">open PR #818</span><span class="chip ext">new: manifest</span></span></div>
+      <div class="plate-g">
+        <div class="ab flat"><span class="cap">C · card · 1:1</span>
+          <div style="position:relative;width:300px"><div class="mc"><div class="t"><span class="tx">Merged this week</span></div><div class="v">23</div></div></div>
+          <div class="fnote">period 2026-W48 counts at Mon 23 Nov 00:00 UTC</div></div>
+        <div>
+          <div class="mf-cap">.plugin/plugin.json · automation.outcomes.keys</div>
+          <pre class="json">"merged_weekly": {
+  "type": "number",
+  "semantics": "total",
+  <span class="hl">"grain": "week",</span>
+  "label": "PRs merged per week",
+  "aggregation": "sum"
+}</pre>
+          <div class="mf-cap">The plugin sends</div>
+          <pre class="json">... "values": [{ "key": "merged_weekly", "type": "number", "value": 23 }],
+    <span class="hl">"period": "2026-W48"</span>
+<span class="c">→ the fact counts at 2026-11-23T00:00:00Z</span>  <span class="chip ok">checked</span></pre>
+        </div>
+      </div>
+      <p class="why">The period text must match the grain. A week is an ISO week, <code>YYYY-Www</code>, and starts on Monday in UTC. A month is <code>YYYY-MM</code>. An hour is <code>YYYY-MM-DDTHH</code>. The service stores the start of the period, so a week card and a day card agree about which Monday a fact belongs to.</p>
+    </div>
+
+    <div class="plate">
+      <div class="plate-h"><b>D · Two automations, one period</b><span class="chips"><span class="chip open">open PR #818</span></span></div>
+      <div class="plate-g">
+        <div class="ab flat"><span class="cap">D · card · 1:1</span>
+          <div style="position:relative;width:300px"><div class="mc"><div class="t"><span class="tx">PRs merged, 24 Nov</span></div><div class="v">12</div></div></div>
+          <table class="ft"><caption>24 Nov, latest report of each automation</caption>
+            <tr><th>automation</th><th class="r">value</th></tr>
+            <tr><td>nightly-merged</td><td class="r">7</td></tr>
+            <tr><td>team-b-merged</td><td class="r">5</td></tr>
+            <tr class="sum"><td class="lbl">sum</td><td class="r">12</td></tr></table></div>
+        <div>
+          <div class="mf-cap">The card reads</div>
+          <pre class="json">operation=sum <span class="c">→ {"value": 12.0, "count": 2}</span>
+operation=avg <span class="c">→ {"value": 6.0, "count": 2}</span>  <span class="chip ok">checked</span></pre>
+        </div>
+      </div>
+      <div class="note warn">A total is kept <b>for each automation</b>. Two automations that both report "all PRs merged on 24 Nov" give 14, not 7. Give each automation its own slice of the work, or put the slice in a dimension (sheet 03). <code>avg</code> averages the period facts, here one for each automation. It is not the average of a day.</div>
+    </div>
+
+    <div class="plate">
+      <div class="plate-h"><b>E · A level, not an amount</b><span class="chips"><span class="chip gap">gap: last</span><span class="chip open">open PR #818</span></span></div>
+      <div class="plate-g">
+        <div class="ab flat"><span class="cap">E · card · 1:1</span>
+          <div style="position:relative;width:300px"><div class="mc"><div class="t"><span class="tx">PRs awaiting review</span></div><div class="v">13</div><div class="m" style="margin-top:4px">As of the last scan</div></div></div>
+          <table class="ft"><caption>hourly totals, 25 Nov</caption>
+            <tr><th>period</th><th class="r">value</th></tr>
+            <tr><td>08:00</td><td class="r">12</td></tr>
+            <tr class="gone"><td>09:00 (first report)</td><td class="r">11</td></tr>
+            <tr><td>09:00 (counts)</td><td class="r">13</td></tr></table></div>
+        <div>
+          <div class="mf-cap">.plugin/plugin.json · automation.outcomes.keys</div>
+          <pre class="json">"open_prs": {
+  "type": "number",
+  "semantics": "total",
+  <span class="hl">"grain": "hour",</span>
+  "label": "PRs awaiting review",
+  "direction": "down_is_good",
+  <span class="hl">"aggregation": "last"</span>
+}</pre>
+          <div class="mf-cap">What the service gives today · window of 1 day, 24 Nov 09:30 to 25 Nov 09:30</div>
+          <pre class="json">operation=sum <span class="c">→ {"value": 25.0, "count": 2}   wrong: adds two levels</span>
+operation=max <span class="c">→ {"value": 13.0, "count": 2}   right here by luck</span>  <span class="chip ok">checked</span></pre>
+        </div>
+      </div>
+      <p class="why">A count of open PRs is a level. Adding two hourly levels makes no sense, and <code>max</code> is wrong as soon as the level falls. The card needs the value of the latest period: a <code>last</code> aggregation. It does not exist. Until it does, a level card can only show a window so short that it holds one period, and that card shows "No data" when the latest report is not in the window yet.</p>
+    </div>
+  </div>
+</section>
+
+<section class="sheet" id="s03">
+  <header><span class="no">03</span><h2>Dimensions</h2><span class="sub">Labels on a fact, such as the repository. Four examples.</span></header>
+  <div class="body">
+    <p>A fact can carry up to eight labels. A later total replaces an earlier one only when the automation, the period <em>and every label</em> match. Two facts with different labels do not replace each other.</p>
+
+    <div class="plate first">
+      <div class="plate-h"><b>A · A total for each repository</b><span class="chips"><span class="chip open">open PR #818</span></span></div>
+      <div class="plate-g">
+        <div class="ab flat"><span class="cap">A · card · 1:1</span>
+          <div style="position:relative;width:300px"><div class="mc"><div class="t"><span class="tx">Reviews posted, 24 Nov</span></div><div class="v">11</div></div></div>
+          <table class="ft"><caption>24 Nov, in the order received</caption>
+            <tr><th>repo</th><th class="r">value</th></tr>
+            <tr class="gone"><td>acme/api</td><td class="r">7</td></tr>
+            <tr><td>acme/web</td><td class="r">3</td></tr>
+            <tr><td>acme/api (counts)</td><td class="r">8</td></tr>
+            <tr class="sum"><td class="lbl">sum</td><td class="r">11</td></tr></table></div>
+        <div>
+          <div class="mf-cap">The plugin sends · one request for each repository</div>
+          <pre class="json">... "values": [{ "key": "reviews", "type": "number", "value": 7 }],
+    "period": "2026-11-24",
+    <span class="hl">"dimensions": { "repo": "acme/api" }</span>
+... same, value 3, <span class="hl">"dimensions": { "repo": "acme/web" }</span>
+... same, value 8, <span class="hl">"dimensions": { "repo": "acme/api" }</span>   <span class="c">replaces the 7</span></pre>
+          <div class="mf-cap">The card reads</div>
+          <pre class="json">operation=sum <span class="c">→ {"value": 11.0, "count": 2}</span>  <span class="chip ok">checked</span></pre>
+        </div>
+      </div>
+      <p class="why">The card has no <code>repo</code> setting, so it adds all repositories. The repository is a label on the fact, not a different key. The third request replaces the first, because the repository is the same. It does not touch <code>acme/web</code>. Dimensions are stored in #818. The card cannot yet filter or group by them (example C).</p>
+    </div>
+
+    <div class="plate">
+      <div class="plate-h"><b>B · Other aggregations count the labelled facts</b><span class="chips"><span class="chip open">open PR #818</span></span></div>
+      <div class="plate-g">
+        <div class="ab flat"><span class="cap">B · the same facts</span><div class="fnote">acme/api 8 · acme/web 3</div></div>
+        <div>
+          <div class="mf-cap">The card reads · the facts of example A</div>
+          <pre class="json">operation=avg <span class="c">→ {"value": 5.5, "count": 2}   the mean of the two repositories</span>
+operation=max <span class="c">→ {"value": 8.0, "count": 2}</span>
+operation=count <span class="c">→ {"value": 2, "count": 2}   two facts, not 11 reviews</span>  <span class="chip ok">checked</span></pre>
+        </div>
+      </div>
+      <p class="why">Each set of labels is one fact. <code>sum</code> is safe to read across labels. <code>avg</code>, <code>min</code>, <code>max</code> and <code>count</code> work on the facts, so a new repository changes them. Prefer <code>sum</code> for a card that has no label setting.</p>
+    </div>
+
+    <div class="plate">
+      <div class="plate-h"><b>C · A breakdown card</b><span class="chips"><span class="chip gap">gap: group by dimension</span><span class="chip gap">gap: dimension filter</span></span></div>
+      <div class="plate-g">
+        <div class="ab flat"><span class="cap">C · card · 1:1 · not possible today</span>
+          <div style="position:relative;width:300px"><div class="mc"><div class="t"><span class="tx">Reviews posted by repo</span></div><div class="v">11</div>
+            <div class="viz" style="display:grid;gap:8px"><div class="brow"><span class="l">acme/api</span><div class="track"><i style="width:73%"></i></div><span class="r">8<em>73%</em></span></div><div class="brow"><span class="l">acme/web</span><div class="track"><i style="width:27%"></i></div><span class="r">3<em>27%</em></span></div></div></div></div></div>
+        <div>
+          <div class="mf-cap">.plugin/plugin.json · automation.outcomes.suggested_cards[ ]</div>
+          <pre class="json">{ "key": "reviews-by-repo",
+  "title": "Reviews posted by repo",
+  "source": { "type": "outcomes", "metric": "reviews" },
+  "display": "number",
+  <span class="hl">"group_by": "repo"</span> }
+<span class="c">needs: GET .../aggregate?...&amp;group_by=dimension:repo</span></pre>
+        </div>
+      </div>
+      <p class="why">The aggregate route groups by day, week or month only. It cannot group by a label or filter on one. The facts and the labels are there. The route and the manifest field <code>group_by</code> are not. The breakdown page will build on this.</p>
+    </div>
+
+    <div class="plate">
+      <div class="plate-h"><b>D · Limits on labels</b><span class="chips"><span class="chip open">open PR #818</span></span></div>
+      <div class="plate-g">
+        <div class="ab flat"><span class="cap">D · limits</span><div class="fnote">at most 8 labels<br>name: letters, digits, _ . -, up to 40<br>value: 1 to 64 characters</div></div>
+        <div>
+          <div class="mf-cap">The plugin sends · an empty value</div>
+          <pre class="json">... "period": "2026-11-25", "dimensions": { "repo": "" }
+<span class="c">→ 422  Dimension 'repo' must be 1 to 64 characters</span>  <span class="chip ok">checked</span></pre>
+        </div>
+      </div>
+      <p class="why">Labels are for a few short values, such as a repository, a team or an environment. A PR number or a title is a bad label: every value is a new set, and a total for each one would never be replaced. Labels are stored with sorted names, so <code>{"a":"1","b":"2"}</code> and <code>{"b":"2","a":"1"}</code> are one set.</p>
+    </div>
+  </div>
+</section>
+
+<section class="sheet" id="s04">
+  <header><span class="no">04</span><h2>Requests the service refuses</h2><span class="sub">What a plugin gets back when the request does not fit the key. Eight cases.</span></header>
+  <div class="body">
+    <p>Each key accepts only the fields that fit its kind. A wrong request answers 422 with the format it wanted, and nothing is stored. A plugin should log the message. A whole request fails together: if one key of several is wrong, none is stored.</p>
+    <div class="tw"><table class="t dense">
+      <tr><th style="width:24px"></th><th>The plugin sends</th><th>Answer <span class="chip ok">checked</span></th></tr>
+      <tr><td class="n">1</td><td>A total with no <code>period</code></td><td><code>Outcome key 'merged_daily' is a total. Send period as YYYY-MM-DD, for example 2026-11-24</code></td></tr>
+      <tr><td class="n">2</td><td>A period in the wrong format for the grain</td><td><code>period '2026-11-24' is not a week period. Use YYYY-Www, an ISO week, for example 2026-W48</code></td></tr>
+      <tr><td class="n">3</td><td>A total with <code>dedupe_key</code></td><td><code>Outcome key 'merged_daily' is a total. A later report for the same period replaces the earlier one, so occurred_at and dedupe_key do not apply</code></td></tr>
+      <tr><td class="n">4</td><td>A total with <code>occurred_at</code></td><td>The same message as case 3.</td></tr>
+      <tr><td class="n">5</td><td>An increment with <code>period</code></td><td><code>Outcome key 'prs_merged' is an increment. period applies only to totals</code></td></tr>
+      <tr><td class="n">6</td><td>A period that has not begun, or an <code>occurred_at</code> more than five minutes ahead</td><td><code>Outcome key 'merged_daily' cannot count at a future time</code></td></tr>
+      <tr><td class="n">7</td><td>A key the factory does not have, or with another type</td><td><code>Outcome key 'nope' is not registered with type 'number'</code></td></tr>
+      <tr><td class="n">8</td><td>An empty label value</td><td>A validation error: <code>Dimension 'repo' must be 1 to 64 characters</code></td></tr>
+    </table></div>
+    <div class="note">Cases 1 to 5 mean the plugin and its manifest disagree about what the key is. The fix is in one of the two. A key cannot change type, <code>semantics</code> or <code>grain</code> once it has facts: <code>PUT /outcome-keys/{key}</code> answers 409. Two plugins in one factory that declare the same key must declare it the same way. The install step proposed here would refuse the second one.</div>
+  </div>
+</section>
+
+<section class="sheet" id="s05">
+  <header><span class="no">05</span><h2>Increment or total</h2><span class="sub">How to choose for a key.</span></header>
+  <div class="body">
+    <div class="tw"><table class="t dense">
+      <tr><th>The plugin…</th><th>Use</th><th>Why</th></tr>
+      <tr><td>sees each event once, as it happens, and can name it</td><td><b>increment</b> with <code>dedupe_key</code></td><td>Retries are safe. The service counts for you. A card can slice the count by any window.</td></tr>
+      <tr><td>scans on a schedule and finds events after the fact</td><td><b>increment</b> with <code>occurred_at</code> and <code>dedupe_key</code></td><td>A scan that overlaps its last run finds the same events again. The key makes them one.</td></tr>
+      <tr><td>queries a system that already holds the answer ("merged yesterday")</td><td><b>total</b> with <code>grain: day</code></td><td>The plugin does not have to track events. It may report as often as it likes.</td></tr>
+      <tr><td>measures a level ("open PRs now")</td><td><b>total</b> with <code>grain: hour</code> or <code>day</code></td><td>Each report is a new reading that replaces the last. A level card needs <code>last</code>.</td></tr>
+      <tr><td>reports true or false</td><td><b>increment</b></td><td>A total must be a number.</td></tr>
+    </table></div>
+    <h3>Which aggregations make sense</h3>
+    <div class="tw"><table class="t dense">
+      <tr><th>Key</th><th>Aggregations that read well</th><th>Read with care</th></tr>
+      <tr><td class="n">increment, number</td><td><code>sum</code> <code>count</code> <code>avg</code> <code>min</code> <code>max</code> · <span class="chip gap">gap</span> <code>rate</code></td><td>—</td></tr>
+      <tr><td class="n">increment, boolean</td><td><code>count_true</code> <code>count_false</code> <code>count</code></td><td>—</td></tr>
+      <tr><td class="n">total, number</td><td><code>sum</code> · <span class="chip gap">gap</span> <code>rate</code> <code>last</code></td><td><code>count</code> counts period facts. <code>avg</code> <code>min</code> <code>max</code> work on period facts, across automations and labels.</td></tr>
+    </table></div>
+  </div>
+</section>
+
+<footer class="doc">Drafted by an AI agent (OpenHands) on behalf of John-Mason Shackelford. Draft for discussion. Nothing here has been built or tested in the product. Backend facts were read from <code>OpenHands/automation</code> <code>main</code> and open PRs #817 and #818 on 2026-11-25.</footer>
+</main>
+</div>
+</body>
+</html>

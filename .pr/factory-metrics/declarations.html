@@ -1,9 +1,9 @@
 <!doctype html>
-<!DOCTYPE html>
-<html lang="en"><head>
+<html lang="en">
+<head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Factory metric cards: plugin declarations</title>
+<title>Factory metric cards: Overview</title>
 <style>
 /* Metric card spec sheet. Doc chrome is light; artboards use the real Agent Canvas dark tokens. */
 :root{
@@ -195,330 +195,144 @@ pre.json .pinref{margin-left:8px;vertical-align:1px}
 .ab .fp .b{font-size:13px;line-height:20px;padding:3px 10px}
 .ab .fl{font:11.5px/1.5 var(--mono);color:var(--muted);width:300px}
 @media (max-width:1100px){.plate-g{grid-template-columns:1fr}}
+
+/* declaration pages: facts tables, stacked code blocks, request lines */
+.plate-g>div:last-child>.mf-cap~.mf-cap{margin-top:14px}
+.plate-g>div:last-child pre.json+.mf-cap{margin-top:14px}
+.ab .ft{width:300px;border-collapse:collapse;font:11.5px/1.4 var(--mono);color:var(--muted)}
+.ab .ft caption{text-align:left;padding:0 0 6px;color:var(--muted)}
+.ab .ft th{text-align:left;font-weight:500;color:var(--dim);padding:2px 6px 4px 0;border-bottom:1px solid var(--border-subtle)}
+.ab .ft td{padding:3px 6px 3px 0;border-bottom:1px solid var(--border-subtle);color:var(--content)}
+.ab .ft td.r,.ab .ft th.r{text-align:right;padding-right:0}
+.ab .ft tr.gone td{color:var(--dim);text-decoration:line-through}
+.ab .ft tr.sum td{border-bottom:0;color:var(--success-fg);font-weight:600}
+.ab .ft tr.sum td.lbl{text-decoration:none}
+.ab .fnote{width:300px;font:11.5px/1.5 var(--mono);color:var(--muted)}
+pre.json .c{color:#7e8a9e}
+pre.json .k{color:#a3b0c4}
+.pagenav{display:flex;flex-wrap:wrap;gap:6px 14px;margin:0 0 10px;font-size:12px}
+.filelist{width:100%;border-collapse:collapse;font-size:13px}
+.filelist td,.filelist th{padding:9px 10px;border-bottom:1px solid var(--rule2);vertical-align:top;text-align:left}
+.filelist th{font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink3);background:#f2f4f8}
+nav.toc .grp{font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink3);margin:14px 0 4px}
+nav.toc a.cur{background:#dde0e8;color:var(--ink);font-weight:600}
+.tb{max-width:420px}
+.ab code{background:none;border:0;color:inherit;padding:0}
 </style>
 </head>
 <body>
 <div class="shell">
-<nav class="toc" aria-label="Sheets">
-  <h2>Sheets</h2>
-  <a href="#s01"><b>01</b>Reading guide</a>
-  <a href="#s02"><b>02</b>Count (MC-01)</a>
-  <a href="#s03"><b>03</b>Aggregations</a>
+<nav class="toc" aria-label="Pages and sheets">
+  <h2>Pages</h2>
+  <a class="cur" href="declarations.html">Overview</a>
+  <a href="declarations/metrics.html">Metrics: how a key counts</a>
+  <div class="grp">Card types</div>
+  <a href="declarations/count.html">Count (MC-01)</a>
+  <div class="grp">On this page</div>
+  <a href="#s01"><b>01</b>How a number gets on a card</a>
+  <a href="#s02"><b>02</b>Reading guide</a>
+  <a href="#s03"><b>03</b>The manifest fields</a>
+  <a href="#s04"><b>04</b>Pages</a>
 </nav>
 <main>
 <section class="cover">
   <div>
     <h1>Factory metric cards: plugin declarations</h1>
-    <p>One sheet per card type. Each sheet shows a card on the left, the plugin manifest that sets it up on the right, and a short note on each example.</p>
-    <p>Companion to the card design sheet (<code>index.html</code> in the same folder). That sheet says what a card looks like. This page says how a plugin declares it.</p>
+    <p>One file for each card type. Each file shows cards on the left, the plugin manifest that sets them up on the right, and what the plugin sends at run time.</p>
+    <p>Companion to the card design sheet (<code>index.html</code> in the parent folder). That sheet says what a card looks like. These pages say how a plugin declares it.</p>
   </div>
   <div class="tb"><dl>
-    <dt>Sheets</dt><dd>3: reading guide, Count and aggregations. Number with trend, sparkline and percent follow.</dd>
+    <dt>Pages</dt><dd>Overview, metrics (how a key counts) and Count. The other card types follow, one file each.</dd>
     <dt>Manifest</dt><dd><code>.plugin/plugin.json</code>, key <code>automation.outcomes</code></dd>
-    <dt>Status</dt><dd>As of 2026-11-25. Nothing here is built.</dd>
+    <dt>Status</dt><dd>As of 2026-11-25. The manifest fields are proposed. The service work is in <code>main</code> and in open PRs #817 and #818.</dd>
   </dl></div>
 </section>
+
 <section class="sheet" id="s01">
-  <header><span class="no">01</span><h2>Reading guide</h2><span class="sub">How to read the pins and the labels on the sheets that follow.</span></header>
+  <header><span class="no">01</span><h2>How a number gets on a card</h2><span class="sub">Four steps. Each page works on one of them.</span></header>
   <div class="body">
-    <h3>Pins</h3>
-    <p>A pin joins a line of the manifest to the part of the card it controls. The numbers mean the same on every sheet.</p>
     <table class="t">
-      <tbody><tr><td style="width:150px"><span class="pinref">1</span></td><td>The card title. It comes from the card, not from the metric.</td></tr>
-      <tr><td><span class="pinref">2</span></td><td>The value. The metric <code>aggregation</code> and the card <code>window</code> decide it together.</td></tr>
+      <tr><th style="width:36px">Step</th><th style="width:240px">What happens</th><th>Where it is declared</th><th style="width:190px">Service today</th></tr>
+      <tr><td class="n">1</td><td>The plugin declares its <b>metrics</b>: the keys it reports, what each key counts, and how.</td><td><code>automation.outcomes.keys</code></td><td><span class="chip open">open PR</span> <code>type</code>, <code>semantics</code>, <code>grain</code> are in #818. The other fields are <span class="chip ext">new: manifest</span></td></tr>
+      <tr><td class="n">2</td><td>The plugin declares <b>suggested cards</b>: how to show a metric.</td><td><code>automation.outcomes.suggested_cards</code></td><td><span class="chip gap">gap</span> There is no card resource yet.</td></tr>
+      <tr><td class="n">3</td><td>At run time the plugin <b>sends facts</b> to the service.</td><td>Plugin code. The run has <code>$AUTOMATION_OUTCOME_URL</code> and <code>$AUTOMATION_OUTCOME_TOKEN</code>.</td><td><span class="chip merged">merged</span> <code>POST /v1/outcomes</code> · <span class="chip open">open PR</span> <code>period</code>, <code>occurred_at</code>, <code>dedupe_key</code>, <code>dimensions</code></td></tr>
+      <tr><td class="n">4</td><td>The factory page <b>reads</b> the facts and draws the card.</td><td>The card, plus the key's default <code>aggregation</code></td><td><span class="chip merged">merged</span> <code>GET …/outcomes/aggregate</code></td></tr>
+    </table>
+    <div class="note">Step 3 is plugin code, not manifest. But the key from step 1 decides which fields step 3 must send. A total needs a <code>period</code>. An increment refuses one. So each example on these pages shows the manifest and the POST side by side.</div>
+  </div>
+</section>
+
+<section class="sheet" id="s02">
+  <header><span class="no">02</span><h2>Reading guide</h2><span class="sub">How to read the pins and the labels on every page.</span></header>
+  <div class="body">
+    <h3>Panes</h3>
+    <p>Each example has the same parts, left to right and top to bottom.</p>
+    <table class="t">
+      <tr><td style="width:190px"><b>Card</b> (dark, left)</td><td>The card as the factory page shows it, drawn 1:1. Under it, the facts the card reads, when they help.</td></tr>
+      <tr><td><b>Manifest</b></td><td>The part of <code>.plugin/plugin.json</code> that sets the card up. Highlighted lines are the ones the example is about.</td></tr>
+      <tr><td><b>The plugin sends</b></td><td>The request the plugin makes at run time. Present when the key's rules decide what the request holds.</td></tr>
+      <tr><td><b>The card reads</b></td><td>The request the card makes and the answer. Every answer marked <span class="chip ok">checked</span> came from running the request against the service code in PR #818.</td></tr>
+    </table>
+    <h3>Pins</h3>
+    <p>A pin joins a line of the manifest to the part of the card it controls. The numbers mean the same on every page.</p>
+    <table class="t">
+      <tr><td style="width:190px"><span class="pinref">1</span></td><td>The card title. It comes from the card, not from the metric.</td></tr>
+      <tr><td><span class="pinref">2</span></td><td>The value. The <code>aggregation</code> and the <code>window</code> decide it together.</td></tr>
       <tr><td><span class="pinref">3</span></td><td>The hint line. It comes from the metric <code>description</code>.</td></tr>
       <tr><td><span class="pinref">4</span></td><td>The link. The whole card becomes a link, and a chevron shows.</td></tr>
-      <tr><td><span class="pinref">5</span></td><td>No place on the card. It says where the number comes from (<code>from</code>).</td></tr>
+      <tr><td><span class="pinref">5</span></td><td>No place on the card. It says where the number comes from.</td></tr>
       <tr><td><span class="pinref">a</span> <span class="pinref">b</span></td><td>Letters mark separate cards when one example has more than one card.</td></tr>
-    </tbody></table>
+    </table>
     <h3>Labels</h3>
     <p>Two kinds of label sit at the top right of each example. One says if the manifest field is proposed. The other says if the service can do the work today.</p>
     <table class="t">
-      <tbody><tr><td style="width:150px"><span class="chip ext">new</span> <span class="chip ext">new: manifest</span></td><td>A manifest field proposed by this page. The manifest schema does not have it today. It rejects fields it does not know.</td></tr>
-      <tr><td><span class="chip merged">merged</span></td><td>The service does this work in <code>OpenHands/automation</code> <code>main</code> today, for example an aggregation.</td></tr>
-      <tr><td><span class="chip open">open PR</span></td><td>The work is in an open pull request and not on <code>main</code>.</td></tr>
-      <tr><td><span class="chip gap">gap</span></td><td>The card needs it and no pull request provides it yet. The text after the colon says what is missing.</td></tr>
-    </tbody></table>
+      <tr><td style="width:190px"><span class="chip ext">new: manifest</span></td><td>A manifest field proposed by these pages. The manifest schema does not have it today. It rejects fields it does not know.</td></tr>
+      <tr><td><span class="chip merged">merged</span></td><td>The service does this work in <code>OpenHands/automation</code> <code>main</code> today.</td></tr>
+      <tr><td><span class="chip open">open PR</span></td><td>The work is in an open pull request and not on <code>main</code>. The text after the label names the PR.</td></tr>
+      <tr><td><span class="chip gap">gap</span></td><td>The example needs it and no pull request provides it yet. The text after the colon says what is missing.</td></tr>
+      <tr><td><span class="chip ok">checked</span></td><td>The answer shown was produced by running the request against the service code. Not a guess.</td></tr>
+    </table>
   </div>
 </section>
-<section class="sheet" id="s02">
-  <header><span class="no">02</span><h2>Count (MC-01)</h2><span class="sub">How a plugin manifest sets up a Count card. Four examples.</span></header>
-  <div class="body">
-    <p>Left is the card as the factory page shows it, drawn 1:1. Right is the part of the plugin manifest that sets it up. Sheet 01 explains the pins and the labels.</p>
 
-    <div class="plate first">
-      <div class="plate-h"><b>A · A total over all time</b><span class="chips"><span class="chip merged">merged</span><span class="chip ext">new: manifest</span></span></div>
-      <div class="plate-g">
-        <div class="ab flat"><span class="cap">A · card · 1:1</span><div style="position:relative;width:300px"><div class="mc"><div class="t"><span class="tx">Reviews posted</span></div><div class="v">148</div><div class="m" style="margin-top:4px">Reviews the agent has posted</div></div><span class="pin" style="left:0;top:24px">1</span><span class="pin" style="left:0;top:54px">2</span><span class="pin" style="left:0;top:83px">3</span></div></div>
-        <div><div class="mf-cap">.plugin/plugin.json · automation.outcomes</div><pre class="json">"outcomes": {
-  "keys": {
-    "reviews_posted": {
-      "type": "number",
-      <span class="hl">"from": "result.reviews",</span><span class="pinref">5</span>
-      "label": "Reviews posted",
-      <span class="hl">"description": "Reviews the agent has posted",</span><span class="pinref">3</span>
-      "unit": "count",
-      "direction": "up_is_good",
-      <span class="hl">"aggregation": "sum"</span><span class="pinref">2</span>
-    }
-  },
-  "suggested_cards": [{
-    "key": "reviews-total",
-    <span class="hl">"title": "Reviews posted",</span><span class="pinref">1</span>
-    "source": { "type": "outcomes", "metric": "reviews_posted" },
-    "display": "number",
-    <span class="hl">"window": "all"</span><span class="pinref">2</span>
-  }]
-}</pre></div>
-      </div>
-      <p class="why">The simplest Count card. The plugin declares one metric and one suggested card. <span class="pinref">1</span> The title comes from the card. <span class="pinref">2</span> The value is the sum of <code>reviews_posted</code> over the window, and here the window is <code>all</code>. <span class="pinref">3</span> The hint line is the metric <code>description</code>. <code>label</code> names the metric in lists and menus, and the card does not use it. <span class="pinref">5</span> <code>from</code> says where the number comes from: the <code>reviews</code> field of the run result. It has no place on the card. A plugin that posts its own values leaves <code>from</code> out. The card has no <code>link</code>, so it shows no chevron and no hover style.</p>
-    </div>
-
-    <div class="plate">
-      <div class="plate-h"><b>B · A latest value, with a link</b><span class="chips"><span class="chip gap">gap: last</span><span class="chip ext">new: manifest</span></span></div>
-      <div class="plate-g">
-        <div class="ab flat"><span class="cap">B · card · 1:1</span><div style="position:relative;width:300px"><div class="mc link"><div class="t"><span class="tx">PRs awaiting review</span></div><div class="v">12<span class="chev">↗</span></div><div class="m" style="margin-top:4px">As of the last scan</div></div><span class="pin" style="left:0;top:24px">1</span><span class="pin" style="left:0;top:54px">2</span><span class="pin" style="left:0;top:83px">3</span><span class="pin" style="left:100%;top:54px">4</span></div></div>
-        <div><div class="mf-cap">.plugin/plugin.json · automation.outcomes</div><pre class="json">"outcomes": {
-  "keys": {
-    "open_prs": {
-      "type": "number",
-      "label": "PRs awaiting review",
-      <span class="hl">"description": "As of the last scan",</span><span class="pinref">3</span>
-      "unit": "count",
-      "direction": "down_is_good",
-      <span class="hl">"aggregation": "last"</span><span class="pinref">2</span>
-    }
-  },
-  "suggested_cards": [{
-    "key": "open-prs",
-    <span class="hl">"title": "PRs awaiting review",</span><span class="pinref">1</span>
-    "source": { "type": "outcomes", "metric": "open_prs" },
-    "display": "number",
-    <span class="hl">"window": "all",</span><span class="pinref">2</span>
-    <span class="hl">"link": { "url": "https://github.com/acme/api/pulls?q=is%3Aopen+review%3Arequired" }</span><span class="pinref">4</span>
-  }]
-}</pre></div>
-      </div>
-      <p class="why">A gauge is a level, not a total. <span class="pinref">2</span> <code>aggregation: last</code> makes the card show the latest value and not a sum. <span class="pinref">4</span> <code>link</code> makes the whole card a link. A URL outside the app opens in a new tab and shows ↗ in place of ›. The service cannot compute <code>last</code> yet, so this card is not available until that gap closes.</p>
-    </div>
-
-    <div class="plate">
-      <div class="plate-h"><b>C · A count of true values in a window</b><span class="chips"><span class="chip merged">merged</span><span class="chip ext">new: manifest</span></span></div>
-      <div class="plate-g">
-        <div class="ab flat"><span class="cap">C · card · 1:1</span><div style="position:relative;width:300px"><div class="mc"><div class="t"><span class="tx">Passed review, 7 days</span></div><div class="v">31</div><div class="m" style="margin-top:4px">Reviews the author accepted</div></div><span class="pin" style="left:0;top:24px">1</span><span class="pin" style="left:0;top:54px">2</span><span class="pin" style="left:0;top:83px">3</span></div></div>
-        <div><div class="mf-cap">.plugin/plugin.json · automation.outcomes</div><pre class="json">"outcomes": {
-  "keys": {
-    "review_passed": {
-      "type": "boolean",
-      "label": "Reviews passed",
-      <span class="hl">"description": "Reviews the author accepted",</span><span class="pinref">3</span>
-      "unit": "count",
-      "direction": "up_is_good",
-      <span class="hl">"aggregation": "count_true"</span><span class="pinref">2</span>
-    }
-  },
-  "suggested_cards": [{
-    "key": "passed-7d",
-    <span class="hl">"title": "Passed review, 7 days",</span><span class="pinref">1</span>
-    "source": { "type": "outcomes", "metric": "review_passed" },
-    "display": "number",
-    <span class="hl">"window": "7d"</span><span class="pinref">2</span>
-  }]
-}</pre></div>
-      </div>
-      <p class="why">A boolean metric can drive a Count card. <span class="pinref">2</span> <code>count_true</code> counts the true values inside the window. The card <code>window</code> of <code>7d</code> sets the period, and the metric does not change. The card does not add the window to its title, so the title says it: <code>Passed review, 7 days</code>.</p>
-    </div>
-
-    <div class="plate">
-      <div class="plate-h"><b>D · One metric, two cards</b><span class="chips"><span class="chip merged">merged</span><span class="chip ext">new: manifest</span></span></div>
-      <div class="plate-g">
-        <div class="ab flat"><span class="cap">D · card · 1:1</span><div style="position:relative;width:300px"><div class="mc"><div class="t"><span class="tx">Reviews posted</span></div><div class="v">148</div><div class="m" style="margin-top:4px">Reviews the agent has posted</div></div><span class="pin" style="left:0;top:24px">a</span></div><div style="position:relative;width:300px"><div class="mc"><div class="t"><span class="tx">Reviews posted, 7 days</span></div><div class="v">23</div><div class="m" style="margin-top:4px">Reviews the agent has posted</div></div><span class="pin" style="left:0;top:24px">b</span></div></div>
-        <div><div class="mf-cap">.plugin/plugin.json · automation.outcomes</div><pre class="json">"outcomes": {
-  "keys": {
-    "reviews_posted": {
-      "type": "number",
-      "label": "Reviews posted",
-      "description": "Reviews the agent has posted",
-      "unit": "count",
-      "direction": "up_is_good",
-      "aggregation": "sum"
-    }
-  },
-  "suggested_cards": [
-    <span class="hl">{ "key": "reviews-total", "title": "Reviews posted",</span><span class="pinref">a</span>
-      "source": { "type": "outcomes", "metric": "reviews_posted" },
-      "display": "number", "window": "all" },
-    <span class="hl">{ "key": "reviews-7d", "title": "Reviews posted, 7 days",</span><span class="pinref">b</span>
-      "source": { "type": "outcomes", "metric": "reviews_posted" },
-      "display": "number", "window": "7d" }
-  ]
-}</pre></div>
-      </div>
-      <p class="why">One metric, two cards. The metric says what the number is. A card says how to show it. Cards <span class="pinref">a</span> and <span class="pinref">b</span> read the same metric with different windows. Remove card <span class="pinref">b</span> and the metric and card <span class="pinref">a</span> stay. Remove the metric while a card uses it, and the service refuses with 409.</p>
-    </div>
-    <div class="note">Card keys are unique in a factory. Install adds a suggested card only when its key is free, and never overwrites a card an admin has edited. A manifest that declares <code>outcomes</code> fails to install on a service that does not support it.</div>
-  </div>
-</section>
 <section class="sheet" id="s03">
-  <header><span class="no">03</span><h2>Aggregations</h2><span class="sub">How the facts in a window become the number on a card. Eight examples.</span></header>
+  <header><span class="no">03</span><h2>The manifest fields</h2><span class="sub">Every field these pages use, and where it stands.</span></header>
   <div class="body">
-    <p>An aggregation turns the facts in the window into one number. The metric names a default, and a card can set its own. Each example below is a card on the left and the manifest lines that set it up on the right. The two metrics come first, with their facts. The facts do not change from one example to the next.</p>
-
-    <div class="plate first">
-      <div class="plate-h"><b>The metrics · a number metric</b><span class="chips"><span class="chip ext">new: manifest</span></span></div>
-      <div class="plate-g">
-        <div class="ab flat"><span class="cap">facts</span><div class="fl">pr_lines · facts in the last 30 days, oldest first</div><div class="fp"><span class="b n">100</span><span class="b n">40</span><span class="b n">300</span><span class="b n">60</span></div></div>
-        <div><div class="mf-cap">.plugin/plugin.json · automation.outcomes</div><pre class="json">"outcomes": {
-  "keys": {
-    "pr_lines": {
-      "type": "number",
-      "label": "Lines changed per PR",
-      "description": "Lines changed in one merged PR",
-      "unit": "count",
-      "direction": "neutral",
-      <span class="hl">"aggregation": "sum"</span>
-    }
-  }
-}</pre></div>
-      </div>
-      <p class="why">A metric holds facts. This one gets one fact for each merged PR. The window holds four facts. The highlighted <code>aggregation</code> is the default for cards that do not set their own. Every number on this sheet comes from these four facts, so you can check each one by hand.</p>
-    </div>
-    <div class="plate">
-      <div class="plate-h"><b>The metrics · a boolean metric</b><span class="chips"><span class="chip ext">new: manifest</span></span></div>
-      <div class="plate-g">
-        <div class="ab flat"><span class="cap">facts</span><div class="fl">review_passed · facts in the last 30 days</div><div class="fp"><span class="b good">true</span><span class="b good">true</span><span class="b bad">false</span><span class="b good">true</span><span class="b bad">false</span></div></div>
-        <div><div class="mf-cap">.plugin/plugin.json · automation.outcomes</div><pre class="json">"outcomes": {
-  "keys": {
-    "review_passed": {
-      "type": "boolean",
-      "label": "Review passed",
-      "description": "True when the author accepted the review",
-      "unit": "count",
-      "direction": "up_is_good",
-      <span class="hl">"aggregation": "count_true"</span>
-    }
-  }
-}</pre></div>
-      </div>
-      <p class="why">A second metric, for the boolean examples. It has five facts: three true and two false.</p>
-    </div>
-    <div class="plate">
-      <div class="plate-h"><b>A · sum</b><span class="chips"><span class="chip merged">merged</span><span class="chip ext">new: manifest</span></span></div>
-      <div class="plate-g">
-        <div class="ab flat"><span class="cap">A · card · 1:1</span><div style="position:relative;width:300px"><div class="mc"><div class="t"><span class="tx">Lines changed, 30 days</span></div><div class="v">500</div></div><span class="pin" style="left:0;top:54px">2</span></div><div class="facts">100 + 40 + 300 + 60 = 500</div></div>
-        <div><div class="mf-cap">.plugin/plugin.json · automation.outcomes.suggested_cards[ ]</div><pre class="json">{ "key": "lines-changed-30-days",
-  "title": "Lines changed, 30 days",
-  "source": { "type": "outcomes", "metric": "pr_lines" },
-  "display": "number",
-  <span class="hl">"window": "30d" }</span><span class="pinref">2</span></pre></div>
-      </div>
-      <p class="why">Adds the numbers. This is the metric default, so the card has no <code>aggregation</code> line. <span class="pinref">2</span> The value is the default aggregation over the <code>30d</code> window.</p>
-    </div>
-    <div class="plate">
-      <div class="plate-h"><b>B · avg</b><span class="chips"><span class="chip merged">merged</span><span class="chip ext">new: manifest</span></span></div>
-      <div class="plate-g">
-        <div class="ab flat"><span class="cap">B · card · 1:1</span><div style="position:relative;width:300px"><div class="mc"><div class="t"><span class="tx">Average PR size</span></div><div class="v">125</div></div><span class="pin" style="left:0;top:54px">2</span></div><div class="facts">(100 + 40 + 300 + 60) ÷ 4 = 125</div></div>
-        <div><div class="mf-cap">.plugin/plugin.json · automation.outcomes.suggested_cards[ ]</div><pre class="json">{ "key": "average-pr-size",
-  "title": "Average PR size",
-  "source": { "type": "outcomes", "metric": "pr_lines" },
-  "display": "number",
-  <span class="hl">"aggregation": "avg",</span><span class="pinref">2</span>
-  <span class="hl">"window": "30d" }</span><span class="pinref">2</span></pre></div>
-      </div>
-      <p class="why">The mean of the numbers. <span class="pinref">2</span> The card sets <code>aggregation: avg</code>, which overrides the metric default. The metric does not change.</p>
-    </div>
-    <div class="plate">
-      <div class="plate-h"><b>C · min</b><span class="chips"><span class="chip merged">merged</span><span class="chip ext">new: manifest</span></span></div>
-      <div class="plate-g">
-        <div class="ab flat"><span class="cap">C · card · 1:1</span><div style="position:relative;width:300px"><div class="mc"><div class="t"><span class="tx">Smallest PR</span></div><div class="v">40</div></div><span class="pin" style="left:0;top:54px">2</span></div><div class="facts">smallest of 100, 40, 300, 60 = 40</div></div>
-        <div><div class="mf-cap">.plugin/plugin.json · automation.outcomes.suggested_cards[ ]</div><pre class="json">{ "key": "smallest-pr",
-  "title": "Smallest PR",
-  "source": { "type": "outcomes", "metric": "pr_lines" },
-  "display": "number",
-  <span class="hl">"aggregation": "min",</span><span class="pinref">2</span>
-  <span class="hl">"window": "30d" }</span><span class="pinref">2</span></pre></div>
-      </div>
-      <p class="why">The lowest number in the window. It needs a number metric.</p>
-    </div>
-    <div class="plate">
-      <div class="plate-h"><b>D · max</b><span class="chips"><span class="chip merged">merged</span><span class="chip ext">new: manifest</span></span></div>
-      <div class="plate-g">
-        <div class="ab flat"><span class="cap">D · card · 1:1</span><div style="position:relative;width:300px"><div class="mc"><div class="t"><span class="tx">Largest PR</span></div><div class="v">300</div></div><span class="pin" style="left:0;top:54px">2</span></div><div class="facts">largest of 100, 40, 300, 60 = 300</div></div>
-        <div><div class="mf-cap">.plugin/plugin.json · automation.outcomes.suggested_cards[ ]</div><pre class="json">{ "key": "largest-pr",
-  "title": "Largest PR",
-  "source": { "type": "outcomes", "metric": "pr_lines" },
-  "display": "number",
-  <span class="hl">"aggregation": "max",</span><span class="pinref">2</span>
-  <span class="hl">"window": "30d" }</span><span class="pinref">2</span></pre></div>
-      </div>
-      <p class="why">The highest number in the window. It needs a number metric.</p>
-    </div>
-    <div class="plate">
-      <div class="plate-h"><b>E · count</b><span class="chips"><span class="chip merged">merged</span><span class="chip ext">new: manifest</span></span></div>
-      <div class="plate-g">
-        <div class="ab flat"><span class="cap">E · card · 1:1</span><div style="position:relative;width:300px"><div class="mc"><div class="t"><span class="tx">PRs merged, 30 days</span></div><div class="v">4</div></div><span class="pin" style="left:0;top:54px">2</span></div><div class="facts">four facts = 4</div></div>
-        <div><div class="mf-cap">.plugin/plugin.json · automation.outcomes.suggested_cards[ ]</div><pre class="json">{ "key": "prs-merged-30-days",
-  "title": "PRs merged, 30 days",
-  "source": { "type": "outcomes", "metric": "pr_lines" },
-  "display": "number",
-  <span class="hl">"aggregation": "count",</span><span class="pinref">2</span>
-  <span class="hl">"window": "30d" }</span><span class="pinref">2</span></pre></div>
-      </div>
-      <p class="why">Counts the facts and ignores their values. It works on a metric of any type. Here each fact is one merged PR.</p>
-    </div>
-    <div class="plate">
-      <div class="plate-h"><b>F · count_true</b><span class="chips"><span class="chip merged">merged</span><span class="chip ext">new: manifest</span></span></div>
-      <div class="plate-g">
-        <div class="ab flat"><span class="cap">F · card · 1:1</span><div style="position:relative;width:300px"><div class="mc"><div class="t"><span class="tx">Reviews that passed</span></div><div class="v">3</div></div><span class="pin" style="left:0;top:54px">2</span></div><div class="facts">true, true, false, true, false → 3 true</div></div>
-        <div><div class="mf-cap">.plugin/plugin.json · automation.outcomes.suggested_cards[ ]</div><pre class="json">{ "key": "reviews-that-passed",
-  "title": "Reviews that passed",
-  "source": { "type": "outcomes", "metric": "review_passed" },
-  "display": "number",
-  <span class="hl">"aggregation": "count_true",</span><span class="pinref">2</span>
-  <span class="hl">"window": "30d" }</span><span class="pinref">2</span></pre></div>
-      </div>
-      <p class="why">Counts the true values. It needs a boolean metric.</p>
-    </div>
-    <div class="plate">
-      <div class="plate-h"><b>G · count_false</b><span class="chips"><span class="chip merged">merged</span><span class="chip ext">new: manifest</span></span></div>
-      <div class="plate-g">
-        <div class="ab flat"><span class="cap">G · card · 1:1</span><div style="position:relative;width:300px"><div class="mc"><div class="t"><span class="tx">Reviews that needed changes</span></div><div class="v">2</div></div><span class="pin" style="left:0;top:54px">2</span></div><div class="facts">true, true, false, true, false → 2 false</div></div>
-        <div><div class="mf-cap">.plugin/plugin.json · automation.outcomes.suggested_cards[ ]</div><pre class="json">{ "key": "reviews-that-needed-changes",
-  "title": "Reviews that needed changes",
-  "source": { "type": "outcomes", "metric": "review_passed" },
-  "display": "number",
-  <span class="hl">"aggregation": "count_false",</span><span class="pinref">2</span>
-  <span class="hl">"window": "30d" }</span><span class="pinref">2</span></pre></div>
-      </div>
-      <p class="why">Counts the false values. It needs a boolean metric.</p>
-    </div>
-    <div class="plate">
-      <div class="plate-h"><b>H · last</b><span class="chips"><span class="chip gap">gap: last</span><span class="chip ext">new: manifest</span></span></div>
-      <div class="plate-g">
-        <div class="ab flat"><span class="cap">H · card · 1:1</span><div style="position:relative;width:300px"><div class="mc"><div class="t"><span class="tx">Size of the latest PR</span></div><div class="v">60</div></div><span class="pin" style="left:0;top:54px">2</span></div><div class="facts">the newest of 100, 40, 300, 60 = 60</div></div>
-        <div><div class="mf-cap">.plugin/plugin.json · automation.outcomes.suggested_cards[ ]</div><pre class="json">{ "key": "size-of-the-latest-pr",
-  "title": "Size of the latest PR",
-  "source": { "type": "outcomes", "metric": "pr_lines" },
-  "display": "number",
-  <span class="hl">"aggregation": "last",</span><span class="pinref">2</span>
-  <span class="hl">"window": "30d" }</span><span class="pinref">2</span></pre></div>
-      </div>
-      <p class="why">The most recent fact by time. Use it for a level, such as open PRs. The service has no <code>last</code> yet, so this card is not available until that gap closes.</p>
-    </div>
-
-    <h3>Which aggregation fits which metric type</h3>
-    <table class="t">
-      <tbody><tr><th>Metric type</th><th>Aggregations</th></tr>
-      <tr><td class="n"><code>number</code></td><td><code>sum</code> <code>avg</code> <code>min</code> <code>max</code> <code>count</code> <span class="chip gap">gap</span> <code>last</code></td></tr>
-      <tr><td class="n"><code>boolean</code></td><td><code>count_true</code> <code>count_false</code> <code>count</code></td></tr>
-      <tr><td class="n"><code>string</code> <code>datetime</code> <code>json</code></td><td><code>count</code></td></tr>
-    </tbody></table>
-    <div class="note">With no facts in the window, <code>sum</code>, <code>avg</code>, <code>min</code> and <code>max</code> have no value and the card shows —. <code>count</code>, <code>count_true</code> and <code>count_false</code> give 0. A card never shows 0 for a number that is missing. A card whose aggregation does not fit its metric type is refused with 422. This is a proposed rule. Percentiles such as <code>p50</code> and <code>p90</code> are a gap and are not on this sheet.</div>
+    <p>The registry in the service holds <code>type</code>, <code>semantics</code> and <code>grain</code> for each key and rejects any other field. Everything else is a proposal for the manifest, and it would reach the service only when the registry grows to hold it.</p>
+    <div class="tw"><table class="t dense">
+      <tr><th>Field</th><th>On</th><th>Says</th><th>Status</th></tr>
+      <tr><td class="n"><code>type</code></td><td>key</td><td>number, string, boolean, datetime or json</td><td><span class="chip merged">merged</span> <span class="chip ext">new: manifest</span></td></tr>
+      <tr><td class="n"><code>semantics</code></td><td>key</td><td><code>increment</code> (every fact counts, the default) or <code>total</code> (one number per period, the latest report wins)</td><td><span class="chip open">open PR #818</span> <span class="chip ext">new: manifest</span></td></tr>
+      <tr><td class="n"><code>grain</code></td><td>key</td><td>The period of a total: hour, day, week or month. A total needs one. An increment refuses one.</td><td><span class="chip open">open PR #818</span> <span class="chip ext">new: manifest</span></td></tr>
+      <tr><td class="n"><code>label</code> <code>description</code></td><td>key</td><td>The name in lists, and the hint line on a card</td><td><span class="chip gap">gap: registry</span> <span class="chip ext">new: manifest</span></td></tr>
+      <tr><td class="n"><code>unit</code> <code>direction</code></td><td>key</td><td>How to format the value, and whether up is good, down is good, or neither</td><td><span class="chip gap">gap: registry</span> <span class="chip ext">new: manifest</span></td></tr>
+      <tr><td class="n"><code>aggregation</code></td><td>key, card</td><td>How the facts in the window become one number. The key names a default. A card can set its own.</td><td><span class="chip merged">merged</span> <code>sum count avg min max count_true count_false</code> · <span class="chip gap">gap</span> <code>last</code> <code>rate</code></td></tr>
+      <tr><td class="n"><code>window</code></td><td>card</td><td>The span the card reads: <code>all</code>, <code>7d</code>, <code>30d</code>. It sets <code>since</code> and <code>until</code>.</td><td><span class="chip merged">merged</span> <span class="chip ext">new: manifest</span></td></tr>
+      <tr><td class="n"><code>per</code></td><td>card</td><td>The unit of a rate: hour, day, week or month</td><td><span class="chip gap">gap: rate</span> <span class="chip ext">new: manifest</span></td></tr>
+      <tr><td class="n"><code>link</code></td><td>card</td><td>Makes the whole card a link</td><td><span class="chip ext">new: manifest</span></td></tr>
+    </table></div>
+    <p>Reported by the plugin, not declared in the manifest: <code>period</code>, <code>occurred_at</code>, <code>dedupe_key</code> and <code>dimensions</code>. They are fields of <code>POST /v1/outcomes</code>.</p>
   </div>
 </section>
-<footer class="doc">Drafted by an AI agent (OpenHands) on behalf of John-Mason Shackelford. Draft for discussion. Nothing here has been built or tested. Backend facts were read from <code>OpenHands/automation</code> <code>main</code> on 2026-11-25.</footer>
+
+<section class="sheet" id="s04">
+  <header><span class="no">04</span><h2>Pages</h2><span class="sub">One file for each card type.</span></header>
+  <div class="body">
+    <table class="filelist">
+      <tr><th style="width:230px">Page</th><th>What it holds</th><th style="width:150px">Examples</th></tr>
+      <tr><td><a href="declarations/metrics.html">Metrics: how a key counts</a></td><td>Increments, totals, periods, duplicates, dimensions, and the requests the service refuses. Every card type depends on this page.</td><td>14, and 8 refused requests</td></tr>
+      <tr><td><a href="declarations/count.html">Count (MC-01)</a></td><td>A single number. All the aggregations, the window, and rates, which are a Count card with <code>per</code>.</td><td>27</td></tr>
+      <tr><td>Number with trend (MC-02)</td><td>A Count card with a change against the previous window. Not written yet.</td><td>—</td></tr>
+      <tr><td>Sparkline (MC-03)</td><td>Not written yet.</td><td>—</td></tr>
+      <tr><td>Percent (MC-04)</td><td>Not written yet.</td><td>—</td></tr>
+      <tr><td>Progress (MC-05)</td><td>Not written yet.</td><td>—</td></tr>
+      <tr><td>Breakdown (MC-06)</td><td>Not written yet.</td><td>—</td></tr>
+    </table>
+  </div>
+</section>
+
+<footer class="doc">Drafted by an AI agent (OpenHands) on behalf of John-Mason Shackelford. Draft for discussion. Nothing here has been built or tested in the product. Backend facts were read from <code>OpenHands/automation</code> <code>main</code> and open PRs #817 and #818 on 2026-11-25.</footer>
 </main>
 </div>
-
-
-</body></html>
+</body>
+</html>
