@@ -14,6 +14,7 @@ export const useDeleteConversation = () => {
     mutationFn: async (variables: {
       conversationId: string;
       deletionScope?: ConversationDeletionScope;
+      broken?: boolean;
     }) => {
       const scope =
         variables.deletionScope ??
@@ -21,6 +22,7 @@ export const useDeleteConversation = () => {
       const result = await AgentServerConversationService.deleteConversation(
         variables.conversationId,
         scope,
+        ...(variables.broken ? [{ broken: true }] : []),
       );
       useSessionActivityStore
         .getState()
