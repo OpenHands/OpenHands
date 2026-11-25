@@ -24,11 +24,6 @@ import AgentServerConversationService from "#/api/conversation-service/agent-ser
 import { getOrganizationSuspension } from "#/api/cloud/organization-suspension-store";
 import { AUTOMATION_SETUP_SYSTEM_SUFFIX } from "#/api/automation-form-client-tool";
 import HooksService from "#/api/hooks-service";
-import LLMSubscriptionService from "#/api/llm-subscription-service";
-import {
-  LLM_AUTH_TYPE_SUBSCRIPTION,
-  OPENAI_SUBSCRIPTION_VENDOR,
-} from "#/constants/llm-subscription";
 
 const {
   mockHttpGet,
@@ -39,6 +34,8 @@ const {
   mockSettingsClient,
   mockSwitchProfile,
   mockSwitchLLM,
+  mockAddModelRouterRoute,
+  mockSwitchModelRouter,
   mockSendEvent,
   mockGetConversation,
   mockSearchConversations,
@@ -62,6 +59,8 @@ const {
   mockSettingsClient: vi.fn(),
   mockSwitchProfile: vi.fn(),
   mockSwitchLLM: vi.fn(),
+  mockAddModelRouterRoute: vi.fn(),
+  mockSwitchModelRouter: vi.fn(),
   mockSendEvent: vi.fn(),
   mockGetConversation: vi.fn(),
   mockSearchConversations: vi.fn(),
@@ -227,6 +226,8 @@ describe("AgentServerConversationService", () => {
     mockListProfiles.mockReset();
     mockSwitchProfile.mockReset();
     mockSwitchLLM.mockReset();
+    mockAddModelRouterRoute.mockReset();
+    mockSwitchModelRouter.mockReset();
     mockSendEvent.mockReset();
     mockGetConversation.mockReset();
     mockSearchConversations.mockReset();
@@ -268,6 +269,8 @@ describe("AgentServerConversationService", () => {
       switchAcpModel: mockSwitchAcpModel,
       switchProfile: mockSwitchProfile,
       switchLLM: mockSwitchLLM,
+      addModelRouterRoute: mockAddModelRouterRoute,
+      switchModelRouter: mockSwitchModelRouter,
     });
     mockFileClient.mockReturnValue({
       downloadTextFile: async (path: string) => {
@@ -1706,52 +1709,36 @@ describe("AgentServerConversationService", () => {
       __resetActiveStoreForTests();
     });
 
-    it("switches an active conversation with the full encrypted profile config", async () => {
-      mockGetProfile.mockResolvedValue({
-        name: "haiku",
-        config: {
-          model: "openhands/claude-haiku-4-5",
-          api_key: "encrypted-key",
-        },
-        api_key_set: true,
+    it("adds a local conversation profile as a model-router route and pins it", async () => {
+      mockAddModelRouterRoute.mockResolvedValue({
+        enabled: true,
+        routes: [{ name: "haiku" }],
       });
-      mockSwitchLLM.mockResolvedValue(undefined);
+      mockSwitchModelRouter.mockResolvedValue({ enabled: true });
 
       await AgentServerConversationService.switchProfile("conv-1", "haiku");
 
-      expect(mockGetProfile).toHaveBeenCalledWith("haiku", {
-        exposeSecrets: "encrypted",
-      });
-      expect(mockSwitchLLM).toHaveBeenCalledWith(
+      expect(mockAddModelRouterRoute).toHaveBeenCalledWith(
         "conv-1",
-        expect.objectContaining({
-          model: "openhands/claude-haiku-4-5",
-          api_key: "encrypted-key",
-          // Streaming must stay enabled after a mid-conversation switch.
-          stream: true,
-          usage_id: expect.stringMatching(/^profile:haiku:/),
-        }),
+        "haiku",
+        "haiku",
       );
-      // Per-convo path: global default is left untouched and profile secrets are
-      // only fetched as encrypted values for direct round-trip to switch_llm.
+      expect(mockSwitchModelRouter).toHaveBeenCalledWith("conv-1", "haiku");
+      expect(mockGetProfile).not.toHaveBeenCalled();
+      expect(mockSwitchLLM).not.toHaveBeenCalled();
       expect(mockActivateProfile).not.toHaveBeenCalled();
       expect(mockSwitchProfile).not.toHaveBeenCalled();
     });
 
-    it("surfaces encrypted profile export failures instead of using the stale profile switch path", async () => {
-      const error = new Error("No cipher");
-      mockGetProfile.mockRejectedValueOnce(error);
+    it("falls back to the requested profile name when the add-route response omits routes", async () => {
+      mockAddModelRouterRoute.mockResolvedValue({ enabled: true });
+      mockSwitchModelRouter.mockResolvedValue({ enabled: true });
 
-      await expect(
-        AgentServerConversationService.switchProfile("conv-1", "haiku"),
-      ).rejects.toThrow(error);
+      await AgentServerConversationService.switchProfile("conv-1", "haiku");
 
-      expect(mockGetProfile).toHaveBeenCalledWith("haiku", {
-        exposeSecrets: "encrypted",
-      });
-      expect(mockSwitchProfile).not.toHaveBeenCalled();
+      expect(mockSwitchModelRouter).toHaveBeenCalledWith("conv-1", "haiku");
+      expect(mockGetProfile).not.toHaveBeenCalled();
       expect(mockSwitchLLM).not.toHaveBeenCalled();
-      expect(mockActivateProfile).not.toHaveBeenCalled();
     });
 
     it("activates the profile globally when called without a conversationId", async () => {
@@ -3308,19 +3295,6 @@ describe("AgentServerConversationService", () => {
       );
     });
 
-    it("rejects a local profile that has no usable model", async () => {
-      mockGetProfile.mockResolvedValue({
-        name: "missing-model",
-        config: { model: null },
-        api_key_set: false,
-      });
-
-      await expect(
-        AgentServerConversationService.switchProfile("conv-1", "missing-model"),
-      ).rejects.toThrow("Profile 'missing-model' has no model");
-      expect(mockSwitchLLM).not.toHaveBeenCalled();
-    });
-
     it("switches an ACP model directly on a local conversation", async () => {
       mockSwitchAcpModel.mockResolvedValue(undefined);
 
@@ -3833,54 +3807,6 @@ describe("AgentServerConversationService", () => {
 
       expect(getStoredConversationMetadata("fork-without-metadata")).toBeNull();
       expect(window.localStorage.getItem(metadataStorageKey)).toBeNull();
-    });
-
-    it("rejects a profile whose model is a non-string value", async () => {
-      mockGetProfile.mockResolvedValue({
-        name: "numeric-model",
-        config: { model: 7 },
-        api_key_set: false,
-      });
-
-      await expect(
-        AgentServerConversationService.switchProfile("conv-1", "numeric-model"),
-      ).rejects.toThrow("Profile 'numeric-model' has no model");
-      expect(mockSwitchLLM).not.toHaveBeenCalled();
-    });
-
-    it("checks subscription authentication against the selected profile config", async () => {
-      const status = vi
-        .spyOn(LLMSubscriptionService, "getOpenAIStatus")
-        .mockResolvedValue({
-          vendor: OPENAI_SUBSCRIPTION_VENDOR,
-          connected: false,
-          accountEmail: null,
-          expiresAt: null,
-        });
-      mockGetProfile.mockResolvedValue({
-        name: "subscription-profile",
-        config: {
-          model: "openai/gpt-5.1-codex",
-          auth_type: LLM_AUTH_TYPE_SUBSCRIPTION,
-          subscription_vendor: OPENAI_SUBSCRIPTION_VENDOR,
-        },
-        api_key_set: false,
-      });
-
-      try {
-        await expect(
-          AgentServerConversationService.switchProfile(
-            "conv-1",
-            "subscription-profile",
-          ),
-        ).rejects.toThrow(
-          "Connect your ChatGPT subscription before starting a conversation with this LLM profile.",
-        );
-        expect(status).toHaveBeenCalledOnce();
-        expect(mockSwitchLLM).not.toHaveBeenCalled();
-      } finally {
-        status.mockRestore();
-      }
     });
   });
 });

@@ -262,7 +262,7 @@ describe("conversation additions", () => {
     );
   });
 
-  it("saves a new LLM profile then live-switches the conversation", async () => {
+  it("saves a new LLM profile then routes the conversation through the model router", async () => {
     const actions: string[] = [];
     server.use(
       http.post("*/api/profiles/:name", async ({ request }) => {
@@ -270,17 +270,30 @@ describe("conversation additions", () => {
         actions.push(`save:${body.llm.model}`);
         return HttpResponse.json({ name: "test-model", message: "Saved" });
       }),
-      http.get("*/api/profiles/:name", () =>
-        HttpResponse.json({
-          name: "test-model",
-          config: { model: "openai/gpt-4o", api_key: "encrypted-key" },
-        }),
+      http.post(
+        "*/api/conversations/:id/model_router/routes",
+        async ({ request }) => {
+          const body = (await request.json()) as { profile_name: string };
+          actions.push(`add-route:${body.profile_name}`);
+          return HttpResponse.json({
+            enabled: true,
+            routes: [{ name: body.profile_name }],
+          });
+        },
       ),
-      http.post("*/api/conversations/:id/switch_llm", async ({ request }) => {
-        const body = (await request.json()) as { llm: { model: string } };
-        actions.push(`switch:${body.llm.model}`);
-        return HttpResponse.json({ success: true });
-      }),
+      http.patch(
+        "*/api/conversations/:id/model_router",
+        async ({ request }) => {
+          const body = (await request.json()) as {
+            selection: { manual_route_name?: string };
+          };
+          actions.push(`switch-route:${body.selection.manual_route_name}`);
+          return HttpResponse.json({
+            enabled: true,
+            selection: body.selection,
+          });
+        },
+      ),
     );
     const user = userEvent.setup();
     renderWithProviders(
@@ -301,7 +314,11 @@ describe("conversation additions", () => {
     );
 
     await waitFor(() =>
-      expect(actions).toEqual(["save:openai/gpt-4o", "switch:openai/gpt-4o"]),
+      expect(actions).toEqual([
+        "save:openai/gpt-4o",
+        "add-route:test-model",
+        "switch-route:test-model",
+      ]),
     );
   });
 });

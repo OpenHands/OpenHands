@@ -12,6 +12,7 @@ const state = vi.hoisted(() => ({
   conversationId: undefined as string | undefined,
   canConfigure: false,
   canInstall: false,
+  canRoute: false,
   projectsEnabled: false,
 }));
 
@@ -27,6 +28,7 @@ vi.mock("#/hooks/query/use-projects", () => ({
 vi.mock("#/hooks/query/use-conversation-configuration-capability", () => ({
   useConversationConfigurationCapability: () => ({ data: state.canConfigure }),
   useConversationMcpCapabilities: () => ({ canInstall: state.canInstall }),
+  useConversationLlmCapabilities: () => ({ canRoute: state.canRoute }),
 }));
 
 vi.mock("#/components/features/projects/project-file-picker", () => ({
@@ -79,6 +81,7 @@ describe("ChatAddFileButton", () => {
     state.conversationId = undefined;
     state.canConfigure = false;
     state.canInstall = false;
+    state.canRoute = false;
     state.projectsEnabled = false;
   });
 
@@ -87,6 +90,7 @@ describe("ChatAddFileButton", () => {
     state.conversation = { id: state.conversationId };
     state.canConfigure = true;
     state.canInstall = true;
+    state.canRoute = true;
     const user = userEvent.setup();
     render(<ChatAddFileButton handleFileIconClick={vi.fn()} />);
 
@@ -107,6 +111,7 @@ describe("ChatAddFileButton", () => {
     state.conversation = { id: state.conversationId, agent_kind: "acp" };
     state.canConfigure = true;
     state.canInstall = true;
+    state.canRoute = true;
     const user = userEvent.setup();
     render(<ChatAddFileButton handleFileIconClick={vi.fn()} />);
 

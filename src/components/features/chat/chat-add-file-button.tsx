@@ -25,6 +25,7 @@ import { useConversationProjectId } from "#/hooks/query/use-conversation-project
 import { useIsArchivedConversation } from "#/hooks/use-is-archived-conversation";
 import {
   useConversationConfigurationCapability,
+  useConversationLlmCapabilities,
   useConversationMcpCapabilities,
 } from "#/hooks/query/use-conversation-configuration-capability";
 import type { ConversationConfigurationSection } from "./conversation-configuration-modal";
@@ -63,6 +64,7 @@ export function ChatAddFileButton({
     !isArchived;
   const { data: canConfigure } = useConversationConfigurationCapability(canAdd);
   const { canInstall } = useConversationMcpCapabilities(canAdd);
+  const { canRoute } = useConversationLlmCapabilities(canAdd);
   const [configurationSection, setConfigurationSection] =
     React.useState<ConversationConfigurationSection | null>(null);
   const [menuOpen, setMenuOpen] = React.useState(false);
@@ -158,7 +160,7 @@ export function ChatAddFileButton({
                   },
                 ]
               : []),
-            ...(canConfigure && conversation?.agent_kind !== "acp"
+            ...(canConfigure && canRoute && conversation?.agent_kind !== "acp"
               ? [
                   {
                     testId: "conversation-add-llm-button",

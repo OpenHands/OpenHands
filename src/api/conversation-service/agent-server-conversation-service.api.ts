@@ -3,7 +3,6 @@ import {
   type ACPModelInfo,
   ConversationSortOrder,
   type ForkConversationRequest,
-  type LLMConfig,
   type VSCodeStatusResponse,
 } from "@openhands/typescript-client";
 import {
@@ -51,7 +50,6 @@ import {
   GIT_PROVIDER_TAG_KEY,
   REPOSITORY_TAG_KEY,
   SELECTED_BRANCH_TAG_KEY,
-  assertSubscriptionAuthReady,
   buildRouterAtStartSystemSuffix,
   buildStartConversationRequestWithEncryptedSettings,
   buildStartPlanningConversationRequestWithEncryptedSettings,
@@ -1435,21 +1433,14 @@ class AgentServerConversationService {
   }
 
   /**
-   * Switches the LLM profile for the running conversation when one is open
-   * (POST /switch_profile — per-conversation swap, doesn't change the user's
-   * default profile). When called without a conversationId (home page),
-   * falls back to POST /activate so the next conversation created picks up
-   * the chosen profile.
+   * Switches the LLM profile for the running conversation when one is open.
+   * Local conversations add the saved profile as a Model Router route, then pin
+   * the router to that route. This keeps secrets and provider fixups on the
+   * agent-server side and avoids direct client round-trips through /switch_llm.
    *
-   * The per-conversation endpoint accepts only the profile name, so the UI does
-   * not need to fetch or forward profile secrets. That keeps switching working
-   * even when the agent server has no OH_SECRET_KEY for encrypted secret export.
-   *
-   * Cloud backends route to the app-server's per-conversation
-   * `/switch_profile`, which owns the profiles and resolves the swap
-   * server-side (base_url/api_key fixups, usage_id derivation, then the
-   * agent-server's switch_llm) — so the client only forwards the profile name,
-   * mirroring {@link switchAcpModel}.
+   * Without a conversationId (home page), this still activates the profile
+   * globally so the next conversation starts with it. Cloud backends keep using
+   * the app-server switch_profile endpoint, which owns cloud profiles.
    */
   static async switchProfile(
     conversationId: string | null,
@@ -1481,32 +1472,26 @@ class AgentServerConversationService {
       return;
     }
 
-    const clientOptions = getAgentServerClientOptions();
-    const conversationClient = new ConversationClient(clientOptions);
-    const profile = await new ProfilesClient(clientOptions).getProfile(
-      profileName,
-      { exposeSecrets: "encrypted" },
+    const conversationClient = new ConversationClient(
+      getAgentServerClientOptions(),
     );
-    const model =
-      typeof profile.config.model === "string" ? profile.config.model : "";
-    if (!model) throw new Error(`Profile '${profileName}' has no model.`);
-    await assertSubscriptionAuthReady({ llm: profile.config });
-    await conversationClient.switchLLM(conversationId, {
-      ...profile.config,
-      model,
-      // Keep streaming on after a switch (parity with conversation start);
-      // the profile config would otherwise default it to stream=False.
-      stream: true,
-      // Avoid stale first-write-wins entries in the backend LLM registry.
-      usage_id: `profile:${profileName}:${randomUUID()}`,
-    } as LLMConfig);
+    const status = await conversationClient.addModelRouterRoute(
+      conversationId,
+      profileName,
+      profileName,
+    );
+    const routeName =
+      status.routes?.find((route) => route.name === profileName)?.name ??
+      profileName;
+    await conversationClient.switchModelRouter(conversationId, routeName);
   }
 
   /**
-   * Switches the model of a running ACP conversation in place (POST
-   * /switch_acp_model — the ACP analog of {@link switchProfile}'s /switch_profile).
-   * The agent-server calls the ACP wrapper's ``session/set_model`` on the live
-   * session, preserving context. Mirrors {@link switchProfile}'s
+   * Switches the model of a running ACP conversation in place via POST
+   * /switch_acp_model — the ACP analog of {@link switchProfile}'s
+   * conversation-scoped model swap. The agent-server calls the ACP wrapper's
+   * ``session/set_model`` on the live session, preserving context. Mirrors
+   * {@link switchProfile}'s
    * local-backend-only guard and per-conversation ConversationClient call.
    *
    * Works on a created-but-not-yet-run conversation too: the agent-server

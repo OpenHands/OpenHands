@@ -751,6 +751,7 @@ export const SETTINGS_HANDLERS = [
       capabilities: [
         "conversation_configuration_additions_v1",
         "conversation_mcp_install_v1",
+        "conversation_model_router_routes_v1",
       ],
       usable_tools: [
         "terminal",

@@ -7,6 +7,7 @@ import { CONVERSATION_CONFIGURATION_QUERY_KEYS } from "./query-keys";
 const CONFIGURATION_ADDITIONS_CAPABILITY =
   "conversation_configuration_additions_v1";
 const MCP_INSTALL_CAPABILITY = "conversation_mcp_install_v1";
+const MODEL_ROUTER_ROUTES_CAPABILITY = "conversation_model_router_routes_v1";
 
 function useConfigurationCapabilities(enabled: boolean) {
   const { backend } = useActiveBackend();
@@ -41,4 +42,9 @@ export function useConversationConfigurationCapability(enabled: boolean) {
 export function useConversationMcpCapabilities(enabled: boolean) {
   const { data } = useConfigurationCapabilities(enabled);
   return { canInstall: data?.includes(MCP_INSTALL_CAPABILITY) === true };
+}
+
+export function useConversationLlmCapabilities(enabled: boolean) {
+  const { data } = useConfigurationCapabilities(enabled);
+  return { canRoute: data?.includes(MODEL_ROUTER_ROUTES_CAPABILITY) === true };
 }

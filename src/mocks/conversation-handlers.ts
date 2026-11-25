@@ -466,6 +466,52 @@ export const CONVERSATION_HANDLERS = [
     },
   ),
 
+  http.post(
+    "*/api/conversations/:conversationId/model_router/routes",
+    async ({ params, request }) => {
+      if (!CONVERSATIONS.has(params.conversationId as string)) {
+        return HttpResponse.json(
+          { detail: "Conversation not found" },
+          { status: 404 },
+        );
+      }
+      const body = (await request.json()) as {
+        profile_name?: string;
+        route_name?: string | null;
+      };
+      const routeName = body.route_name || body.profile_name;
+      if (!body.profile_name || !routeName) {
+        return HttpResponse.json(
+          { detail: "Profile name required" },
+          { status: 400 },
+        );
+      }
+      return HttpResponse.json({
+        enabled: true,
+        routes: [{ name: routeName, profile_name: body.profile_name }],
+      });
+    },
+  ),
+
+  http.patch(
+    "*/api/conversations/:conversationId/model_router",
+    async ({ params, request }) => {
+      if (!CONVERSATIONS.has(params.conversationId as string)) {
+        return HttpResponse.json(
+          { detail: "Conversation not found" },
+          { status: 404 },
+        );
+      }
+      const body = (await request.json()) as {
+        selection?: { manual_route_name?: string | null; mode?: string };
+      };
+      return HttpResponse.json({
+        enabled: true,
+        selection: body.selection ?? { mode: "auto" },
+      });
+    },
+  ),
+
   // The generated-canvas fixture behaves like a real workspace artifact:
   // after the chat chip opens the Files drawer, its static-session URL serves
   // the same Markdown bytes carried by the file-editor observation.
