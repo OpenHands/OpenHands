@@ -1,5 +1,6 @@
 import { useCallback, useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
+import { Info } from "lucide-react";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import { ensureDefaultAgentProfileMigrated } from "#/hooks/use-migrate-default-agent-profile";
 import { useTranslation } from "react-i18next";
@@ -404,6 +405,21 @@ export function AgentProfilesLocalView() {
             {t(I18nKey.SETTINGS$PAGE_AGENT_PROFILES_SUBLINE)}
           </p>
         </header>
+        <div
+          role="note"
+          aria-label={t(I18nKey.SETTINGS$AGENT_SETUP_MOVED_TITLE)}
+          className="flex items-start gap-3 rounded-xl border border-border bg-surface-raised px-4 py-3"
+        >
+          <Info className="mt-0.5 size-4 shrink-0 text-muted" aria-hidden />
+          <div className="flex flex-col gap-1">
+            <p className="text-sm font-medium text-foreground">
+              {t(I18nKey.SETTINGS$AGENT_SETUP_MOVED_TITLE)}
+            </p>
+            <p className="text-sm leading-5 text-text-secondary">
+              {t(I18nKey.SETTINGS$AGENT_SETUP_MOVED_MESSAGE)}
+            </p>
+          </div>
+        </div>
         <AgentProfilesManager
           onAddProfile={handleAddProfile}
           onEditProfile={handleEditProfile}
