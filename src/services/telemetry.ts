@@ -951,10 +951,10 @@ async function getFeedbackSurveyQuestion(
   return validatedQuestion;
 }
 
-/** Submit only the feedback and required contact email the user explicitly chose to send. */
+/** Submit feedback without linking it to an analytics identity. */
 export async function submitPrivateFeedback(
   message: string,
-  email: string,
+  email?: string,
 ): Promise<void> {
   if (
     isTelemetryHardDisabled() ||
@@ -964,7 +964,6 @@ export async function submitPrivateFeedback(
     throw new Error("Feedback unavailable");
   }
   const contactEmail = email?.trim();
-  if (!contactEmail) throw new Error("Feedback email required");
   const surveyId = import.meta.env.VITE_POSTHOG_SURVEY_ID as string | undefined;
   if (!surveyId) throw new Error("Feedback survey not configured");
   const apiKey = telemetryConfig.apiKey || DEFAULT_POSTHOG_API_KEY;
@@ -989,7 +988,7 @@ export async function submitPrivateFeedback(
         $survey_completed: true,
         $process_person_profile: false,
         feedback_source: "agent_canvas",
-        feedback_email: contactEmail,
+        ...(contactEmail ? { feedback_email: contactEmail } : {}),
       },
       ip: false,
     }),

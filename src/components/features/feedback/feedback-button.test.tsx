@@ -21,8 +21,11 @@ afterEach(() => {
   localStorage.removeItem("openhands-telemetry-consent");
 });
 
+const getEmailInput = () =>
+  screen.getByRole("textbox", { name: "FEEDBACK$EMAIL COMMON$OPTIONAL" });
+
 describe("FeedbackButton", () => {
-  it("requires a valid email before enabling feedback submission", async () => {
+  it("accepts anonymous feedback but rejects a malformed optional email", async () => {
     const fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);
     render(<FeedbackButton />);
@@ -33,28 +36,33 @@ describe("FeedbackButton", () => {
       "FEEDBACK$CONSENT",
     );
     expect(screen.queryByRole("link")).not.toBeInTheDocument();
-    const email = screen.getByRole("textbox", { name: "FEEDBACK$EMAIL" });
+    const email = getEmailInput();
+    const message = screen.getByRole("textbox", { name: "FEEDBACK$QUESTION" });
     const send = screen.getByRole("button", { name: "FEEDBACK$SEND" });
+    expect(message).toBeRequired();
+    expect(email).not.toBeRequired();
     expect(
-      screen.getByRole("textbox", { name: "FEEDBACK$QUESTION" }),
-    ).toBeRequired();
-    expect(email).toBeRequired();
-    for (const id of ["feedback-message", "feedback-email"]) {
-      const marker = document.querySelector(
-        `label[for="${id}"] span[aria-hidden="true"]`,
-      );
-      expect(marker).toHaveTextContent("*");
-      expect(marker).toHaveClass("text-danger");
-    }
-    fireEvent.change(
-      screen.getByRole("textbox", { name: "FEEDBACK$QUESTION" }),
-      {
-        target: { value: "Make this easier" },
-      },
-    );
+      document.querySelector('label[for="feedback-email"]'),
+    ).toHaveTextContent("COMMON$OPTIONAL");
+    expect(
+      document.querySelector(
+        'label[for="feedback-message"] span[aria-hidden="true"]',
+      ),
+    ).toHaveClass("text-danger");
+    expect(
+      document.querySelector(
+        'label[for="feedback-email"] span[aria-hidden="true"]',
+      ),
+    ).not.toBeInTheDocument();
+    const hint = screen.getByText("FEEDBACK$SUBMIT_HINT");
+    expect(hint).toHaveAttribute("id", "feedback-submit-hint");
+    expect(message).toHaveAttribute("aria-describedby", "feedback-submit-hint");
+    expect(email).toHaveAttribute("aria-describedby", "feedback-submit-hint");
     expect(send).toBeDisabled();
+    fireEvent.change(message, { target: { value: "Make this easier" } });
+    expect(send).toBeEnabled();
     fireEvent.change(email, { target: { value: "   " } });
-    expect(send).toBeDisabled();
+    expect(send).toBeEnabled();
     fireEvent.change(email, { target: { value: "not-an-email" } });
     expect(send).toBeDisabled();
     fireEvent.change(email, { target: { value: "person@example.com" } });
@@ -62,15 +70,70 @@ describe("FeedbackButton", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it("does not request a survey or capture feedback without an email", async () => {
-    const fetchMock = vi.fn();
+  it("submits without an email or with a whitespace-only email anonymously", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          surveys: [
+            {
+              id: "01a19e14-c300-0000-d661-ad6bb5304fbe",
+              questions: [{ id: "question-1", question: "Your feedback?" }],
+            },
+          ],
+        }),
+      })
+      .mockResolvedValue({ ok: true, json: async () => ({ status: "Ok" }) });
     vi.stubGlobal("fetch", fetchMock);
-    await expect(submitPrivateFeedback("A draft", "")).rejects.toThrow();
-    await expect(submitPrivateFeedback("A draft", "   ")).rejects.toThrow();
-    expect(fetchMock).not.toHaveBeenCalled();
+    await submitPrivateFeedback("A draft");
+    await submitPrivateFeedback("Another draft", "   ");
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    const first = JSON.parse(fetchMock.mock.calls[1][1].body);
+    const second = JSON.parse(fetchMock.mock.calls[2][1].body);
+    expect(first.properties.feedback_email).toBeUndefined();
+    expect(second.properties.feedback_email).toBeUndefined();
+    expect(first.properties.$process_person_profile).toBe(false);
+    expect(first.distinct_id).not.toBe(second.distinct_id);
   });
 
-  it("submits the required email with feedback without creating a profile", async () => {
+  it("sends feedback without an email when analytics consent is denied", async () => {
+    localStorage.setItem("openhands-telemetry-consent", "denied");
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          surveys: [
+            {
+              id: "01a19e14-c300-0000-d661-ad6bb5304fbe",
+              questions: [{ id: "question-1", question: "Your feedback?" }],
+            },
+          ],
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ status: "Ok" }),
+      });
+    vi.stubGlobal("fetch", fetchMock);
+    render(<FeedbackButton />);
+    fireEvent.click(screen.getByRole("button", { name: "FEEDBACK$TITLE" }));
+    fireEvent.change(
+      screen.getByRole("textbox", { name: "FEEDBACK$QUESTION" }),
+      { target: { value: "An anonymous idea" } },
+    );
+    fireEvent.click(screen.getByRole("button", { name: "FEEDBACK$SEND" }));
+    expect(await screen.findByRole("status")).toHaveTextContent(
+      "FEEDBACK$SUCCESS",
+    );
+    const body = JSON.parse(fetchMock.mock.calls[1][1].body);
+    expect(body.properties.$survey_response).toBe("An anonymous idea");
+    expect(body.properties.feedback_email).toBeUndefined();
+    expect(localStorage.getItem("openhands-telemetry-consent")).toBe("denied");
+  });
+
+  it("submits a chosen email with feedback without creating a profile", async () => {
     configureTelemetry({ apiKey: "phc_feedback_project" });
     localStorage.setItem("openhands-telemetry-consent", "denied");
     const fetchMock = vi
@@ -99,7 +162,7 @@ describe("FeedbackButton", () => {
         target: { value: "Please follow up" },
       },
     );
-    fireEvent.change(screen.getByRole("textbox", { name: "FEEDBACK$EMAIL" }), {
+    fireEvent.change(getEmailInput(), {
       target: { value: "person@example.com" },
     });
     fireEvent.click(screen.getByRole("button", { name: "FEEDBACK$SEND" }));
@@ -124,9 +187,7 @@ describe("FeedbackButton", () => {
     expect(localStorage.getItem("openhands-telemetry-consent")).toBe("denied");
     fireEvent.click(screen.getByRole("button", { name: "BUTTON$CLOSE" }));
     fireEvent.click(screen.getByRole("button", { name: "FEEDBACK$TITLE" }));
-    expect(screen.getByRole("textbox", { name: "FEEDBACK$EMAIL" })).toHaveValue(
-      "",
-    );
+    expect(getEmailInput()).toHaveValue("");
   });
 
   it("rejects a successful HTTP response without a capture acknowledgment", async () => {
@@ -151,7 +212,7 @@ describe("FeedbackButton", () => {
     fireEvent.click(screen.getByRole("button", { name: "FEEDBACK$TITLE" }));
     const input = screen.getByRole("textbox", { name: "FEEDBACK$QUESTION" });
     fireEvent.change(input, { target: { value: "A draft" } });
-    fireEvent.change(screen.getByRole("textbox", { name: "FEEDBACK$EMAIL" }), {
+    fireEvent.change(getEmailInput(), {
       target: { value: "person@example.com" },
     });
     fireEvent.click(screen.getByRole("button", { name: "FEEDBACK$SEND" }));
@@ -183,7 +244,7 @@ describe("FeedbackButton", () => {
     render(<FeedbackButton />);
     fireEvent.click(screen.getByRole("button", { name: "FEEDBACK$TITLE" }));
     const input = screen.getByRole("textbox", { name: "FEEDBACK$QUESTION" });
-    const email = screen.getByRole("textbox", { name: "FEEDBACK$EMAIL" });
+    const email = getEmailInput();
     fireEvent.change(input, { target: { value: "A draft" } });
     fireEvent.change(email, { target: { value: "person@example.com" } });
     fireEvent.click(screen.getByRole("button", { name: "FEEDBACK$SEND" }));
@@ -227,7 +288,7 @@ describe("FeedbackButton", () => {
         target: { value: "Try again" },
       },
     );
-    fireEvent.change(screen.getByRole("textbox", { name: "FEEDBACK$EMAIL" }), {
+    fireEvent.change(getEmailInput(), {
       target: { value: "person@example.com" },
     });
     fireEvent.click(screen.getByRole("button", { name: "FEEDBACK$SEND" }));
@@ -250,7 +311,7 @@ describe("FeedbackButton", () => {
     fireEvent.click(screen.getByRole("button", { name: "FEEDBACK$TITLE" }));
     const input = screen.getByRole("textbox", { name: "FEEDBACK$QUESTION" });
     fireEvent.change(input, { target: { value: "A draft" } });
-    fireEvent.change(screen.getByRole("textbox", { name: "FEEDBACK$EMAIL" }), {
+    fireEvent.change(getEmailInput(), {
       target: { value: "person@example.com" },
     });
     fireEvent.click(screen.getByRole("button", { name: "FEEDBACK$SEND" }));
@@ -271,7 +332,7 @@ describe("FeedbackButton", () => {
         target: { value: "A draft" },
       },
     );
-    fireEvent.change(screen.getByRole("textbox", { name: "FEEDBACK$EMAIL" }), {
+    fireEvent.change(getEmailInput(), {
       target: { value: "person@example.com" },
     });
     fireEvent.click(screen.getByRole("button", { name: "FEEDBACK$SEND" }));
@@ -291,7 +352,7 @@ describe("FeedbackButton", () => {
         target: { value: "A draft" },
       },
     );
-    fireEvent.change(screen.getByRole("textbox", { name: "FEEDBACK$EMAIL" }), {
+    fireEvent.change(getEmailInput(), {
       target: { value: "person@example.com" },
     });
     fireEvent.click(screen.getByRole("button", { name: "FEEDBACK$SEND" }));

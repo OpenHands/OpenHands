@@ -9,6 +9,7 @@ import {
 import { ModalCloseButton } from "#/components/shared/modals/modal-close-button";
 import { StyledTooltip } from "#/components/shared/buttons/styled-tooltip";
 import { BrandButton } from "#/components/features/settings/brand-button";
+import { OptionalTag } from "#/components/features/settings/optional-tag";
 import { I18nKey } from "#/i18n/declaration";
 import { submitPrivateFeedback } from "#/services/telemetry";
 
@@ -18,7 +19,7 @@ export function FeedbackButton() {
   const [showDisclosure, setShowDisclosure] = useState(false);
   const [message, setMessage] = useState("");
   const [email, setEmail] = useState("");
-  const [isEmailValid, setIsEmailValid] = useState(false);
+  const [isEmailValid, setIsEmailValid] = useState(true);
   const [status, setStatus] = useState<"idle" | "sending" | "error" | "sent">(
     "idle",
   );
@@ -41,7 +42,7 @@ export function FeedbackButton() {
       await submitPrivateFeedback(text, email);
       setMessage("");
       setEmail("");
-      setIsEmailValid(false);
+      setIsEmailValid(true);
       setStatus("sent");
     } catch {
       setStatus("error");
@@ -108,6 +109,7 @@ export function FeedbackButton() {
                 <textarea
                   id="feedback-message"
                   required
+                  aria-describedby="feedback-submit-hint"
                   value={message}
                   onChange={(event) => setMessage(event.target.value)}
                   rows={5}
@@ -117,32 +119,29 @@ export function FeedbackButton() {
                   htmlFor="feedback-email"
                   className="text-sm text-contrast"
                 >
-                  {t(I18nKey.FEEDBACK$EMAIL)}{" "}
-                  <span
-                    className="text-danger text-sm leading-none"
-                    aria-hidden
-                  >
-                    *
-                  </span>
+                  {t(I18nKey.FEEDBACK$EMAIL)} <OptionalTag />
                 </label>
                 <input
                   id="feedback-email"
                   type="email"
-                  required
+                  aria-describedby="feedback-submit-hint"
                   autoComplete="email"
                   maxLength={254}
                   value={email}
                   onChange={(event) => {
                     setEmail(event.currentTarget.value);
                     setIsEmailValid(
-                      event.currentTarget.validity.valid &&
-                        Boolean(event.currentTarget.value.trim()),
+                      !event.currentTarget.value.trim() ||
+                        event.currentTarget.validity.valid,
                     );
                   }}
                   className="w-full rounded-md border border-border bg-base-secondary p-2 text-contrast"
                 />
                 <p className="text-xs text-muted">
                   {t(I18nKey.FEEDBACK$PRIVACY)}
+                </p>
+                <p id="feedback-submit-hint" className="text-xs text-muted">
+                  {t(I18nKey.FEEDBACK$SUBMIT_HINT)}
                 </p>
                 {status === "error" && (
                   <p role="alert" className="text-sm text-feedback-error">
