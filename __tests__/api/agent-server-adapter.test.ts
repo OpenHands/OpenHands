@@ -9,6 +9,7 @@ import { AUTOMATION_SETUP_SYSTEM_SUFFIX } from "#/api/automation-form-client-too
 
 import {
   ACP_SERVER_TAG_KEY,
+  ACTIVE_PROFILE_TAG_KEY,
   WORKSPACE_TAG_KEY,
   buildWorkspaceTags,
   buildRuntimeServicesSystemSuffix,
@@ -819,6 +820,55 @@ describe("toAppConversation", () => {
       });
 
       expect(result.git_provider).toBeNull();
+    });
+  });
+
+  describe("server-side active profile tag fallback (#16766)", () => {
+    afterEach(() => {
+      removeStoredConversationMetadata(baseInfo.id);
+    });
+
+    it("uses a key the agent-server will accept (lowercase alphanumeric)", () => {
+      expect(ACTIVE_PROFILE_TAG_KEY).toMatch(/^[a-z0-9]+$/);
+    });
+
+    it("hydrates active_profile from the tag when localStorage has none", () => {
+      // Another browser or device never wrote the creating client's
+      // localStorage stamp, so the chat-input profile picker reads the tag.
+      const result = toAppConversation({
+        ...baseInfo,
+        tags: { [ACTIVE_PROFILE_TAG_KEY]: "architect" },
+      });
+
+      expect(result.active_profile).toBe("architect");
+    });
+
+    it("prefers the stored stamp over the tag for the creating client", () => {
+      setStoredConversationMetadata(baseInfo.id, {
+        selected_repository: null,
+        selected_branch: null,
+        git_provider: null,
+        active_profile: "fast",
+      });
+
+      const result = toAppConversation({
+        ...baseInfo,
+        tags: { [ACTIVE_PROFILE_TAG_KEY]: "architect" },
+      });
+
+      expect(result.active_profile).toBe("fast");
+    });
+
+    it("stays null when neither localStorage nor the tag names a profile", () => {
+      expect(
+        toAppConversation({ ...baseInfo, tags: {} }).active_profile,
+      ).toBeNull();
+      expect(
+        toAppConversation({
+          ...baseInfo,
+          tags: { [ACTIVE_PROFILE_TAG_KEY]: " " },
+        }).active_profile,
+      ).toBeNull();
     });
   });
 

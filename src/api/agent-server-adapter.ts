@@ -452,7 +452,11 @@ export function toAppConversation(
     // browser, device, or after cleared site data (#17386).
     selected_workspace:
       metadata?.selected_workspace ?? info.tags?.[WORKSPACE_TAG_KEY] ?? null,
-    active_profile: metadata?.active_profile ?? null,
+    // Same warm-cache-then-tag order as the workspace/repo fields above:
+    // another device has no localStorage entry, so it reads the tag.
+    active_profile:
+      metadata?.active_profile ??
+      (info.tags?.[ACTIVE_PROFILE_TAG_KEY]?.trim() || null),
     title: info.title?.trim()
       ? info.title
       : getDefaultConversationTitle(info.id),
@@ -597,6 +601,14 @@ export function buildWorkspaceTags(
 // Repository tags, read back like the workspace tag (#15598). Keys must match
 // the agent-server's `^[a-z0-9]+$`.
 export const REPOSITORY_TAG_KEY = "repository";
+/**
+ * The LLM profile a conversation runs, stamped as a server-side tag so the
+ * chat-header picker names the right profile on another browser or device
+ * and after cleared site data (#16766). The creating client's localStorage
+ * `active_profile` stays the warm cache and wins when present. Key obeys the
+ * agent-server's `^[a-z0-9]+$` tag-key rule.
+ */
+export const ACTIVE_PROFILE_TAG_KEY = "activeprofile";
 export const SELECTED_BRANCH_TAG_KEY = "selectedbranch";
 export const GIT_PROVIDER_TAG_KEY = "gitprovider";
 
@@ -669,6 +681,9 @@ export const RESERVED_CONVERSATION_TAG_KEYS: ReadonlySet<string> = new Set([
   "pinned",
   "archived",
   LOCAL_PLANNER_PARENT_TAG_KEY,
+  // The conversation's LLM profile (#16766): surfaced by the chat-header
+  // picker, not as a tag chip.
+  ACTIVE_PROFILE_TAG_KEY,
   // The launched agent profile, which the app server stamps as tags; the
   // hovercard names the profile instead of echoing the raw id and revision.
   "agentprofileid",
