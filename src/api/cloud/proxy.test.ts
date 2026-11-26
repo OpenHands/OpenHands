@@ -65,6 +65,19 @@ describe("callCloudProxy", () => {
     );
   });
 
+  it("preserves an explicitly captured empty organization selection", async () => {
+    await callCloudProxy({
+      backend: cloudBackend,
+      method: "GET",
+      path: "/api/v1/server_info",
+      orgId: null,
+    });
+
+    expect(CloudClientMock).toHaveBeenCalledWith(
+      expect.objectContaining({ orgId: null }),
+    );
+  });
+
   it("does not send an org header for inactive cloud backends", async () => {
     const inactiveBackend = { ...cloudBackend, id: "other-cloud" };
 

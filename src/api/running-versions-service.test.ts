@@ -94,6 +94,7 @@ describe("RunningVersionsService.getBackendVersions", () => {
         method: "GET",
         path: "/server_info",
         headers: expect.objectContaining({ "X-Org-Id": "org-1" }),
+        orgId: "org-1",
         timeoutSeconds: 5,
       }),
     );

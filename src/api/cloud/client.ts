@@ -30,7 +30,10 @@ export function activeOrgForBackend(backend: Backend): string | null {
   return active.backend.id === backend.id ? active.orgId : null;
 }
 
-export function createCloudClient(backend?: Backend): CloudClient {
+export function createCloudClient(
+  backend?: Backend,
+  orgId?: string | null,
+): CloudClient {
   const target = requireCloudBackend(backend);
   const agentServerProxyBaseUrl = getAgentServerBaseUrl();
   // Standalone Canvas uses its local Agent Server as the runtime proxy. The
@@ -42,7 +45,7 @@ export function createCloudClient(backend?: Backend): CloudClient {
   return new CloudClient({
     host: target.host,
     apiKey: target.apiKey,
-    orgId: activeOrgForBackend(target),
+    orgId: orgId !== undefined ? orgId : activeOrgForBackend(target),
     // Default request timeout in ms, matching the 30s the previous axios
     // transport used for direct and proxied calls. Per-request
     // `timeoutSeconds` still overrides it for direct calls.
@@ -54,8 +57,11 @@ export function createCloudClient(backend?: Backend): CloudClient {
   });
 }
 
-export function createCloudClientForRuntime(backend?: Backend): CloudClient {
-  const client = createCloudClient(backend);
+export function createCloudClientForRuntime(
+  backend?: Backend,
+  orgId?: string | null,
+): CloudClient {
+  const client = createCloudClient(backend, orgId);
   if (!client.proxy) {
     throw new NoBackendAvailableError();
   }

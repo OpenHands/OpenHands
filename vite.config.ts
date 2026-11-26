@@ -14,6 +14,7 @@ import {
   AGENT_SERVER_UI_SCOPE_SELECTOR,
   transformAgentServerUISelector,
 } from "./src/styles/agent-server-ui-style-scope";
+import { resolvePackageVersion } from "./scripts/resolve-package-version.mjs";
 
 const LIB_ENTRY = fileURLToPath(new URL("./src/index.ts", import.meta.url));
 const LIB_EXTERNALS = [
@@ -52,6 +53,14 @@ const normalizeBasePath = (value?: string) => {
 // real filesystem paths to the Python agent-server (which uses them to
 // resolve bundled skill resources like scripts/ and references/).
 const _require = createRequire(import.meta.url);
+const EXTENSIONS_PACKAGE_VERSION = resolvePackageVersion(
+  "@openhands/extensions",
+  _require.resolve("@openhands/extensions"),
+);
+const TYPESCRIPT_CLIENT_PACKAGE_VERSION = resolvePackageVersion(
+  "@openhands/typescript-client",
+  _require.resolve("@openhands/typescript-client"),
+);
 const EXTENSIONS_SKILLS_DIR = resolve(
   dirname(_require.resolve("@openhands/extensions/package.json")),
   "skills",
@@ -138,6 +147,12 @@ export default defineConfig(({ mode }) => {
       // "public" when the value is falsy.
       __EXTENSIONS_SKILLS_DIR__: JSON.stringify(
         isLibraryBuild ? "" : EXTENSIONS_SKILLS_DIR,
+      ),
+      __OPENHANDS_TYPESCRIPT_CLIENT_VERSION__: JSON.stringify(
+        TYPESCRIPT_CLIENT_PACKAGE_VERSION,
+      ),
+      __OPENHANDS_EXTENSIONS_VERSION__: JSON.stringify(
+        EXTENSIONS_PACKAGE_VERSION,
       ),
     },
     plugins: [

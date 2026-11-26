@@ -49,6 +49,7 @@ class RunningVersionsService {
           method: "GET",
           path: "/server_info",
           headers: active.orgId ? { "X-Org-Id": active.orgId } : undefined,
+          orgId: active.orgId,
           timeoutSeconds: 5,
         });
       } else {

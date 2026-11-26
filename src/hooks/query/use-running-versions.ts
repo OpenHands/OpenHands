@@ -24,9 +24,11 @@ export function useRunningVersions() {
   ] as const;
 
   const backendQuery = useQuery(
+    // The query key intentionally omits credentials; this fetch uses its render's backend snapshot.
+    // eslint-disable-next-line @tanstack/query/exhaustive-deps
     {
       queryKey: RUNNING_VERSIONS_QUERY_KEYS.forBackend(...backendIdentity),
-      queryFn: () => RunningVersionsService.getBackendVersions(),
+      queryFn: () => RunningVersionsService.getBackendVersions(active),
       enabled,
       staleTime: VERSION_CACHE_TIME_MS,
       gcTime: VERSION_CACHE_TIME_MS,
@@ -37,9 +39,11 @@ export function useRunningVersions() {
   );
 
   const automationQuery = useQuery(
+    // The query key intentionally omits credentials; this fetch uses its render's backend snapshot.
+    // eslint-disable-next-line @tanstack/query/exhaustive-deps
     {
       queryKey: RUNNING_VERSIONS_QUERY_KEYS.forAutomation(...backendIdentity),
-      queryFn: () => AutomationService.getVersionInfo(),
+      queryFn: () => AutomationService.getVersionInfo(active),
       enabled,
       staleTime: VERSION_CACHE_TIME_MS,
       gcTime: VERSION_CACHE_TIME_MS,

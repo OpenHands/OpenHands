@@ -147,10 +147,11 @@ describe("useAutomationSdkVersion", () => {
       .mockResolvedValueOnce("1.36.3")
       .mockResolvedValueOnce("1.37.0");
 
+    const localActive = activeBackendMock.active;
     const { result, rerender } = renderHook(() => useAutomationSdkVersion());
     await waitFor(() => expect(result.current).toBe("1.36.3"));
 
-    activeBackendMock.active = {
+    const cloudActive: ResolvedActiveBackend = {
       backend: {
         id: "cloud-1",
         name: "Cloud",
@@ -160,10 +161,19 @@ describe("useAutomationSdkVersion", () => {
       },
       orgId: "org-1",
     };
+    activeBackendMock.active = cloudActive;
     rerender();
 
     await waitFor(() => expect(result.current).toBe("1.37.0"));
     expect(AutomationService.getSdkVersion).toHaveBeenCalledTimes(2);
+    expect(AutomationService.getSdkVersion).toHaveBeenNthCalledWith(
+      1,
+      localActive,
+    );
+    expect(AutomationService.getSdkVersion).toHaveBeenNthCalledWith(
+      2,
+      cloudActive,
+    );
   });
 
   it("does not query without an available backend", () => {

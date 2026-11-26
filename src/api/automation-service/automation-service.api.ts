@@ -1,3 +1,4 @@
+import { HttpError } from "@openhands/typescript-client";
 import type {
   AutomationUpdate,
   Automation,
@@ -273,6 +274,21 @@ function getAutomationSdkVersionFromResponse(
   );
 }
 
+function isNotFoundError(error: unknown): boolean {
+  if (error instanceof HttpError) return error.status === 404;
+  if (typeof error !== "object" || error === null || !("response" in error)) {
+    return false;
+  }
+
+  const { response } = error;
+  return (
+    typeof response === "object" &&
+    response !== null &&
+    "status" in response &&
+    response.status === 404
+  );
+}
+
 /**
  * The query string for a paged list request. `extra` adds params such as
  * filters; keys whose value is undefined are left out.
@@ -514,8 +530,9 @@ class AutomationService {
     }
   }
 
-  static async getSdkVersion(): Promise<string | null> {
-    const active = getActiveBackend();
+  static async getSdkVersion(
+    active: ResolvedActiveBackend = getActiveBackend(),
+  ): Promise<string | null> {
     const path = `${AUTOMATION_BASE_PATH}/sdk-version`;
 
     try {
@@ -526,11 +543,13 @@ class AutomationService {
           method: "GET",
           path,
           headers: await buildPinnedCloudHeaders(active),
+          orgId: active.orgId,
           timeoutSeconds: 5,
         });
       } else {
         const { data } =
           await localAutomationAxios.get<AutomationSdkVersionResponse>(path, {
+            ...(await buildPinnedLocalConfig(active.backend)),
             timeout: 5000,
           });
         response = data;
@@ -555,11 +574,13 @@ class AutomationService {
           method: "GET",
           path,
           headers: await buildPinnedCloudHeaders(active),
+          orgId: active.orgId,
           timeoutSeconds: 5,
         });
       } else {
         const { data } =
           await localAutomationAxios.get<AutomationServerInfoResponse>(path, {
+            ...(await buildPinnedLocalConfig(active.backend)),
             timeout: 5000,
           });
         response = data;
@@ -572,8 +593,10 @@ class AutomationService {
       return versionInfo.packageVersion || versionInfo.sdkVersion
         ? versionInfo
         : null;
-    } catch {
-      return null;
+    } catch (error) {
+      if (!isNotFoundError(error)) return null;
+      const sdkVersion = await AutomationService.getSdkVersion(active);
+      return sdkVersion ? { packageVersion: null, sdkVersion } : null;
     }
   }
 
