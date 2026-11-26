@@ -47518,5 +47518,23 @@
     "uk": "Відкрити {{ref}} на GitHub",
     "ca": "Obre {{ref}} a GitHub",
     "id": "Buka {{ref}} di GitHub"
+  },
+  "NAV$SKIP_TO_CONTENT": {
+    "en": "Skip to main content",
+    "ja": "メインコンテンツへスキップ",
+    "zh-CN": "跳转到主要内容",
+    "zh-TW": "跳至主要內容",
+    "ko-KR": "주요 콘텐츠로 건너뛰기",
+    "no": "Hopp til hovedinnhold",
+    "it": "Vai al contenuto principale",
+    "pt": "Ir para o conteúdo principal",
+    "es": "Ir al contenido principal",
+    "ar": "انتقل إلى المحتوى الرئيسي",
+    "fr": "Aller au contenu principal",
+    "tr": "Ana içeriğe geç",
+    "de": "Zum Hauptinhalt springen",
+    "uk": "Перейти до основного вмісту",
+    "ca": "Ves al contingut principal",
+    "id": "Langsung ke konten utama"
   }
 }
