@@ -25,7 +25,11 @@ import { createServer } from "node:http";
 import process from "node:process";
 import { pathToFileURL } from "node:url";
 
-import { DEFAULT_BIND_HOST, resolveBindHost } from "./bind-host.mjs";
+import {
+  DEFAULT_BIND_HOST,
+  isForeignLoopbackRequest,
+  resolveBindHost,
+} from "./bind-host.mjs";
 import { mountMarsWebBridge } from "./mars-web-bridge.mjs";
 import {
   createProxyHandlers,
@@ -172,17 +176,23 @@ function buildConfig(args, env = process.env) {
 // ═══════════════════════════════════════════════════════════════════════════
 
 export function startIngress(config) {
+  const host = config.host || DEFAULT_BIND_HOST;
   const route = createRouter(config.routes, config.defaultBackend);
   const proxy = createProxyHandlers({ label: `ingress:${config.port}` });
   const uninstallDiagnostics = proxy.installDiagnostics();
   // DigitalOcean Managed Agents for the browser: with MARS_WEB=1, host the MARS
   // bridge and proxies to sessions' tunnel listeners, behind the session key
   // (MARS_WEB_KEY; dev-with-automation passes the stack's key).
-  const marsWeb = mountMarsWebBridge({ host: config.host });
+  const marsWeb = mountMarsWebBridge({ host });
 
   const noReferrerPrefixes = config.noReferrerPrefixes ?? [];
 
   const server = createServer((req, res) => {
+    if (isForeignLoopbackRequest(req, host)) {
+      res.writeHead(403, { "Content-Type": "text/plain; charset=utf-8" });
+      res.end("Forbidden");
+      return;
+    }
     const url = req.url ?? "/";
     if (marsWeb?.handleHttp(req, res)) return;
     const backend = route(url);
@@ -214,6 +224,10 @@ export function startIngress(config) {
 
   // Handle WebSocket upgrades
   server.on("upgrade", (req, socket, head) => {
+    if (isForeignLoopbackRequest(req, host, { upgrade: true })) {
+      socket.end("HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n");
+      return;
+    }
     if (marsWeb?.handleUpgrade(req, socket, head)) return;
     const backend = route(req.url ?? "/");
 
@@ -242,7 +256,7 @@ export function startIngress(config) {
     void marsWeb?.dispose().catch(() => {});
   });
 
-  server.listen(config.port, config.host || DEFAULT_BIND_HOST, () => {
+  server.listen(config.port, host, () => {
     console.log("");
     console.log(
       "╔═══════════════════════════════════════════════════════════════╗",

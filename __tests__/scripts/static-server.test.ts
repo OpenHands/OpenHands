@@ -792,7 +792,9 @@ describe("static-server.mjs", () => {
 
       try {
         const server = await startStaticServer({
-          ...parseArgs(["--host", "0.0.0.0"], { SESSION_API_KEY: "lan-secret" }),
+          ...parseArgs(["--host", "0.0.0.0"], {
+            SESSION_API_KEY: "lan-secret",
+          }),
           port: 0,
           dir: buildDir,
         });
@@ -1191,4 +1193,243 @@ describe("static-server.mjs MARS web bridge (Docker arguments)", () => {
       expect(response.headers.get("content-type")).toMatch(/text\/html/);
     },
   );
+});
+
+describe("static-server.mjs loopback Host and Origin protection", () => {
+  const servers: Server[] = [];
+  const tempDirs: string[] = [];
+
+  afterEach(async () => {
+    await Promise.all(
+      servers.splice(0).map(
+        (server) =>
+          new Promise<void>((resolve) => {
+            server.close(() => resolve());
+          }),
+      ),
+    );
+    for (const dir of tempDirs.splice(0)) {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  function sendRawHttp(
+    port: number,
+    pathName: string,
+    headers: Record<string, string>,
+    method = "GET",
+  ) {
+    return new Promise<{ status: number; body: string }>((resolve, reject) => {
+      const req = request(
+        { host: "127.0.0.1", port, path: pathName, method, headers },
+        (res) => {
+          let body = "";
+          res.setEncoding("utf8");
+          res.on("data", (chunk) => {
+            body += chunk;
+          });
+          res.on("end", () => resolve({ status: res.statusCode ?? 0, body }));
+        },
+      );
+      req.on("error", reject);
+      req.end();
+    });
+  }
+
+  function sendRawUpgrade(
+    port: number,
+    pathName: string,
+    headers: Record<string, string>,
+  ) {
+    return new Promise<{ status: number; upgraded: boolean }>(
+      (resolve, reject) => {
+        const req = request({
+          host: "127.0.0.1",
+          port,
+          path: pathName,
+          headers: {
+            Connection: "Upgrade",
+            Upgrade: "websocket",
+            "Sec-WebSocket-Key": "dGhlIHNhbXBsZSBub25jZQ==",
+            "Sec-WebSocket-Version": "13",
+            ...headers,
+          },
+        });
+        req.on("upgrade", (_res, socket) => {
+          socket.destroy();
+          resolve({ status: 101, upgraded: true });
+        });
+        req.on("response", (res) => {
+          res.resume();
+          resolve({ status: res.statusCode ?? 0, upgraded: false });
+        });
+        req.on("error", reject);
+        req.end();
+      },
+    );
+  }
+
+  it("rejects DNS-rebound and userinfo-spoofed Host headers on loopback without leaking the session key", async () => {
+    let backendHits = 0;
+    const backend = createServer((_req, res) => {
+      backendHits += 1;
+      res.writeHead(200);
+      res.end("ok");
+    });
+    await new Promise<void>((resolve) =>
+      backend.listen(0, "127.0.0.1", resolve),
+    );
+    servers.push(backend);
+    const backendAddr = backend.address();
+    if (!backendAddr || typeof backendAddr === "string") {
+      throw new Error("Backend did not bind to a port");
+    }
+
+    const buildDir = mkdtempSync(path.join(tmpdir(), "agent-canvas-dns-"));
+    tempDirs.push(buildDir);
+    writeFileSync(
+      path.join(buildDir, "index.html"),
+      "<html><head></head><body>app</body></html>",
+    );
+
+    const server = await startStaticServer({
+      port: 0,
+      host: "127.0.0.1",
+      dir: buildDir,
+      routes: { "/api": `http://127.0.0.1:${backendAddr.port}` },
+      sessionApiKey: "super-secret-loopback-key",
+    });
+    servers.push(server);
+    const addr = server.address();
+    if (!addr || typeof addr === "string") {
+      throw new Error("Static server did not bind to a port");
+    }
+
+    for (const badHost of [
+      "evil.example:8000",
+      "localhost.evil.example:8000",
+      `evil.example@127.0.0.1:${addr.port}`,
+      ".localhost:8000",
+    ]) {
+      const rootRes = await sendRawHttp(addr.port, "/", { Host: badHost });
+      expect(rootRes.status).toBe(403);
+      expect(rootRes.body).not.toContain("super-secret-loopback-key");
+
+      const apiRes = await sendRawHttp(addr.port, "/api/health", {
+        Host: badHost,
+      });
+      expect(apiRes.status).toBe(403);
+    }
+    expect(backendHits).toBe(0);
+
+    const okLocalhost = await sendRawHttp(addr.port, "/", {
+      Host: `app.localhost:${addr.port}`,
+    });
+    expect(okLocalhost.status).toBe(200);
+    expect(okLocalhost.body).toContain("super-secret-loopback-key");
+  });
+
+  it("rejects cross-origin WebSocket upgrades and unsafe POSTs on loopback while allowing reverse-proxy Hosts off-loopback", async () => {
+    let backendUpgrades = 0;
+    let backendPosts = 0;
+    const backend = createServer((req, res) => {
+      if (req.method === "POST") backendPosts += 1;
+      res.writeHead(200);
+      res.end("ok");
+    });
+    backend.on("upgrade", (_req, socket) => {
+      backendUpgrades += 1;
+      socket.write(
+        "HTTP/1.1 101 Switching Protocols\r\n" +
+          "Upgrade: websocket\r\n" +
+          "Connection: Upgrade\r\n" +
+          "Sec-WebSocket-Accept: s3pPLMBiTxaQ9kYGzzhZRbK+xOo=\r\n\r\n",
+      );
+      socket.end();
+    });
+    await new Promise<void>((resolve) =>
+      backend.listen(0, "127.0.0.1", resolve),
+    );
+    servers.push(backend);
+    const backendAddr = backend.address();
+    if (!backendAddr || typeof backendAddr === "string") {
+      throw new Error("Backend did not bind to a port");
+    }
+
+    const buildDir = mkdtempSync(path.join(tmpdir(), "agent-canvas-ws-"));
+    tempDirs.push(buildDir);
+    writeFileSync(
+      path.join(buildDir, "index.html"),
+      "<html><body></body></html>",
+    );
+
+    const loopbackServer = await startStaticServer({
+      port: 0,
+      host: "127.0.0.1",
+      dir: buildDir,
+      routes: {
+        "/api": `http://127.0.0.1:${backendAddr.port}`,
+        "/sockets": `http://127.0.0.1:${backendAddr.port}`,
+      },
+    });
+    servers.push(loopbackServer);
+    const lbAddr = loopbackServer.address();
+    if (!lbAddr || typeof lbAddr === "string") throw new Error("No port");
+
+    expect(
+      await sendRawUpgrade(lbAddr.port, "/sockets/events", {
+        Host: `127.0.0.1:${lbAddr.port}`,
+        Origin: "https://evil.example",
+      }),
+    ).toEqual({ status: 403, upgraded: false });
+
+    expect(
+      await sendRawUpgrade(lbAddr.port, "/sockets/events", {
+        Host: `127.0.0.1:${lbAddr.port}`,
+        Origin: "null",
+      }),
+    ).toEqual({ status: 403, upgraded: false });
+
+    const crossPost = await sendRawHttp(
+      lbAddr.port,
+      "/api/conversations",
+      { Host: `127.0.0.1:${lbAddr.port}`, Origin: "https://evil.example" },
+      "POST",
+    );
+    expect(crossPost.status).toBe(403);
+    expect(backendUpgrades).toBe(0);
+    expect(backendPosts).toBe(0);
+
+    // Cross-port loopback Origin (e.g. ingress proxying to static child) works.
+    expect(
+      await sendRawUpgrade(lbAddr.port, "/sockets/events", {
+        Host: `127.0.0.1:${lbAddr.port}`,
+        Origin: "http://localhost:8000",
+      }),
+    ).toEqual({ status: 101, upgraded: true });
+    expect(backendUpgrades).toBe(1);
+
+    // Off-loopback binds still accept reverse-proxy Host and Origin headers.
+    const lanWarn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      const lanServer = await startStaticServer({
+        port: 0,
+        host: "0.0.0.0",
+        dir: buildDir,
+        routes: { "/api": `http://127.0.0.1:${backendAddr.port}` },
+        authRequired: true,
+      });
+      servers.push(lanServer);
+      const lanAddr = lanServer.address();
+      if (!lanAddr || typeof lanAddr === "string") throw new Error("No port");
+
+      const proxied = await sendRawHttp(lanAddr.port, "/api/health", {
+        Host: "canvas.example.com",
+        Origin: "https://canvas.example.com",
+      });
+      expect(proxied.status).toBe(200);
+    } finally {
+      lanWarn.mockRestore();
+    }
+  });
 });

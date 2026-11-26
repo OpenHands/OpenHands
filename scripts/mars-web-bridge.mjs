@@ -53,7 +53,12 @@ import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { homedir } from "node:os";
 import path from "node:path";
 
-import { DEFAULT_BIND_HOST, isLoopbackBind } from "./bind-host.mjs";
+import {
+  DEFAULT_BIND_HOST,
+  isCrossOriginHttpRequest,
+  isForeignLoopbackRequest,
+  isLoopbackBind,
+} from "./bind-host.mjs";
 import { readRequestBody } from "./http-body.mjs";
 import {
   buildTunnelHost,
@@ -236,16 +241,6 @@ function readCookie(req, name) {
   return null;
 }
 
-/** Hostname of the request's `Host` header, without port or brackets. */
-function requestHostname(req) {
-  const host = req.headers.host ?? "";
-  try {
-    return new URL(`http://${host}`).hostname.replace(/^\[|\]$/g, "");
-  } catch {
-    return "";
-  }
-}
-
 /** `http://host[:port]` of the request as the browser sees it. */
 function requestOrigin(req) {
   const proto =
@@ -255,32 +250,6 @@ function requestOrigin(req) {
 
 function sessionProxyBase(req, sessionId) {
   return `${requestOrigin(req)}${SESSIONS_PREFIX}${encodeURIComponent(sessionId)}`;
-}
-
-/**
- * A page on another origin cannot be allowed to drive the bridge or read
- * through the proxy. Same-origin requests either carry a matching Origin or
- * none at all (plain navigations, same-origin GETs).
- */
-function isCrossOrigin(req) {
-  const origin = req.headers.origin;
-  if (!origin) return false;
-  try {
-    return new URL(origin).host !== req.headers.host;
-  } catch {
-    return true;
-  }
-}
-
-/**
- * On a loopback bind the only legitimate `Host` values are loopback names;
- * a DNS-rebound page arrives with its own hostname in both `Host` and
- * `Origin`, so the origin check alone would pass it.
- */
-function isForeignHost(req, bindHost) {
-  if (!isLoopbackBind(bindHost)) return false;
-  const hostname = requestHostname(req);
-  return !(isLoopbackBind(hostname) || hostname.endsWith(".localhost"));
 }
 
 function writeJson(res, status, body) {
@@ -546,7 +515,10 @@ export function createMarsWebBridge({
     handleHttp(req, res) {
       const url = req.url ?? "/";
       if (!url.startsWith(`${MARS_WEB_PREFIX}/`)) return false;
-      if (isCrossOrigin(req) || isForeignHost(req, host)) {
+      if (
+        isCrossOriginHttpRequest(req) ||
+        isForeignLoopbackRequest(req, host, { env })
+      ) {
         writeJson(res, 403, {
           error: { message: "cross-origin request refused" },
         });
@@ -588,7 +560,10 @@ export function createMarsWebBridge({
     handleUpgrade(req, socket, head) {
       const url = req.url ?? "/";
       if (!url.startsWith(`${MARS_WEB_PREFIX}/`)) return false;
-      if (isCrossOrigin(req) || isForeignHost(req, host)) {
+      if (
+        isCrossOriginHttpRequest(req) ||
+        isForeignLoopbackRequest(req, host, { upgrade: true, env })
+      ) {
         socket.end("HTTP/1.1 403 Forbidden\r\n\r\n");
         return true;
       }
