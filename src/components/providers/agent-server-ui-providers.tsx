@@ -18,6 +18,11 @@ import { ActiveBackendProvider } from "#/contexts/active-backend-context";
 import { CloudOrganizationBoundary } from "#/components/features/backends/cloud-organization-boundary";
 import { useHydrateFreeModels } from "#/hooks/query/use-free-models";
 import type { TelemetryConfig } from "#/services/telemetry";
+import {
+  type FeaturePolicy,
+  readInjectedFeaturePolicy,
+} from "#/feature-policy/feature-policy";
+import { FeaturePolicyProvider } from "#/feature-policy/feature-policy-context";
 import { TelemetryProvider } from "./telemetry-provider";
 import {
   AgentServerUIRoot,
@@ -46,6 +51,8 @@ export interface AgentServerUIProvidersProps extends Pick<
   withStyleRoot?: boolean;
   /** Opt in only after authentication; otherwise mount CloudOrganizationBoundary after the host auth gate. */
   resolveCloudOrganization?: boolean;
+  /** Features the host turns off. Omit to use the policy injected into the page, if any. */
+  featurePolicy?: FeaturePolicy;
 }
 
 /**
@@ -70,6 +77,7 @@ export function AgentServerUIProviders({
   theme,
   withStyleRoot = true,
   resolveCloudOrganization = false,
+  featurePolicy,
 }: AgentServerUIProvidersProps) {
   const resolvedQueryClient = React.useMemo(
     () => queryClient ?? getDefaultQueryClient(),
@@ -109,13 +117,22 @@ export function AgentServerUIProviders({
           uiHost: analytics.uiHost,
         }
       : false;
+  // Always mounted, so a host that supplies the prop after its first render
+  // does not remount everything below.
+  const gatedChildren = (
+    <FeaturePolicyProvider
+      policy={featurePolicy ?? readInjectedFeaturePolicy()}
+    >
+      {children}
+    </FeaturePolicyProvider>
+  );
   const content = (
     <TelemetryProvider config={posthogConfig}>
       <FreeModelsHydrator />
       {resolveCloudOrganization ? (
-        <CloudOrganizationBoundary>{children}</CloudOrganizationBoundary>
+        <CloudOrganizationBoundary>{gatedChildren}</CloudOrganizationBoundary>
       ) : (
-        children
+        gatedChildren
       )}
     </TelemetryProvider>
   );

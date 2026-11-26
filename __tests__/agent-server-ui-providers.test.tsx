@@ -23,6 +23,7 @@ import {
   setQueryClient,
 } from "#/index";
 import i18n from "#/i18n";
+import { useFeaturePolicy } from "#/feature-policy/feature-policy-context";
 
 const telemetryProviderMock = vi.hoisted(() => vi.fn());
 vi.mock("#/components/providers/telemetry-provider", () => ({
@@ -92,7 +93,20 @@ afterEach(() => {
   setQueryClient();
   setI18n();
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
 });
+
+function AddBackendAvailability({ onMount }: { onMount?: () => void }) {
+  const featurePolicy = useFeaturePolicy();
+  React.useEffect(() => {
+    onMount?.();
+  }, []);
+  return (
+    <span data-testid="add-backend-enabled">
+      {String(featurePolicy.isEnabled("backends.add"))}
+    </span>
+  );
+}
 
 describe("AgentServerUIProviders", () => {
   it("exports and uses the default query client and i18n instances when props are omitted", async () => {
@@ -208,6 +222,65 @@ describe("AgentServerUIProviders", () => {
           uiHost: analytics.uiHost,
         },
       }),
+    );
+  });
+
+  it("applies a host-supplied feature policy to its children", () => {
+    render(
+      <AgentServerUIProviders
+        featurePolicy={{ version: 1, disabled: ["backends.add"] }}
+      >
+        <AddBackendAvailability />
+      </AgentServerUIProviders>,
+    );
+
+    expect(screen.getByTestId("add-backend-enabled")).toHaveTextContent(
+      "false",
+    );
+  });
+
+  it("keeps children mounted when a host supplies the policy after first render", () => {
+    // Arrange
+    const onMount = vi.fn();
+    const { rerender } = render(
+      <AgentServerUIProviders>
+        <AddBackendAvailability onMount={onMount} />
+      </AgentServerUIProviders>,
+    );
+
+    // Act
+    rerender(
+      <AgentServerUIProviders
+        featurePolicy={{ version: 1, disabled: ["backends.add"] }}
+      >
+        <AddBackendAvailability onMount={onMount} />
+      </AgentServerUIProviders>,
+    );
+
+    // Assert
+    expect(screen.getByTestId("add-backend-enabled")).toHaveTextContent(
+      "false",
+    );
+    expect(onMount).toHaveBeenCalledTimes(1);
+  });
+
+  it("turns features off when a host page injects a malformed policy", () => {
+    // Arrange: a string instead of an array would otherwise disable nothing.
+    vi.stubGlobal("__AGENT_CANVAS_FEATURE_POLICY__", {
+      version: 1,
+      disabled: "backends.add",
+    });
+
+    // Act
+    render(
+      <AgentServerUIProviders>
+        <AddBackendAvailability />
+      </AgentServerUIProviders>,
+    );
+
+    // Assert
+    expect(screen.getByTestId("add-backend-enabled")).toHaveTextContent(
+      "false",
     );
   });
 
