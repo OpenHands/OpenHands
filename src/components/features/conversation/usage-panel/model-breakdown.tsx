@@ -1,6 +1,7 @@
 import { useTranslation } from "react-i18next";
 import { I18nKey } from "#/i18n/declaration";
 import type { UsageBreakdownEntry } from "#/api/conversation-service/agent-server-conversation-service.types";
+import { formatUsageCost } from "#/utils/conversation-metrics";
 import { MetricRow } from "../metrics-modal/metric-row";
 
 interface ModelBreakdownProps {
@@ -23,25 +24,23 @@ export function ModelBreakdown({ entries }: ModelBreakdownProps) {
       <span className="text-sm text-muted">
         {t(I18nKey.CONVERSATION$BY_MODEL)}
       </span>
-      {entries.map(({ modelName, accumulatedCost, usage }) => {
-        const isUnpriced =
-          accumulatedCost === 0 &&
-          usage.prompt_tokens + usage.completion_tokens > 0;
-        return (
-          <div key={modelName} className="mt-1">
-            <MetricRow
-              label={modelName}
-              value={isUnpriced ? "—" : `$${accumulatedCost.toFixed(4)}`}
-            />
-            <div className="pl-4 text-sm text-muted">
-              {t(I18nKey.CONVERSATION$INPUT)}{" "}
-              {usage.prompt_tokens.toLocaleString()} ·{" "}
-              {t(I18nKey.CONVERSATION$OUTPUT)}{" "}
-              {usage.completion_tokens.toLocaleString()}
-            </div>
+      {entries.map(({ modelName, accumulatedCost, usage }) => (
+        <div key={modelName} className="mt-1">
+          <MetricRow
+            label={modelName}
+            value={formatUsageCost(
+              accumulatedCost,
+              usage.prompt_tokens + usage.completion_tokens,
+            )}
+          />
+          <div className="pl-4 text-sm text-muted">
+            {t(I18nKey.CONVERSATION$INPUT)}{" "}
+            {usage.prompt_tokens.toLocaleString()} ·{" "}
+            {t(I18nKey.CONVERSATION$OUTPUT)}{" "}
+            {usage.completion_tokens.toLocaleString()}
           </div>
-        );
-      })}
+        </div>
+      ))}
     </div>
   );
 }

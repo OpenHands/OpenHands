@@ -13,6 +13,22 @@ interface UsageMetricsLike {
 }
 
 /**
+ * Tokens were spent but no cost was reported. The agent server leaves calls it
+ * cannot price out of the cost, and a free model reports $0, so the two look
+ * the same here.
+ */
+export function isUnpricedUsage(cost: number, tokens: number): boolean {
+  return cost === 0 && tokens > 0;
+}
+
+/** 4-decimal USD; "—" for unpriced usage, never "$0.0000" for a real cost. */
+export function formatUsageCost(cost: number, tokens: number): string {
+  if (isUnpricedUsage(cost, tokens)) return "—";
+  if (cost > 0 && cost < 0.00005) return "< $0.0001";
+  return `$${cost.toFixed(4)}`;
+}
+
+/**
  * Per-model cost and tokens, costliest first, so the combined total can be
  * attributed. Usage ids sharing a model (e.g. agent + condenser) are summed and
  * unused ones dropped. Shared by the REST snapshot and the live stats event.

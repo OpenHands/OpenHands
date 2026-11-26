@@ -130,6 +130,24 @@ describe("UsagePanel cost transparency", () => {
     ).toHaveLength(1);
   });
 
+  it("flags an unpriced model that the priced total leaves out", async () => {
+    renderPanel({
+      agent: llmMetrics("anthropic/claude-sonnet-4-5", 1.25, 10_000, 500),
+      "profile:coder": llmMetrics(
+        "openai/acme-internal-coder",
+        0,
+        1_250_000,
+        4_200,
+      ),
+    });
+
+    expect(await screen.findByTestId("total-cost-value")).toHaveTextContent(
+      "$1.2500",
+    );
+    expect(screen.getByTestId("cost-unpriced-note")).toBeInTheDocument();
+    expect(screen.getByTestId("cost-estimate-note")).toBeInTheDocument();
+  });
+
   it("keeps the ACP plan-usage note instead of the generic estimate note", async () => {
     renderPanel({ agent: llmMetrics("claude-code", 0.4, 1_000, 50) }, "acp");
 

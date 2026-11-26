@@ -3,6 +3,7 @@ import { MetricsSnapshot } from "#/api/conversation-service/agent-server-convers
 import {
   buildUsageBreakdown,
   combineUsageMetrics,
+  formatUsageCost,
 } from "#/utils/conversation-metrics";
 
 const usage = (overrides: Record<string, number> = {}) => ({
@@ -111,5 +112,17 @@ describe("buildUsageBreakdown", () => {
   it("falls back to the usage id when the model name is empty", () => {
     const result = buildUsageBreakdown({ agent: metrics("", 0.1) });
     expect(result[0].modelName).toBe("agent");
+  });
+});
+
+describe("formatUsageCost", () => {
+  it.each([
+    [1.25, 1_000, "$1.2500"],
+    [0, 0, "$0.0000"],
+    [0, 1_000, "—"],
+    [0.00003, 1_000, "< $0.0001"],
+    [0.00005, 1_000, "$0.0001"],
+  ])("formats cost %s with %s tokens as %s", (cost, tokens, expected) => {
+    expect(formatUsageCost(cost, tokens)).toBe(expected);
   });
 });

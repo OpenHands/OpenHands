@@ -9,12 +9,14 @@ const renderCost = (
   cost: number | null,
   usageTokens: number | null,
   showEstimateNote = true,
+  { hasUnpricedModel = false, maxBudget = null as number | null } = {},
 ) =>
   render(
     <CostSection
       cost={cost}
-      maxBudget={null}
+      maxBudget={maxBudget}
       usageTokens={usageTokens}
+      hasUnpricedModel={hasUnpricedModel}
       showEstimateNote={showEstimateNote}
     />,
   );
@@ -52,6 +54,24 @@ describe("CostSection", () => {
     ).toBeInTheDocument();
     expect(
       screen.queryByText(I18nKey.CONVERSATION$COST_ESTIMATE_NOTE),
+    ).not.toBeInTheDocument();
+  });
+
+  it("says a priced total leaves out an unpriced model", () => {
+    renderCost(1.25, 1_260_000, true, { hasUnpricedModel: true });
+    expect(screen.getByTestId("total-cost-value")).toHaveTextContent("$1.2500");
+    expect(
+      screen.getByText(I18nKey.CONVERSATION$NO_COST_DATA),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(I18nKey.CONVERSATION$COST_ESTIMATE_NOTE),
+    ).toBeInTheDocument();
+  });
+
+  it("hides the budget bar when no usage could be priced", () => {
+    renderCost(0, 2_000_000, true, { maxBudget: 5 });
+    expect(
+      screen.queryByText(I18nKey.CONVERSATION$BUDGET_USAGE_FORMAT),
     ).not.toBeInTheDocument();
   });
 
