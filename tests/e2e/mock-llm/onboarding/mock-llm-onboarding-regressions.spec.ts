@@ -2,6 +2,7 @@ import test, { expect } from "@playwright/test";
 import {
   advanceOnboardingToLlmStep,
   ONBOARDING_BACKEND_STEP,
+  routeOnboardingLlmCatalog,
   showOnboarding,
   waitForOnboardingStep,
 } from "../../support/onboarding-helpers";
@@ -144,5 +145,63 @@ test.describe("onboarding recent regressions", () => {
       page.getByTestId("openhands-account-help"),
       "OpenHands account helper should be hidden for OpenAI defaults",
     ).toBeHidden();
+  });
+
+  test("backend step radio buttons and disclosure controls meet WCAG 2.5.8 24px minimum target size", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.addInitScript(() => {
+      window.localStorage.removeItem("openhands-onboarded");
+      window.localStorage.removeItem("openhands-backends");
+      window.localStorage.removeItem("openhands-active-backend");
+      window.localStorage.setItem("analytics-consent", "false");
+      window.localStorage.setItem("openhands-telemetry-consent", "denied");
+      window.localStorage.setItem("openhands-telemetry-first-use", "true");
+    });
+    await routeSessionApiKey(page);
+    await routeOnboardingLlmCatalog(page);
+    await page.goto("/", { waitUntil: "domcontentloaded" });
+    await expect(page.getByTestId("onboarding-modal")).toBeVisible({
+      timeout: 20_000,
+    });
+    await waitForOnboardingStep(page, ONBOARDING_BACKEND_STEP);
+
+    for (const testId of [
+      "onboarding-backend-kind-option-local",
+      "onboarding-backend-kind-option-cloud",
+    ]) {
+      const control = page.getByTestId(testId);
+      await expect(control).toBeVisible();
+      const box = await control.evaluate((el) => {
+        const r = el.getBoundingClientRect();
+        return { width: r.width, height: r.height };
+      });
+      expect(
+        box.width,
+        `${testId} width should be >= 24px`,
+      ).toBeGreaterThanOrEqual(24);
+      expect(
+        box.height,
+        `${testId} height should be >= 24px`,
+      ).toBeGreaterThanOrEqual(24);
+    }
+
+    const advancedToggle = page.getByTestId(
+      "onboarding-backend-advanced-toggle",
+    );
+    await expect(advancedToggle).toBeVisible();
+    const advBox = await advancedToggle.evaluate((el) => {
+      const r = el.getBoundingClientRect();
+      return { width: r.width, height: r.height };
+    });
+    expect(
+      advBox.width,
+      "advanced toggle width should be >= 24px",
+    ).toBeGreaterThanOrEqual(24);
+    expect(
+      advBox.height,
+      "advanced toggle height should be >= 24px",
+    ).toBeGreaterThanOrEqual(24);
   });
 });
