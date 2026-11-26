@@ -14,7 +14,6 @@ import {
   useAddAutomationsToFactory,
   useAutomations,
 } from "#/hooks/query/use-automations";
-import { useFactories } from "#/hooks/query/use-factories";
 import type { Factory } from "#/types/automation";
 import { isDraftAutomation } from "#/utils/automation-state";
 import {
@@ -47,7 +46,6 @@ function AddAutomationsDialog({
     isFetchingNextPage,
     fetchNextPage,
   } = useAutomations();
-  const factories = useFactories().data;
   const addAutomations = useAddAutomationsToFactory();
 
   // The list is filtered by name here, so every page is loaded up front; a
@@ -60,17 +58,14 @@ function AddAutomationsDialog({
     () =>
       (data?.automations ?? []).filter(
         (automation) =>
-          !isDraftAutomation(automation) &&
-          automation.factory_id !== factory.id,
+          !isDraftAutomation(automation) && !automation.factory_id,
       ),
-    [data?.automations, factory.id],
+    [data?.automations],
   );
   const needle = filter.trim().toLowerCase();
   const visible = candidates.filter((automation) =>
     automation.name.toLowerCase().includes(needle),
   );
-  const factoryName = (id: string) =>
-    factories?.find((other) => other.id === id)?.name;
   const selectedIds = candidates
     .filter((automation) => selected.has(automation.id))
     .map((automation) => automation.id);
@@ -170,44 +165,32 @@ function AddAutomationsDialog({
           {t(I18nKey.FACTORIES$ADD_AUTOMATIONS_SELECT_ALL)}
         </label>
         <ul className="flex max-h-72 flex-col overflow-y-auto">
-          {visible.map((automation) => {
-            const currentFactory = automation.factory_id
-              ? factoryName(automation.factory_id)
-              : undefined;
-            return (
-              <li key={automation.id}>
-                <label className="flex items-center gap-3 rounded-lg px-2 py-1.5 hover:bg-surface-raised">
-                  <input
-                    data-testid={`add-automations-check-${automation.id}`}
-                    type="checkbox"
-                    checked={selected.has(automation.id)}
-                    disabled={isPending}
-                    onChange={(event) =>
-                      toggle(automation.id, event.target.checked)
-                    }
-                  />
-                  <span
-                    className="min-w-0 flex-1 truncate text-sm text-contrast"
-                    title={automation.name}
-                  >
-                    {automation.name}
+          {visible.map((automation) => (
+            <li key={automation.id}>
+              <label className="flex items-center gap-3 rounded-lg px-2 py-1.5 hover:bg-surface-raised">
+                <input
+                  data-testid={`add-automations-check-${automation.id}`}
+                  type="checkbox"
+                  checked={selected.has(automation.id)}
+                  disabled={isPending}
+                  onChange={(event) =>
+                    toggle(automation.id, event.target.checked)
+                  }
+                />
+                <span
+                  className="min-w-0 flex-1 truncate text-sm text-contrast"
+                  title={automation.name}
+                >
+                  {automation.name}
+                </span>
+                {failed.has(automation.id) && (
+                  <span className="shrink-0 text-xs text-feedback-error">
+                    {t(I18nKey.FACTORIES$ADD_AUTOMATIONS_ROW_FAILED)}
                   </span>
-                  {currentFactory && (
-                    <span className="shrink-0 text-xs text-muted">
-                      {t(I18nKey.FACTORIES$ADD_AUTOMATIONS_IN_FACTORY, {
-                        factory: currentFactory,
-                      })}
-                    </span>
-                  )}
-                  {failed.has(automation.id) && (
-                    <span className="shrink-0 text-xs text-feedback-error">
-                      {t(I18nKey.FACTORIES$ADD_AUTOMATIONS_ROW_FAILED)}
-                    </span>
-                  )}
-                </label>
-              </li>
-            );
-          })}
+                )}
+              </label>
+            </li>
+          ))}
         </ul>
       </>
     );

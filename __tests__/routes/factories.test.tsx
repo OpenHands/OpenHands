@@ -540,7 +540,7 @@ describe("adding automations to a factory", () => {
     );
   });
 
-  it("lists the automations that are not in this factory, saying where the others are", async () => {
+  it("lists only the automations that are in no factory", async () => {
     // Arrange
     const user = userEvent.setup();
 
@@ -554,10 +554,9 @@ describe("adding automations to a factory", () => {
     expect(
       within(modal).getByTestId("add-automations-check-a-nightly"),
     ).toBeInTheDocument();
-    const moved = within(modal).getByTestId("add-automations-check-a-docs");
-    expect(moved.closest("label")).toHaveTextContent(
-      I18nKey.FACTORIES$ADD_AUTOMATIONS_IN_FACTORY,
-    );
+    expect(
+      within(modal).queryByTestId("add-automations-check-a-docs"),
+    ).not.toBeInTheDocument();
     expect(
       within(modal).queryByTestId("add-automations-check-a-reviewer"),
     ).not.toBeInTheDocument();
@@ -626,7 +625,9 @@ describe("adding automations to a factory", () => {
     await user.click(
       await within(modal).findByTestId("add-automations-check-a-org"),
     );
-    await user.click(within(modal).getByTestId("add-automations-check-a-docs"));
+    await user.click(
+      within(modal).getByTestId("add-automations-check-a-nightly"),
+    );
 
     // Act
     await user.click(within(modal).getByTestId("add-automations-submit"));
@@ -641,9 +642,12 @@ describe("adding automations to a factory", () => {
     expect(AutomationService.updateAutomation).toHaveBeenCalledWith("a-org", {
       factory_id: "f-core",
     });
-    expect(AutomationService.updateAutomation).toHaveBeenCalledWith("a-docs", {
-      factory_id: "f-core",
-    });
+    expect(AutomationService.updateAutomation).toHaveBeenCalledWith(
+      "a-nightly",
+      {
+        factory_id: "f-core",
+      },
+    );
     expect(displaySuccessToast).toHaveBeenCalledWith(
       I18nKey.FACTORIES$ADD_AUTOMATIONS_SUCCESS,
     );
@@ -684,7 +688,7 @@ describe("adding automations to a factory", () => {
     const user = userEvent.setup();
     vi.mocked(AutomationService.updateAutomation).mockImplementation(
       async (id) => {
-        if (id === "a-docs") throw new Error("Forbidden");
+        if (id === "a-nightly") throw new Error("Forbidden");
         return createAutomation({ id, factory_id: "f-core" });
       },
     );
@@ -692,7 +696,9 @@ describe("adding automations to a factory", () => {
     await user.click(
       await within(modal).findByTestId("add-automations-check-a-org"),
     );
-    await user.click(within(modal).getByTestId("add-automations-check-a-docs"));
+    await user.click(
+      within(modal).getByTestId("add-automations-check-a-nightly"),
+    );
 
     // Act
     await user.click(within(modal).getByTestId("add-automations-submit"));
@@ -707,11 +713,11 @@ describe("adding automations to a factory", () => {
     expect(screen.getByTestId("add-automations-modal")).toBeInTheDocument();
     expect(
       within(modal)
-        .getByTestId("add-automations-check-a-docs")
+        .getByTestId("add-automations-check-a-nightly")
         .closest("label"),
     ).toHaveTextContent(I18nKey.FACTORIES$ADD_AUTOMATIONS_ROW_FAILED);
     expect(
-      within(modal).getByTestId("add-automations-check-a-docs"),
+      within(modal).getByTestId("add-automations-check-a-nightly"),
     ).toBeChecked();
   });
 
