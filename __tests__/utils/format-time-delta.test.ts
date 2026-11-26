@@ -72,4 +72,11 @@ describe("formatTimeDelta", () => {
     const threeSecondsAgo = new Date("2023-12-31T23:59:57Z");
     expect(formatTimeDelta(threeSecondsAgo)).toBe("3s");
   });
+
+  it("shows 0s instead of a negative age for timestamps ahead of the browser clock", () => {
+    expect(formatTimeDelta(new Date("2024-01-01T00:00:00.001Z"))).toBe("0s");
+    expect(formatTimeDelta(new Date("2024-01-01T00:00:05Z"))).toBe("0s");
+    expect(formatTimeDelta(new Date("2024-01-01T01:00:00Z"))).toBe("0s");
+    expect(formatTimeDelta("2024-01-01T00:00:05")).toBe("0s");
+  });
 });
