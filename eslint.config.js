@@ -550,6 +550,7 @@ export default [
       "src/components/features/chat/tool-visualizers/primitives/markdown-file-preview.tsx",
       "src/components/features/conversation-panel/skills-modal-section.tsx",
       "src/components/features/home/featured-automations/pinned-automation-card.tsx",
+      "src/components/features/home/home-chat-launcher.tsx",
       "src/components/features/markdown/headings.tsx",
       "src/components/features/mcp-page/mcp-logo-stack-badge.tsx",
       "src/components/features/settings/llm-settings/openai-subscription-auth-card.tsx",

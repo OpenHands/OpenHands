@@ -890,6 +890,10 @@ code .token {
 }
 
 /* Fixed SVG illustration coordinates stay in pixels in embedded roots. */
+@utility home-launcher-top-space {
+  padding-top: max(4rem, 28vh);
+}
+
 @utility file-drop-image {
   top: -40px;
   left: -10px;

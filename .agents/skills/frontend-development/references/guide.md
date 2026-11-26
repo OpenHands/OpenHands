@@ -331,3 +331,9 @@ library CSS contract verifies the exact variable declarations.
 The LLM setup and Say hello slides share `onboarding-step-height`. Keep the
 existing viewport-relative cap and rem offset so their content can scroll at
 short heights. Both slides reject new arbitrary values.
+
+## Home launcher spacing
+
+The idle launcher uses `home-launcher-top-space` for its existing
+`max(4rem, 28vh)` top padding. The active launch path owns its compact padding.
+The Home launcher rejects new arbitrary values.

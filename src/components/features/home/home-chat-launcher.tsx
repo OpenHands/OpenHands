@@ -449,7 +449,7 @@ export function HomeChatLauncher() {
       data-testid="home-chat-launcher"
       className={cn(
         "flex w-full flex-col items-center",
-        activeLaunch ? "h-full min-h-0 py-4" : "pt-[max(4rem,28vh)] pb-10",
+        activeLaunch ? "h-full min-h-0 py-4" : "home-launcher-top-space pb-10",
       )}
     >
       <div

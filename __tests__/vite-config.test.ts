@@ -639,6 +639,10 @@ describe("vite library build", () => {
     expect(declarations(recipe("z-9999"))).toMatchObject({
       "z-index": "9999",
     });
+    expect(declarations(recipe("home-launcher-top-space"))).toMatchObject({
+      "padding-top": "max(4rem,28vh)",
+    });
+
     expect(declarations(recipe("home-dropdown-sticky-list"))).toMatchObject({
       "max-height": "12rem",
     });
