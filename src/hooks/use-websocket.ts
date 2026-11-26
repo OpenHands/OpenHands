@@ -29,6 +29,10 @@ const RECONNECT_MAX_DELAY_MS = 30_000;
 
 export const useWebSocket = (url: string, options?: WebSocketHookOptions) => {
   const connectionKey = options?.connectionKey;
+  const committedConnectionRef = React.useRef({ url, connectionKey });
+  React.useLayoutEffect(() => {
+    committedConnectionRef.current = { url, connectionKey };
+  }, [url, connectionKey]);
   const [isConnected, setIsConnected] = React.useState(false);
   const [error, setError] = React.useState<Error | null>(null);
   const [isReconnecting, setIsReconnecting] = React.useState(false);
@@ -84,6 +88,14 @@ export const useWebSocket = (url: string, options?: WebSocketHookOptions) => {
     };
 
     ws.onmessage = (event) => {
+      if (
+        committedConnectionRef.current.url !== url ||
+        committedConnectionRef.current.connectionKey !== connectionKey ||
+        wsRef.current !== ws ||
+        ws.readyState !== WebSocket.OPEN
+      ) {
+        return;
+      }
       // Deliberately no `lastMessage` state here: nothing reads it, and a
       // React state write per frame re-renders this hook's owner on every
       // streamed token. Consumers subscribe via `onMessage`.
@@ -159,7 +171,7 @@ export const useWebSocket = (url: string, options?: WebSocketHookOptions) => {
       setIsConnected(false);
       optionsRef.current?.onError?.(event);
     };
-  }, [url]);
+  }, [url, connectionKey]);
 
   React.useEffect(() => {
     // Reset shouldReconnect flag and attempt count when creating a new connection
