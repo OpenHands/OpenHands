@@ -366,6 +366,9 @@ export function ProjectConversationList({
         const items = board.conversations.filter(
           (c) => boardGroupOf(c, statuses) === group.id,
         );
+        const hasCurrent = items.some(
+          (c) => projectIdKey(c.conversation_id) === current,
+        );
         return (
           <ProjectPanelGroup
             key={group.id}
@@ -373,10 +376,8 @@ export function ProjectConversationList({
             label={t(group.label)}
             count={items.length}
             // Resolved starts folded, unless the open conversation is in it.
-            defaultOpen={
-              group.id !== "resolved" ||
-              items.some((c) => projectIdKey(c.conversation_id) === current)
-            }
+            defaultOpen={group.id !== "resolved" || hasCurrent}
+            activeKey={hasCurrent ? current : null}
             emphasized={group.id === "needs_you"}
           >
             {items.map((conversation) =>

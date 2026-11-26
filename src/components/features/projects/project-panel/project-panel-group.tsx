@@ -10,6 +10,7 @@ export function ProjectPanelGroup({
   label,
   count,
   defaultOpen = true,
+  activeKey = null,
   emphasized = false,
   children,
 }: {
@@ -17,11 +18,20 @@ export function ProjectPanelGroup({
   label: string;
   count: number;
   defaultOpen?: boolean;
+  /** When non-null and changed, ensures the group expands for the newly active item. */
+  activeKey?: string | null;
   /** Draw the heading in the foreground color, for groups that need the user. */
   emphasized?: boolean;
   children: React.ReactNode;
 }) {
-  const [open, setOpen] = React.useState(defaultOpen);
+  const [open, setOpen] = React.useState(defaultOpen || activeKey !== null);
+  const [prevActiveKey, setPrevActiveKey] = React.useState(activeKey);
+  if (activeKey !== prevActiveKey) {
+    setPrevActiveKey(activeKey);
+    if (activeKey !== null) {
+      setOpen(true);
+    }
+  }
   if (!count) return null;
   const Chevron = open ? ChevronDown : ChevronRight;
   return (

@@ -207,4 +207,62 @@ describe("Sidebar in a project view", () => {
       retry.querySelector('[data-testid="project-conversation-files"]'),
     ).toHaveTextContent("PROJECTS$FILE_COUNT");
   });
+
+  it("expands a folded group on client-side navigation while keeping manual fold on the same conversation", async () => {
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const tree = (path = `/conversations/${view.conversationId}`) => (
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter initialEntries={[path]}>
+          <NavigationProvider
+            value={{
+              currentPath: path,
+              conversationId: view.conversationId,
+              isNavigating: false,
+              navigate: () => {},
+            }}
+          >
+            <SidebarConversationList collapsed={false} />
+          </NavigationProvider>
+        </MemoryRouter>
+      </QueryClientProvider>
+    );
+
+    const { rerender } = render(tree());
+    const resolvedToggle = await screen.findByTestId(
+      "project-panel-group-resolved-toggle",
+    );
+    expect(resolvedToggle).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByText("Audit auth flows")).toBeNull();
+
+    // Navigating client-side to a resolved worker expands Resolved and marks it.
+    openConversation(AUDIT, PROJECT_ID);
+    rerender(tree());
+    expect(resolvedToggle).toHaveAttribute("aria-expanded", "true");
+    const auditRow = await rowOf("Audit auth flows");
+    expect(auditRow).toHaveAttribute("aria-current", "page");
+    expect(auditRow).toHaveTextContent("PROJECTS$YOU_ARE_HERE · ");
+
+    // Folding Resolved by hand while staying on the same conversation keeps it folded.
+    await userEvent.click(resolvedToggle);
+    expect(resolvedToggle).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByText("Audit auth flows")).toBeNull();
+    rerender(tree());
+    expect(resolvedToggle).toHaveAttribute("aria-expanded", "false");
+
+    // Navigating to a conversation in another manually folded group expands it too.
+    const workingToggle = screen.getByTestId(
+      "project-panel-group-working-toggle",
+    );
+    await userEvent.click(workingToggle);
+    expect(workingToggle).toHaveAttribute("aria-expanded", "false");
+    openConversation(RETRY, PROJECT_ID);
+    rerender(tree());
+    expect(workingToggle).toHaveAttribute("aria-expanded", "true");
+    expect(await rowOf("Fix login retry")).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+  });
 });
