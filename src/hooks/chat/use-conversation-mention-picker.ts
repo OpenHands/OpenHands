@@ -62,7 +62,11 @@ export const useConversationMentionPicker = (
   const items = useMemo<ConversationMentionItem[]>(() => {
     const words = filterText.toLowerCase().split(/\s+/).filter(Boolean);
     return (data?.items ?? [])
-      .filter((c) => !conversationId || !sameId(c.id, conversationId))
+      .filter(
+        (c) =>
+          !c.broken_reason &&
+          (!conversationId || !sameId(c.id, conversationId)),
+      )
       .filter((c) => {
         const title = (c.title ?? "").toLowerCase();
         return words.every((word) => title.includes(word));

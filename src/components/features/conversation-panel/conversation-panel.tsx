@@ -4,10 +4,13 @@ import { useConversationDisplayTitleState } from "#/hooks/use-conversation-displ
 import { usePendingTaskAttachmentsStore } from "#/stores/pending-task-attachments-store";
 import { useConversationLaunchStore } from "#/stores/conversation-launch-store";
 import React from "react";
+import { Link2, Lock } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { I18nKey } from "#/i18n/declaration";
 import { useNavigation } from "#/context/navigation-context";
 import { useActiveBackend } from "#/contexts/active-backend-context";
+import { useAutomationPermissions } from "#/hooks/use-automation-permissions";
+import { useSharedConversationDiscovery } from "#/hooks/query/use-shared-conversation-discovery";
 import { useBackendScopedPath } from "#/hooks/use-backend-scoped-path";
 import { usePaginatedConversations } from "#/hooks/query/use-paginated-conversations";
 import { useAgentProfiles } from "#/hooks/query/use-agent-profiles";
@@ -43,6 +46,7 @@ import { ConversationPanelRow } from "./conversation-panel-row";
 import { StartTaskCard } from "./start-task-card/start-task-card";
 import { ConversationCardSkeleton } from "./conversation-card/conversation-card-skeleton";
 import { CompactConversationRow } from "./compact-conversation-row";
+import { BrokenConversationRow } from "./broken-conversation-row";
 import { useConversationPanelPreferencesStore } from "#/stores/conversation-panel-preferences-store";
 import { cn } from "#/utils/utils";
 import { ConversationLayoutsMenu } from "./conversation-layouts-menu";
@@ -50,6 +54,8 @@ import { ConversationActiveTagFilters } from "./conversation-active-tag-filters"
 import { ConversationPanelNewThreadPicker } from "./conversation-panel-new-thread-picker";
 import { ConversationGroupFolderList } from "./conversation-group-folder-list";
 import { ConversationPanelPinnedSection } from "./conversation-panel-pinned-section";
+import { SharedConversationList } from "./shared-conversation-list";
+import { SegmentedToggle } from "#/components/features/files-tab/segmented-toggle";
 import { ConversationSubConversationGroup } from "./conversation-sub-conversation-group";
 import {
   applyAutomationConversationFilter,
@@ -105,6 +111,22 @@ export function ConversationPanel({
   const { t } = useTranslation("openhands");
   const { conversationId: currentConversationId, navigate } = useNavigation();
   const { backend: activeBackend, orgId } = useActiveBackend();
+  const { userId } = useAutomationPermissions();
+  const isSharedConversationDiscoveryEnabled = useSharedConversationDiscovery();
+  // Members share conversations with a cloud team workspace only: a personal
+  // one's org id is the user id, and it has no other members to list for.
+  // An Org Admin can also hide the list from the org's members.
+  const canShowSharedList =
+    !compact &&
+    activeBackend.kind === "cloud" &&
+    !!orgId &&
+    !!userId &&
+    orgId !== userId &&
+    isSharedConversationDiscoveryEnabled;
+  const [listScope, setListScope] = React.useState<"private" | "shared">(
+    "private",
+  );
+  const showSharedList = canShowSharedList && listScope === "shared";
   const backendScopedPath = useBackendScopedPath();
   const prefetchConversation = usePrefetchUserConversation();
   // Click-outside is only relevant in the legacy drawer mode where an
@@ -1179,9 +1201,20 @@ export function ConversationPanel({
   const handleConfirmDelete = () => {
     if (selectedConversationId) {
       const conversationId = selectedConversationId;
+      const broken = allLoadedConversations.some(
+        (conversation) =>
+          conversation.id === conversationId && conversation.broken_reason,
+      );
       deleteConversation(
-        { conversationId },
+        broken ? { conversationId, broken } : { conversationId },
         {
+          onError: () => {
+            if (broken) {
+              displayErrorToast(
+                t(I18nKey.CONVERSATION_PANEL$CORRUPTED_DELETE_FAILED),
+              );
+            }
+          },
           onSuccess: () => {
             removeArchivedConversation(activeBackend.id, conversationId);
             if (conversationId === currentConversationId) {
@@ -1266,8 +1299,13 @@ export function ConversationPanel({
     // deduplicated set before deletes start invalidating the paginated cache.
     const idsToDelete = allLoadedConversations.map((c) => c.id);
     const results = await Promise.allSettled(
-      idsToDelete.map((conversationId) =>
-        deleteConversationAsync({ conversationId, deletionScope }),
+      allLoadedConversations.map(
+        ({ id: conversationId, broken_reason: reason }) =>
+          deleteConversationAsync(
+            reason
+              ? { conversationId, deletionScope, broken: true }
+              : { conversationId, deletionScope },
+          ),
       ),
     );
 
@@ -1300,6 +1338,20 @@ export function ConversationPanel({
       conversation: (typeof conversations)[number],
       options?: { inPinnedSection?: boolean },
     ) => {
+      if (conversation.broken_reason) {
+        return (
+          <BrokenConversationRow
+            key={conversation.id}
+            conversation={conversation}
+            onDelete={() =>
+              handleDeleteProject(
+                conversation.id,
+                conversation.title ?? conversation.id,
+              )
+            }
+          />
+        );
+      }
       const { title: displayTitle, pending: titlePending } = getTitle(
         conversation.id,
         conversation.title,
@@ -1499,7 +1551,7 @@ export function ConversationPanel({
             data-testid="older-conversations-summary"
             className="flex min-w-0 flex-nowrap items-center gap-x-2 py-2 pl-4 pr-2.5 text-muted"
           >
-            {hasVisibleGroups ? (
+            {hasVisibleGroups && !showSharedList ? (
               <button
                 type="button"
                 data-testid="conversations-header-toggle"
@@ -1522,24 +1574,50 @@ export function ConversationPanel({
               <ConversationPanelNewThreadPicker
                 backendKind={activeBackend.kind}
               />
-              <ConversationLayoutsMenu
-                menuOpen={filterMenuOpen}
-                setMenuOpen={setFilterMenuOpen}
-                menuRef={filterMenuRef}
-                backendKind={activeBackend.kind}
-                tagFacets={tagFacets}
-                automationNameFacets={automationNameFacets}
-                totalConversationsCount={allLoadedConversations.length}
-                onRequestDeleteAll={handleRequestDeleteAll}
-              />
+              {/* Its filters and "Delete all" act on the private list only. */}
+              {!showSharedList && (
+                <ConversationLayoutsMenu
+                  menuOpen={filterMenuOpen}
+                  setMenuOpen={setFilterMenuOpen}
+                  menuRef={filterMenuRef}
+                  backendKind={activeBackend.kind}
+                  tagFacets={tagFacets}
+                  automationNameFacets={automationNameFacets}
+                  totalConversationsCount={allLoadedConversations.length}
+                  onRequestDeleteAll={handleRequestDeleteAll}
+                />
+              )}
             </div>
           </div>
+          {canShowSharedList && (
+            <div className="pb-2 pl-4 pr-2.5">
+              <SegmentedToggle
+                value={listScope}
+                options={[
+                  {
+                    value: "private",
+                    label: t(I18nKey.CONVERSATION_PANEL$PRIVATE),
+                    icon: <Lock className="size-3" aria-hidden />,
+                  },
+                  {
+                    value: "shared",
+                    label: t(I18nKey.CONVERSATION_PANEL$SHARED),
+                    icon: <Link2 className="size-3" aria-hidden />,
+                  },
+                ]}
+                onChange={setListScope}
+                ariaLabel={t(I18nKey.SIDEBAR$CONVERSATIONS)}
+                testId="conversation-list-scope"
+                equalWidth
+              />
+            </div>
+          )}
         </div>
       )}
 
       {/* Sits above the list, not inside the scroll container: a filter that
           scrolls out of view is a filter the user can't see. */}
-      {!compact && (
+      {!compact && !showSharedList && (
         <ConversationActiveTagFilters
           selectedFacets={selectedTagFacets}
           onToggleFacet={toggleTagFacet}
@@ -1549,6 +1627,10 @@ export function ConversationPanel({
         />
       )}
 
+      {showSharedList && <SharedConversationList onClose={onClose} />}
+
+      {/* Hidden, not unmounted, while the shared list shows, so the private
+          list keeps its scroll position and loaded pages. */}
       <div
         ref={scrollContainerRef}
         data-testid="conversation-panel-list-scroll"
@@ -1558,6 +1640,7 @@ export function ConversationPanel({
         className={cn(
           "flex min-h-0 flex-1 flex-col overflow-y-auto overflow-x-hidden overscroll-contain custom-scrollbar-always",
           !compact && "conversation-panel-list-scroll",
+          showSharedList && "hidden",
         )}
       >
         {showInitialSkeleton && <ConversationCardSkeleton compact={compact} />}

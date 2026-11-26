@@ -59,10 +59,16 @@ describe("npm publish workflow", () => {
       "VITE_POSTHOG_API_KEY: ${{ vars.POSTHOG_PROD_KEY }}",
     );
     expect(buildAppStep).toContain("npm run build");
+    expect(buildAppStep).toContain(
+      "VITE_POSTHOG_SURVEY_ID: ${{ vars.POSTHOG_SURVEY_ID }}",
+    );
     expect(buildLibraryStep).toContain(
       "VITE_POSTHOG_API_KEY: ${{ vars.POSTHOG_PROD_KEY }}",
     );
     expect(buildLibraryStep).toContain("npm run build:lib");
+    expect(buildLibraryStep).toContain(
+      "VITE_POSTHOG_SURVEY_ID: ${{ vars.POSTHOG_SURVEY_ID }}",
+    );
   });
 
   it("passes the selected PostHog key through Docker's supported build arg", () => {
@@ -77,6 +83,13 @@ describe("npm publish workflow", () => {
     expect(dockerfile).toContain('ARG VITE_POSTHOG_API_KEY=""');
     expect(dockerfile).toContain(
       "ENV VITE_POSTHOG_API_KEY=${VITE_POSTHOG_API_KEY}",
+    );
+    expect(workflow).toContain(
+      "VITE_POSTHOG_SURVEY_ID=${{ vars.POSTHOG_SURVEY_ID }}",
+    );
+    expect(dockerfile).toContain('ARG VITE_POSTHOG_SURVEY_ID=""');
+    expect(dockerfile).toContain(
+      "ENV VITE_POSTHOG_SURVEY_ID=${VITE_POSTHOG_SURVEY_ID}",
     );
     expect(dockerfile).not.toContain("VITE_APP_ENV");
   });
