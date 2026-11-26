@@ -3,8 +3,9 @@ import {
   useSessionActivityStore,
 } from "#/stores/session-activity-store";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
-import type { ConversationDeletionScope } from "#/api/conversation-service/agent-server-conversation-service.api";
+import AgentServerConversationService, {
+  type ConversationDeletionScope,
+} from "#/api/conversation-service/agent-server-conversation-service.api";
 import { clearConversationLocalStorage } from "#/utils/conversation-local-storage";
 
 export const useDeleteConversation = () => {
