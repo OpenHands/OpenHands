@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  resolveUploadLimits,
   validateFiles,
   validateIndividualFileSizes,
   validateTotalFileSize,
@@ -8,14 +9,22 @@ import {
 const MEBIBYTE = 1024 * 1024;
 const THREE_MEBIBYTES = 3 * MEBIBYTE;
 
-function fileWithSize(name: string, size: number): File {
-  const file = new File([], name);
+function fileWithSize(
+  name: string,
+  size: number,
+  type = "application/octet-stream",
+) {
+  const file = new File([], name, { type });
   Object.defineProperty(file, "size", { value: size });
   return file;
 }
 
+function imageWithSize(name: string, size: number) {
+  return fileWithSize(name, size, "image/png");
+}
+
 describe("attachment size validation", () => {
-  it("accepts a file at the 3 MiB boundary and rejects one byte over it", () => {
+  it("accepts a file at the default limit and rejects one byte over it", () => {
     expect(
       validateIndividualFileSizes([
         fileWithSize("at-limit.zip", THREE_MEBIBYTES),
@@ -48,7 +57,7 @@ describe("attachment size validation", () => {
     });
   });
 
-  it("accepts new and existing files whose combined size is exactly 3 MiB", () => {
+  it("accepts new and existing files whose combined size is exactly the limit", () => {
     expect(
       validateTotalFileSize(
         [fileWithSize("new.bin", MEBIBYTE)],
@@ -128,5 +137,91 @@ describe("attachment size validation", () => {
         [fileWithSize("existing.bin", 2 * MEBIBYTE)],
       ),
     ).toEqual({ isValid: true });
+  });
+
+  it("holds an image to the provider's limit rather than the default one", () => {
+    const limits = resolveUploadLimits("anthropic");
+
+    // 4 MB is over the 3 MB default but within Anthropic's 5 MB.
+    expect(
+      validateIndividualFileSizes(
+        [imageWithSize("shot.png", 4 * MEBIBYTE)],
+        limits,
+      ),
+    ).toEqual({ isValid: true });
+
+    expect(
+      validateIndividualFileSizes(
+        [imageWithSize("shot.png", 6 * MEBIBYTE)],
+        limits,
+      ),
+    ).toEqual({
+      isValid: false,
+      errorMessage: "Files exceeding 5MB are not allowed: shot.png",
+      oversizedFiles: ["shot.png"],
+    });
+  });
+
+  it("holds a non-image attachment to the default limit even on a permissive provider", () => {
+    const limits = resolveUploadLimits("openai");
+
+    // The provider never receives the bytes of a PDF, so its 50 MB image
+    // limit says nothing about this attachment.
+    expect(
+      validateIndividualFileSizes(
+        [fileWithSize("report.pdf", 4 * MEBIBYTE, "application/pdf")],
+        limits,
+      ),
+    ).toEqual({
+      isValid: false,
+      errorMessage: "Files exceeding 3MB are not allowed: report.pdf",
+      oversizedFiles: ["report.pdf"],
+    });
+  });
+
+  it("keeps an image and a file on different ceilings in one selection", () => {
+    const limits = resolveUploadLimits("anthropic");
+
+    const result = validateIndividualFileSizes(
+      [
+        imageWithSize("shot.png", 6 * MEBIBYTE),
+        fileWithSize("report.pdf", 4 * MEBIBYTE, "application/pdf"),
+      ],
+      limits,
+    );
+
+    expect(result.isValid).toBe(false);
+    expect(result.errorMessage).toContain(
+      "Files exceeding 5MB are not allowed: shot.png",
+    );
+    expect(result.errorMessage).toContain(
+      "Files exceeding 3MB are not allowed: report.pdf",
+    );
+    expect(result.oversizedFiles).toEqual(["shot.png", "report.pdf"]);
+  });
+
+  it("falls back to the default limit for a provider with no published limit", () => {
+    const limits = resolveUploadLimits("some-unknown-provider");
+
+    expect(
+      validateIndividualFileSizes(
+        [imageWithSize("shot.png", 4 * MEBIBYTE)],
+        limits,
+      ),
+    ).toEqual({
+      isValid: false,
+      errorMessage: "Files exceeding 3MB are not allowed: shot.png",
+      oversizedFiles: ["shot.png"],
+    });
+  });
+
+  it("resolves the default limits when no provider is known", () => {
+    expect(resolveUploadLimits(null)).toEqual({
+      imageLimitBytes: 3 * MEBIBYTE,
+      imageLimitMb: 3,
+      attachmentLimitBytes: 3 * MEBIBYTE,
+      attachmentLimitMb: 3,
+      provider: null,
+    });
   });
 });

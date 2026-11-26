@@ -8,6 +8,7 @@ import { displayErrorToast } from "#/utils/custom-toast-handlers";
 import { validateFiles } from "#/utils/file-validation";
 import { processFiles, processImages } from "#/utils/file-processing";
 import { useConversationStore } from "#/stores/conversation-store";
+import { useCurrentUploadLimits } from "#/hooks/query/use-current-upload-limits";
 
 /**
  * Shared attachment pipeline for home and conversation chat inputs.
@@ -25,9 +26,15 @@ export function useChatAttachmentUpload() {
     markImagesAsPasted,
   } = useConversationStore();
 
+  const limits = useCurrentUploadLimits();
+
   const handleUpload = useCallback(
     async (selectedFiles: File[], _options?: ChatAttachmentUploadOptions) => {
-      const validation = validateFiles(selectedFiles, [...images, ...files]);
+      const validation = validateFiles(
+        selectedFiles,
+        [...images, ...files],
+        limits,
+      );
 
       if (!validation.isValid) {
         displayErrorToast(`Error: ${validation.errorMessage}`);
@@ -88,6 +95,7 @@ export function useChatAttachmentUpload() {
     [
       images,
       files,
+      limits,
       addImages,
       addFiles,
       addFileLoading,

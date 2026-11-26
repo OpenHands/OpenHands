@@ -104,6 +104,8 @@ export function parseArgs(argv = process.argv.slice(2), env = process.env) {
     lockToCloud: null,
     basePath: "/",
     vscodeBasePath: null,
+    // Deployment overrides for the per-provider image upload limits, as JSON.
+    providerUploadLimits: null,
     // Also settable via the --disable-telemetry flag below.
     disableTelemetry: isEnvFlagEnabled(env.AGENT_CANVAS_DISABLE_TELEMETRY),
   };
@@ -147,12 +149,15 @@ export function parseArgs(argv = process.argv.slice(2), env = process.env) {
       case "--lock-to-cloud":
         config.lockToCloud = argv[++i] || null;
         break;
+      case "--provider-upload-limits":
+        config.providerUploadLimits = argv[++i] || null;
+        break;
       case "--base-path":
         config.basePath = normalizeBasePath(argv[++i]);
         break;
       case "--vscode-base-path": {
         const prefix = argv[++i];
-        if (!prefix || !prefix.startsWith("/")) {
+        if (!prefix?.startsWith("/")) {
           throw new Error(
             `--vscode-base-path value must start with '/': ${prefix ?? "(empty)"}`,
           );
@@ -172,7 +177,7 @@ export function parseArgs(argv = process.argv.slice(2), env = process.env) {
         break;
       case "--reject-prefix": {
         const prefix = argv[++i];
-        if (!prefix || !prefix.startsWith("/")) {
+        if (!prefix?.startsWith("/")) {
           throw new Error(
             `--reject-prefix value must start with '/': ${prefix ?? "(empty)"}`,
           );
@@ -182,7 +187,7 @@ export function parseArgs(argv = process.argv.slice(2), env = process.env) {
       }
       case "--no-referrer-prefix": {
         const prefix = argv[++i];
-        if (!prefix || !prefix.startsWith("/")) {
+        if (!prefix?.startsWith("/")) {
           throw new Error(
             `--no-referrer-prefix value must start with '/': ${prefix ?? "(empty)"}`,
           );
@@ -205,6 +210,14 @@ export function parseArgs(argv = process.argv.slice(2), env = process.env) {
   // shared hosts. Only used in local mode (never with --auth-required).
   if (!config.sessionApiKey && !config.authRequired && env.SESSION_API_KEY) {
     config.sessionApiKey = env.SESSION_API_KEY;
+  }
+
+  // Fallback: the per-provider image upload limits can also come from the
+  // environment, as JSON (e.g. '{"anthropic": 10}'). The flag wins over the
+  // environment, and an unparsable value is ignored rather than fatal, so a
+  // typo cannot take the whole server down.
+  if (!config.providerUploadLimits && env.AGENT_CANVAS_PROVIDER_UPLOAD_LIMITS) {
+    config.providerUploadLimits = env.AGENT_CANVAS_PROVIDER_UPLOAD_LIMITS;
   }
 
   // Guard: --session-api-key and --auth-required are semantically
@@ -281,6 +294,13 @@ OPTIONS:
   --lock-to-cloud <cloud-url>  Lock backend setup to a single OpenHands Cloud
                                URL. Hides manual/local backend setup and the
                                custom Cloud URL field in the pre-built frontend.
+  --provider-upload-limits <json>
+                               Override the per-provider image upload limits
+                               (MB) as JSON, e.g. '{"anthropic": 10}'. The
+                               pre-built frontend reads them from
+                               window.__AGENT_CANVAS_PROVIDER_UPLOAD_LIMITS__.
+                               Alternatively set the
+                               AGENT_CANVAS_PROVIDER_UPLOAD_LIMITS env var.
   --disable-telemetry          Disable all product telemetry (including the
                                anonymous install event) in the pre-built
                                frontend at runtime, without VITE_DO_NOT_TRACK
@@ -387,6 +407,7 @@ function makeConfigInjectionScript(
   basePath,
   vscodeBasePath,
   disableTelemetry,
+  providerUploadLimits,
 ) {
   const parts = [];
 
@@ -446,6 +467,12 @@ function makeConfigInjectionScript(
     parts.push(`window.__AGENT_CANVAS_DO_NOT_TRACK__=true;`);
   }
 
+  if (providerUploadLimits) {
+    parts.push(
+      `window.__AGENT_CANVAS_PROVIDER_UPLOAD_LIMITS__=${serializeForInlineScript(providerUploadLimits)};`,
+    );
+  }
+
   if (parts.length === 0) return "";
 
   return `<script>(function(){${parts.join("")}}());</script>`;
@@ -467,6 +494,7 @@ async function serveInjectedIndexHtml(
     basePath,
     vscodeBasePath,
     disableTelemetry,
+    providerUploadLimits,
   } = {},
 ) {
   let content;
@@ -484,6 +512,7 @@ async function serveInjectedIndexHtml(
     basePath,
     vscodeBasePath,
     disableTelemetry,
+    providerUploadLimits,
   );
   // Inject right before </head> so the key is available before any app code runs.
   // replace() targets the first (and only) </head> in well-formed HTML.
@@ -534,6 +563,7 @@ function needsRuntimeInjection(injectionOpts) {
     injectionOpts.lockToCloud ||
     injectionOpts.vscodeBasePath ||
     injectionOpts.disableTelemetry ||
+    injectionOpts.providerUploadLimits ||
     (injectionOpts.basePath && injectionOpts.basePath !== "/"),
   );
 }
@@ -689,6 +719,7 @@ export function startStaticServer(config) {
     basePath: normalizeBasePath(config.basePath),
     vscodeBasePath: config.vscodeBasePath || null,
     disableTelemetry: config.disableTelemetry || false,
+    providerUploadLimits: config.providerUploadLimits || null,
   };
   const basePath = injectionOpts.basePath;
   const rejectPrefixes = config.rejectPrefixes ?? [];

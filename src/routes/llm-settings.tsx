@@ -6,6 +6,7 @@ import { useSettings } from "#/hooks/query/use-settings";
 import { SettingsInput } from "#/components/features/settings/settings-input";
 import { SettingsDropdownInput } from "#/components/features/settings/settings-dropdown-input";
 import { OpenAISubscriptionAuthCard } from "#/components/features/settings/llm-settings/openai-subscription-auth-card";
+import { ProviderUploadLimitNote } from "#/components/features/settings/llm-settings/provider-upload-limit-note";
 import { HelpLink } from "#/ui/help-link";
 import { KeyStatusIcon } from "#/components/features/settings/key-status-icon";
 import {
@@ -175,6 +176,27 @@ export function LlmSettingsScreen({
   );
   const [enableSubscriptionModels, setEnableSubscriptionModels] =
     React.useState(initialAuthType === LLM_AUTH_TYPE_SUBSCRIPTION);
+  // The provider the user picked in the model selector. It is tracked
+  // separately from `llm.model` because that value only carries a composed
+  // `provider/model` string, which is empty while a provider is selected but
+  // its model is not.
+  const [selectedProvider, setSelectedProvider] = React.useState<string | null>(
+    null,
+  );
+  // Seed the provider from the persisted model so the note is correct before
+  // the user touches the selector.
+  React.useEffect(() => {
+    const persistedModel =
+      (typeof initialValueOverrides?.["llm.model"] === "string"
+        ? initialValueOverrides["llm.model"]
+        : undefined) ??
+      (typeof persistedLlmSettings?.model === "string"
+        ? persistedLlmSettings.model
+        : undefined);
+    if (!persistedModel) return;
+    const { provider } = extractModelAndProvider(persistedModel);
+    if (provider) setSelectedProvider(provider);
+  }, [initialValueOverrides?.["llm.model"], persistedLlmSettings?.model]);
   const {
     data: subscriptionModels,
     isLoading: isSubscriptionModelsLoading,
@@ -460,9 +482,12 @@ export function LlmSettingsScreen({
                         onChange("llm.model", nextModel);
                       }
                     }}
+                    onProviderChanged={setSelectedProvider}
                     wrapperClassName="!flex-col !gap-6"
                     isDisabled={isDisabled}
                   />
+
+                  <ProviderUploadLimitNote provider={selectedProvider} />
 
                   {showConnectionSelector ? renderConnectionSelector() : null}
 
@@ -552,6 +577,7 @@ export function LlmSettingsScreen({
       isWaitingForSubscriptionModels,
       settings?.llm_api_key_set,
       subscriptionModels,
+      selectedProvider,
       t,
     ],
   );
