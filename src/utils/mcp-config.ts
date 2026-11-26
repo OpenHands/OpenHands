@@ -410,17 +410,20 @@ export function buildRenameMcpConfigPatch(
   previous: MCPServer,
   edited: MCPServerConfig,
 ): MCPConfigPatch {
-  const previousSecrets =
-    previous.transport === "stdio"
-      ? previous.env
-      : { auth: previous.auth, headers: previous.headers };
-  if (hasRedactedMcpSecretLeaf(previousSecrets)) {
-    throw new Error(MCP_RENAME_CREDENTIAL_ERROR);
-  }
   const renamedServer = applyMcpServerPatch(
     previous,
     buildMcpServerPatch(previous, edited),
   );
+  // The new key has no stored credential to restore a redacted value from, so
+  // only a server whose credential was replaced or cleared in this edit can be
+  // renamed.
+  const renamedSecrets =
+    renamedServer.transport === "stdio"
+      ? renamedServer.env
+      : { auth: renamedServer.auth, headers: renamedServer.headers };
+  if (hasRedactedMcpSecretLeaf(renamedSecrets)) {
+    throw new Error(MCP_RENAME_CREDENTIAL_ERROR);
+  }
   return {
     [oldKey]: null,
     [newKey]: renamedServer,
