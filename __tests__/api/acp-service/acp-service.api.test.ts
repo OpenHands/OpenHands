@@ -185,7 +185,10 @@ describe("AcpService.discoverModels", () => {
     discoverModels.mockResolvedValue({ current_model_id: "default" });
 
     await expect(
-      AcpService.discoverModels("claude-code", ["ANTHROPIC_API_KEY"]),
+      AcpService.discoverModels(
+        { server: "claude-code", command: [], args: [] },
+        ["ANTHROPIC_API_KEY"],
+      ),
     ).resolves.toEqual({ current_model_id: "default" });
 
     expect(discoverModels).toHaveBeenCalledWith({
@@ -197,5 +200,29 @@ describe("AcpService.discoverModels", () => {
         }),
       },
     });
+  });
+
+  it("sends a custom launch's command and args as separate arrays", async () => {
+    discoverModels.mockResolvedValue({ current_model_id: "default" });
+
+    await AcpService.discoverModels(
+      {
+        server: "custom",
+        command: ["my-acp-wrapper", "--flag"],
+        args: ["--extra"],
+      },
+      [],
+    );
+
+    expect(discoverModels).toHaveBeenCalledWith(
+      expect.objectContaining({
+        agent_settings: {
+          agent_kind: "acp",
+          acp_server: "custom",
+          acp_command: ["my-acp-wrapper", "--flag"],
+          acp_args: ["--extra"],
+        },
+      }),
+    );
   });
 });
