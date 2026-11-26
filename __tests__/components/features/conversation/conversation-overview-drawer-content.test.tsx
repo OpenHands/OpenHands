@@ -412,4 +412,18 @@ describe("ConversationOverviewDrawer desktop CSS", () => {
       screen.queryByTestId("conversation-overview-drawer-resize-handle"),
     ).toBeNull();
   });
+
+  it("gives the resize handle wrapper a flex stretch context so the grip spans the drawer height", async () => {
+    const user = userEvent.setup();
+    const view = renderShell();
+    await user.click(screen.getByTestId("open-drawer-section"));
+    const handleWrapper = screen.getByTestId(
+      "conversation-overview-drawer-resize-handle",
+    );
+    const styles = await compiledStyles(view.container);
+
+    expect(handleWrapper).toHaveClass("flex", "self-stretch");
+    expect(styles(handleWrapper).declarations.get("display")).toBe("flex");
+    expect(styles(handleWrapper).declarations.get("align-self")).toBe("stretch");
+  });
 });
