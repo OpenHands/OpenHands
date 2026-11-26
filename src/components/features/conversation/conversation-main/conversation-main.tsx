@@ -370,7 +370,6 @@ export function ConversationMain({ children }: { children?: ReactNode } = {}) {
           <div className="flex-1 min-h-0 flex flex-col">
             <ChatInterfaceWrapper
               pendingContent={children}
-              isRightPanelShown={!isMobile && isRightPanelShown}
               showGitControlBar={!isAutomationSetupMode}
               showEmptyStateSuggestions={!isAutomationSetupMode}
               composerDockTarget={composerDockTarget}
