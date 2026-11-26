@@ -17,6 +17,16 @@ interface SearchOptions {
 
 const MAX_OUTPUT_PAGES = 20; // safety cap; >2000 output events is unlikely.
 
+/** A command's `BashOutput` events, and whether the page cap cut them short. */
+export interface BashOutputListing {
+  outputs: BashOutput[];
+  /**
+   * True when retrieval stopped at the page cap while the server still
+   * reported a next page, so `outputs` is not the command's full output.
+   */
+  truncated: boolean;
+}
+
 function isBashOutput(event: BashEvent): event is BashOutput {
   return event.kind === "BashOutput";
 }
@@ -44,17 +54,20 @@ function isBashOutput(event: BashEvent): event is BashOutput {
  */
 class BashService {
   /**
-   * Fetch all `BashOutput` events for a bash command, paginated and
-   * sorted by timestamp. Returns events in command-emission order so
-   * callers can concatenate `stdout` / `stderr` values directly.
+   * Fetch the `BashOutput` events for a bash command, paginated and
+   * sorted by timestamp, up to `MAX_OUTPUT_PAGES` pages. Events come back
+   * in command-emission order so callers can concatenate `stdout` /
+   * `stderr` values directly; `truncated` says whether pages were left
+   * unread.
    */
   static async listOutputs(
     conversationUrl: string | null,
     sessionApiKey: string | null | undefined,
     bashCommandId: string,
-  ): Promise<BashOutput[]> {
+  ): Promise<BashOutputListing> {
     const outputs: BashOutput[] = [];
     let pageId: string | undefined;
+    let truncated = false;
     for (let i = 0; i < MAX_OUTPUT_PAGES; i += 1) {
       const page = await BashService.searchEvents(
         conversationUrl,
@@ -71,8 +84,9 @@ class BashService {
       });
       if (!page.next_page_id) break;
       pageId = page.next_page_id;
+      truncated = i === MAX_OUTPUT_PAGES - 1;
     }
-    return outputs;
+    return { outputs, truncated };
   }
 
   private static async searchEvents(

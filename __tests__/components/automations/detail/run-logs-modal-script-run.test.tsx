@@ -85,17 +85,20 @@ describe("RunLogsModal — script run without a conversation (cloud)", () => {
   it("shows the run's output instead of loading forever", async () => {
     // Arrange
     batchGetCloudSandboxesMock.mockResolvedValue([runningSandbox]);
-    listOutputsMock.mockResolvedValue([
-      {
-        kind: "BashOutput",
-        id: "out-1",
-        command_id: "cmd-1",
-        timestamp: "2026-01-01T10:00:00Z",
-        order: 0,
-        stdout: "scanned 3 repositories\n",
-        stderr: "",
-      },
-    ]);
+    listOutputsMock.mockResolvedValue({
+      outputs: [
+        {
+          kind: "BashOutput",
+          id: "out-1",
+          command_id: "cmd-1",
+          timestamp: "2026-01-01T10:00:00Z",
+          order: 0,
+          stdout: "scanned 3 repositories\n",
+          stderr: "",
+        },
+      ],
+      truncated: false,
+    });
 
     // Act
     renderModal();
