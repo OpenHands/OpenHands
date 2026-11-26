@@ -9,9 +9,11 @@ export const DEFAULT_BIND_HOST = "127.0.0.1";
 
 const STATIC_LOOPBACK_HOSTS = new Set(["::1", "localhost"]);
 const IPV4_LOOPBACK_RE = /^127(?:\.(?:25[0-5]|2[0-4]\d|[01]?\d\d?)){3}$/;
+// `_` is not valid in DNS names but is common in hostnames that never reach DNS
+// (Docker Compose service names, /etc/hosts aliases); WHATWG URL accepts it.
 const LOCALHOST_SUBDOMAIN_RE =
-  /^(?:[a-z\d](?:[a-z\d-]*[a-z\d])?\.)+localhost$/i;
-const HOST_AUTHORITY_RE = /^[a-z\d.:[\]-]+$/i;
+  /^(?:[a-z\d_](?:[a-z\d_-]*[a-z\d_])?\.)+localhost$/i;
+const HOST_AUTHORITY_RE = /^[a-z\d_.:[\]-]+$/i;
 const SAFE_HTTP_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 
 export function isLoopbackBind(host) {
@@ -102,6 +104,23 @@ export function isLoopbackHostname(hostname) {
 }
 
 /**
+ * Extra hostnames a loopback listener accepts in `Host` and `Origin`, from
+ * comma-separated `OH_ALLOWED_HOSTS`: the public name of a tunnel or reverse
+ * proxy (ngrok, Caddy, cloudflared) that forwards to it.
+ *
+ * @param {Record<string, string | undefined>} [env]
+ * @returns {Set<string>}
+ */
+export function resolveAllowedHosts(env = process.env) {
+  return new Set(
+    String(env.OH_ALLOWED_HOSTS ?? "")
+      .split(",")
+      .map((host) => host.trim().toLowerCase())
+      .filter(Boolean),
+  );
+}
+
+/**
  * Check whether an incoming `Origin` header differs from `req.headers.host`.
  * Requests without `Origin` (plain navigations, non-browser clients) pass.
  *
@@ -118,22 +137,25 @@ export function isCrossOriginHttpRequest(req) {
 
 /**
  * On a loopback listener, reject requests whose `Host` header is missing,
- * malformed, carries userinfo (`@`), or names a non-loopback host (DNS rebinding),
- * and reject WebSocket upgrades or unsafe HTTP mutations carrying a foreign or
- * `null` `Origin` (CSWSH / CSRF).
+ * malformed, carries userinfo (`@`), or names a host that is neither loopback
+ * nor in `OH_ALLOWED_HOSTS` (DNS rebinding), and reject WebSocket upgrades or
+ * unsafe HTTP mutations carrying a foreign or `null` `Origin` (CSWSH / CSRF).
  *
  * @param {import("node:http").IncomingMessage} req
  * @param {string} [bindHost]
- * @param {{ upgrade?: boolean }} [options]
+ * @param {{ upgrade?: boolean, env?: Record<string, string | undefined> }} [options]
  */
 export function isForeignLoopbackRequest(
   req,
   bindHost,
-  { upgrade = false } = {},
+  { upgrade = false, env = process.env } = {},
 ) {
   if (!isLoopbackBind(bindHost)) return false;
+  const allowedHosts = resolveAllowedHosts(env);
+  const isTrusted = (hostname) =>
+    isLoopbackHostname(hostname) || allowedHosts.has(hostname);
   const parsedHost = parseHttpHostHeader(req.headers?.host);
-  if (!parsedHost || !isLoopbackHostname(parsedHost.hostname)) {
+  if (!parsedHost || !isTrusted(parsedHost.hostname)) {
     return true;
   }
   const rawOrigin = req.headers?.origin;
@@ -141,7 +163,7 @@ export function isForeignLoopbackRequest(
   const method = String(req.method ?? "GET").toUpperCase();
   if (!upgrade && SAFE_HTTP_METHODS.has(method)) return false;
   const parsedOrigin = parseHttpOriginHeader(rawOrigin);
-  return !parsedOrigin || !isLoopbackHostname(parsedOrigin.hostname);
+  return !parsedOrigin || !isTrusted(parsedOrigin.hostname);
 }
 
 /**

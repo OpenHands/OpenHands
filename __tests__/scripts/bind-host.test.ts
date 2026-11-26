@@ -10,6 +10,7 @@ import {
   isLoopbackHostname,
   parseHttpHostHeader,
   parseHttpOriginHeader,
+  resolveAllowedHosts,
   resolveBindHost,
 } from "../../scripts/bind-host.mjs";
 
@@ -92,6 +93,11 @@ describe("bind-host", () => {
     expect(parseHttpHostHeader("evil.example@127.0.0.1:8000")).toBeNull();
     expect(parseHttpHostHeader("127.0.0.1:8000, evil.example")).toBeNull();
     expect(parseHttpHostHeader("127.999.0.1:8000")).toBeNull();
+    expect(parseHttpHostHeader("agent_canvas:8000")).toEqual({
+      host: "agent_canvas:8000",
+      hostname: "agent_canvas",
+      port: "8000",
+    });
     expect(parseHttpHostHeader("")).toBeNull();
     expect(parseHttpHostHeader(undefined)).toBeNull();
   });
@@ -101,6 +107,7 @@ describe("bind-host", () => {
     expect(isLoopbackHostname("::1")).toBe(true);
     expect(isLoopbackHostname("localhost")).toBe(true);
     expect(isLoopbackHostname("canvas.localhost")).toBe(true);
+    expect(isLoopbackHostname("my_app.localhost")).toBe(true);
     expect(isLoopbackHostname(".localhost")).toBe(false);
     expect(isLoopbackHostname("foo..localhost")).toBe(false);
     expect(isLoopbackHostname("localhost.evil.example")).toBe(false);
@@ -182,6 +189,16 @@ describe("bind-host", () => {
       ),
     ).toBe(false);
 
+    // Same-origin underscore hostnames (Docker Compose service names) pass
+    expect(
+      isCrossOriginHttpRequest(
+        req({
+          host: "agent_canvas:8000",
+          origin: "http://agent_canvas:8000",
+        }),
+      ),
+    ).toBe(false);
+
     // Shared cross-origin check rejects userinfo and honors case-insensitive match
     expect(
       isCrossOriginHttpRequest(
@@ -195,6 +212,50 @@ describe("bind-host", () => {
           origin: "http://127.0.0.1:8000",
         }),
       ),
+    ).toBe(true);
+  });
+
+  it("accepts OH_ALLOWED_HOSTS tunnel/proxy hostnames in Host and Origin on loopback", () => {
+    const req = (headers: Record<string, string | undefined>, method = "GET") =>
+      ({ headers, method }) as never;
+    const env = { OH_ALLOWED_HOSTS: " ABC.ngrok.app , canvas.example.com" };
+
+    expect(resolveAllowedHosts(env)).toEqual(
+      new Set(["abc.ngrok.app", "canvas.example.com"]),
+    );
+    expect(resolveAllowedHosts({})).toEqual(new Set());
+
+    // Tunnel that keeps its public Host
+    expect(
+      isForeignLoopbackRequest(req({ host: "abc.ngrok.app" }), "127.0.0.1", {
+        env,
+      }),
+    ).toBe(false);
+    // Tunnel that rewrites Host but keeps the public Origin
+    expect(
+      isForeignLoopbackRequest(
+        req({ host: "127.0.0.1:8000", origin: "https://abc.ngrok.app" }),
+        "127.0.0.1",
+        { upgrade: true, env },
+      ),
+    ).toBe(false);
+    // Unlisted hosts and origins are still refused
+    expect(
+      isForeignLoopbackRequest(req({ host: "evil.example" }), "127.0.0.1", {
+        env,
+      }),
+    ).toBe(true);
+    expect(
+      isForeignLoopbackRequest(
+        req({ host: "abc.ngrok.app", origin: "https://evil.example" }, "POST"),
+        "127.0.0.1",
+        { env },
+      ),
+    ).toBe(true);
+    expect(
+      isForeignLoopbackRequest(req({ host: "abc.ngrok.app" }), "127.0.0.1", {
+        env: {},
+      }),
     ).toBe(true);
   });
 });

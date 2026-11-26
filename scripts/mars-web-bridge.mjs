@@ -517,7 +517,7 @@ export function createMarsWebBridge({
       if (!url.startsWith(`${MARS_WEB_PREFIX}/`)) return false;
       if (
         isCrossOriginHttpRequest(req) ||
-        isForeignLoopbackRequest(req, host)
+        isForeignLoopbackRequest(req, host, { env })
       ) {
         writeJson(res, 403, {
           error: { message: "cross-origin request refused" },
@@ -562,7 +562,7 @@ export function createMarsWebBridge({
       if (!url.startsWith(`${MARS_WEB_PREFIX}/`)) return false;
       if (
         isCrossOriginHttpRequest(req) ||
-        isForeignLoopbackRequest(req, host, { upgrade: true })
+        isForeignLoopbackRequest(req, host, { upgrade: true, env })
       ) {
         socket.end("HTTP/1.1 403 Forbidden\r\n\r\n");
         return true;

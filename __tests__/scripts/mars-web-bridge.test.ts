@@ -520,8 +520,8 @@ describe("createMarsWebBridge", () => {
     const caseInsensitive = await fetch(`${web.origin}/mars/health`, {
       headers: { Origin: `http://LOCALHOST:${port}` },
     });
-    // web.origin uses 127.0.0.1, so localhost:port is cross-origin unless Host matches;
-    // verify matching case-variant Host/Origin succeeds.
+    // web.origin uses 127.0.0.1, so a LOCALHOST Origin against a 127.0.0.1 Host
+    // is cross-origin; the matching case-variant pair below must succeed.
     expect(caseInsensitive.status).toBe(403);
 
     const matchingCaseStatus = await new Promise<number>((resolve, reject) => {
