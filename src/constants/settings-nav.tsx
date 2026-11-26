@@ -2,6 +2,7 @@ import {
   AppWindow,
   Brain,
   Container,
+  Gauge,
   Route as RouteIcon,
   Shield,
 } from "lucide-react";
@@ -62,6 +63,12 @@ export const OSS_NAV_ITEMS: SettingsNavItem[] = [
     to: "/settings/verification",
     text: "SETTINGS$NAV_VERIFICATION",
     subtitle: "SETTINGS$PAGE_VERIFICATION_SUBLINE",
+  },
+  {
+    icon: <Gauge className="size-4" strokeWidth={2} aria-hidden />,
+    to: "/settings/conversation-limits",
+    text: "SETTINGS$NAV_CONVERSATION_LIMITS",
+    subtitle: "SETTINGS$PAGE_CONVERSATION_LIMITS_SUBLINE",
   },
   {
     icon: <Container className="size-4" strokeWidth={2} aria-hidden />,
