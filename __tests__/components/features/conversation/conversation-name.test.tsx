@@ -2,6 +2,7 @@ import { useConversationLaunchStore } from "#/stores/conversation-launch-store";
 import { screen, within, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import {
+  afterAll,
   afterEach,
   beforeAll,
   beforeEach,
@@ -97,7 +98,7 @@ vi.mock("react-i18next", async () => {
           BUTTON$SHOW_AGENT_TOOLS_AND_METADATA: "Show Agent Tools",
           CONVERSATION$SHOW_SKILLS: "Show Skills",
           BUTTON$DISPLAY_COST: "Display Usage and Cost",
-          COMMON$CLOSE_CONVERSATION_STOP_RUNTIME: "Stop Conversation (Runtime)",
+          COMMON$STOP_SANDBOX: "Stop Sandbox",
           COMMON$STOP_CONVERSATION: "Stop Conversation",
           COMMON$DELETE_CONVERSATION: "Delete Conversation",
           CONVERSATION$SHARE_PUBLICLY: "Share Publicly",
@@ -127,14 +128,11 @@ const renderConversationNameWithRouter = () => {
 
 describe("ConversationName", () => {
   beforeAll(() => {
-    vi.stubGlobal("window", {
-      open: vi.fn(),
-      addEventListener: vi.fn(),
-      removeEventListener: vi.fn(),
-      location: {
-        origin: "http://localhost:3000",
-      },
-    });
+    vi.spyOn(window, "open").mockImplementation(() => null);
+  });
+
+  afterAll(() => {
+    vi.mocked(window.open).mockRestore();
   });
 
   beforeEach(() => {

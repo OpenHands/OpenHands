@@ -8,10 +8,6 @@ import { useMutation } from "@tanstack/react-query";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import { useTranslation } from "react-i18next";
 import { resumeCloudSandbox } from "#/api/cloud/conversation-service.api";
-import {
-  clearCloudAutoResumeSuppression,
-  consumeCloudAutoResumeSuppression,
-} from "#/api/cloud/cloud-sandbox-resume-suppression";
 import type { AppConversation } from "#/api/conversation-service/agent-server-conversation-service.types";
 import type { BackendKind } from "#/api/backend-registry/types";
 import { I18nKey } from "#/i18n/declaration";
@@ -143,7 +139,6 @@ export function useCloudSandboxAutoResume({
 
   useEffect(
     () => () => {
-      clearCloudAutoResumeSuppression(conversationId);
       resumeAttemptRef.current = null;
     },
     [conversationId, scope],
@@ -151,15 +146,6 @@ export function useCloudSandboxAutoResume({
 
   useEffect(() => {
     if (!resumeKey || !conversation?.sandbox_id) return;
-
-    if (consumeCloudAutoResumeSuppression(conversationId)) {
-      resumeAttemptRef.current = {
-        key: resumeKey,
-        state: "settled",
-        message: sendingMessage,
-      };
-      return;
-    }
 
     const previous = resumeAttemptRef.current;
     // Repeated pauses need a new send/retry intent, not another idle-tab wake-up.

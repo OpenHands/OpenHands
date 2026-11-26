@@ -1,6 +1,48 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type CDPSession, type Page } from "@playwright/test";
 
 test.use({ viewport: { width: 390, height: 844 }, hasTouch: true });
+
+type TouchPoint = [x: number, y: number];
+
+/** Drives a one-finger swipe through Chromium's native touch input. */
+async function swipe(cdp: CDPSession, from: TouchPoint, to: TouchPoint) {
+  const steps = 8;
+  const point = (step: number) => ({
+    x: from[0] + ((to[0] - from[0]) * step) / steps,
+    y: from[1] + ((to[1] - from[1]) * step) / steps,
+  });
+  await cdp.send("Input.dispatchTouchEvent", {
+    type: "touchStart",
+    touchPoints: [point(0)],
+  });
+  for (let step = 1; step <= steps; step += 1) {
+    await cdp.send("Input.dispatchTouchEvent", {
+      type: "touchMove",
+      touchPoints: [point(step)],
+    });
+  }
+  // Rest before lifting, as a finger does, so Chrome starts no momentum
+  // scroll that would swallow the next tap's click.
+  await new Promise((resolve) => {
+    setTimeout(resolve, 150);
+  });
+  await cdp.send("Input.dispatchTouchEvent", {
+    type: "touchMove",
+    touchPoints: [point(steps)],
+  });
+  await cdp.send("Input.dispatchTouchEvent", {
+    type: "touchEnd",
+    touchPoints: [],
+  });
+}
+
+const nextFrames = (page: Page) =>
+  page.evaluate(
+    () =>
+      new Promise((resolve) => {
+        requestAnimationFrame(() => requestAnimationFrame(resolve));
+      }),
+  );
 
 test.beforeEach(async ({ page }) => {
   await page.addInitScript(() => {
@@ -66,6 +108,43 @@ test("mobile conversation menu has a comfortable touch target", async ({
   expect(topBarBounds!.height).toBeGreaterThanOrEqual(48);
 });
 
+test("swiping right from the chat's left third opens the navigation drawer", async ({
+  page,
+  browserName,
+}) => {
+  test.skip(browserName !== "chromium", "Uses Chromium touch input.");
+  const cdp = await page.context().newCDPSession(page);
+  const menu = page.getByTestId("sidebar-mobile-menu-toggle");
+  const drawer = page.getByTestId("sidebar-mobile-drawer");
+  const chat = (await page
+    .getByTestId("conversation-chat-panel")
+    .boundingBox())!;
+  const y = chat.y + chat.height / 2;
+  const third = chat.width / 3;
+
+  // OS edge gutter, past the left third, vertical scroll, and a short swipe.
+  await swipe(cdp, [chat.x + 10, y], [chat.x + 240, y]);
+  await swipe(cdp, [chat.x + third + 20, y], [chat.x + third + 220, y]);
+  await swipe(cdp, [chat.x + 48, y], [chat.x + 54, y - 240]);
+  await swipe(cdp, [chat.x + 48, y], [chat.x + 88, y]);
+  await nextFrames(page);
+  await expect(menu).toHaveAttribute("aria-expanded", "false");
+  await expect(drawer).toHaveCount(0);
+
+  await swipe(cdp, [chat.x + 48, y], [chat.x + 260, y + 8]);
+  await expect(drawer).toBeVisible();
+  // The swipe opens the drawer rather than navigating the browser back.
+  await expect(page).toHaveURL(/\/conversations\/1$/);
+  // Tap only once the drawer has finished sliding in.
+  await expect.poll(async () => (await drawer.boundingBox())?.x).toBe(0);
+  await drawer.getByTestId("sidebar-mobile-drawer-close").tap();
+  await expect(drawer).toBeHidden();
+
+  await menu.tap();
+  await expect(drawer).toBeVisible();
+  await cdp.detach();
+});
+
 test("mobile conversation rows are easy to tap without triggering their actions", async ({
   page,
 }) => {
@@ -109,4 +188,38 @@ test("desktop sidebar rows retain their compact dimensions", async ({
     (await page.getByTestId("sidebar-conversations-link").boundingBox())!
       .height,
   ).toBe(36);
+});
+
+test("shared conversation keeps its header inside mobile safe areas", async ({
+  page,
+}) => {
+  const conversationId = "mobile-safe-area";
+  const cdp = await page.context().newCDPSession(page);
+  await cdp.send("Emulation.setSafeAreaInsetsOverride", {
+    insets: { top: 44, right: 0, bottom: 34, left: 0 },
+  });
+  await page.goto(`/shared/conversations/${conversationId}`);
+
+  const heading = page.getByRole("heading", {
+    name: "Shared mobile conversation",
+  });
+  await expect(heading).toBeVisible();
+  const headerBounds = await heading.boundingBox();
+  const returnLinkBounds = await page
+    .getByRole("link", { name: "OpenHands" })
+    .boundingBox();
+  expect(headerBounds!.y).toBeGreaterThanOrEqual(44);
+  expect(returnLinkBounds!.y).toBeGreaterThanOrEqual(44);
+  const shell = page.locator(".app-shell-safe-area");
+  await expect(shell).toHaveCSS("padding-top", "44px");
+  await expect(shell).toHaveCSS("padding-bottom", "34px");
+  expect(
+    await page.evaluate(() =>
+      Math.max(
+        document.documentElement.scrollHeight,
+        document.body.scrollHeight,
+      ),
+    ),
+  ).toBe(844);
+  await cdp.detach();
 });

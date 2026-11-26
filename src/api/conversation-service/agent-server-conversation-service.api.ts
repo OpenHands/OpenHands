@@ -1,4 +1,5 @@
 import {
+  type ACPEffortOption,
   type ACPModelInfo,
   ConversationSortOrder,
   type ForkConversationRequest,
@@ -11,7 +12,7 @@ import {
   ProfilesClient,
   VSCodeClient,
 } from "@openhands/typescript-client/clients";
-import { v4 as uuidv4 } from "uuid";
+import { randomUUID } from "#/utils/random-uuid";
 import { AgentKind, Provider } from "#/types/settings";
 import type { ConversationRuntimeContext } from "#/api/conversation-file-upload.api";
 import { getAgentServerWorkingDir } from "../agent-server-config";
@@ -20,11 +21,13 @@ import {
   resolveNewConversationWorkspace,
 } from "../conversation-workspace";
 import HooksService from "../hooks-service";
+import type { Backend } from "../backend-registry/types";
 import {
   getActiveBackend,
   getEffectiveLocalBackend,
 } from "../backend-registry/active-store";
 import { callCloudProxy } from "../cloud/proxy";
+import { activeOrgForBackend } from "../cloud/client";
 import ProfilesService from "../profiles-service/profiles-service.api";
 import {
   batchGetCloudConversations,
@@ -76,8 +79,14 @@ import {
   type WorkspaceMode,
 } from "../conversation-metadata-store";
 import { resolveTitleLlmProfile } from "#/utils/title-llm-profile";
-import { toAcpModelOptions } from "#/constants/acp-providers";
-import { isPlannerConversationOf } from "#/utils/plan-file";
+import {
+  toAcpEffortChoices,
+  toAcpModelOptions,
+} from "#/constants/acp-providers";
+import {
+  isPlannerConversationOf,
+  LOCAL_PLANNER_PARENT_TAG_KEY,
+} from "#/utils/plan-file";
 import { buildAutomationSetupModeTags } from "#/utils/automation-draft-tags";
 import {
   AUTOMATION_SETUP_SYSTEM_SUFFIX,
@@ -101,6 +110,20 @@ import type {
 } from "./agent-server-conversation-service.types";
 
 const DEFAULT_CONVERSATION_TIMESTAMP = "1970-01-01T00:00:00.000Z";
+
+/** Captured synchronously before a delete mutation's asynchronous callbacks. */
+export type ConversationDeletionScope =
+  | {
+      kind: "local";
+      client: ConversationClient;
+      backend: Backend;
+      orgId: string | null;
+    }
+  | {
+      kind: "cloud";
+      backend: Backend;
+      orgId: string | null;
+    };
 // Creating the first conversation right after a cold agent-server boot (fresh
 // machine or the packaged desktop app, where uvx may still be warming caches)
 // can exceed the client's 60s default timeout.
@@ -130,6 +153,15 @@ function numberOrZero(value: unknown): number {
 
 function stringOrNull(value: unknown): string | null {
   return typeof value === "string" ? value : null;
+}
+
+function normalizeAcpEfforts(value: unknown): ACPEffortOption[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((entry) =>
+    isRecord(entry) && typeof entry.value === "string"
+      ? [{ value: entry.value, name: stringOrNull(entry.name) }]
+      : [],
+  );
 }
 
 function normalizeAcpModels(value: unknown): ACPModelInfo[] {
@@ -345,8 +377,14 @@ function requirePathInsideDirectory(path: string, directory: string): string {
   return normalizedPath;
 }
 
+function hasConversationId(
+  item: unknown,
+): item is Record<string, unknown> & { id: string } {
+  return isRecord(item) && typeof item.id === "string" && !!item.id.trim();
+}
+
 function requireDirectConversationInfo(item: unknown): DirectConversationInfo {
-  if (!isRecord(item) || typeof item.id !== "string" || !item.id.trim()) {
+  if (!hasConversationId(item)) {
     throw invalidConversationResponse();
   }
 
@@ -370,6 +408,7 @@ function requireDirectConversationInfo(item: unknown): DirectConversationInfo {
     sub_conversation_ids: normalizeSubConversationIds(
       item.sub_conversation_ids,
     ),
+    parent_conversation_id: stringOrNull(item.parent_conversation_id),
     // SDK-runtime ACP model fields (populated when the agent-server supports
     // ``ConversationInfo.current_model_*``). Consumed by the conversation
     // adapter to drive the per-card chip's model text. Older agent-servers
@@ -377,16 +416,9 @@ function requireDirectConversationInfo(item: unknown): DirectConversationInfo {
     current_model_id: stringOrNull(item.current_model_id),
     current_model_name: stringOrNull(item.current_model_name),
     available_models: normalizeAcpModels(item.available_models),
+    current_effort: stringOrNull(item.current_effort),
+    available_efforts: normalizeAcpEfforts(item.available_efforts),
   };
-}
-
-function requireDirectConversationItems(
-  items: unknown,
-): DirectConversationInfo[] {
-  if (!Array.isArray(items)) {
-    throw invalidConversationResponse();
-  }
-  return items.map(requireDirectConversationInfo);
 }
 
 /**
@@ -405,26 +437,48 @@ function requireDirectConversationBatch(
   );
 }
 
-function requireConversationSearchPage(page: unknown): {
-  items: DirectConversationInfo[];
-  next_page_id: string | null;
-} {
-  if (Array.isArray(page)) {
-    return {
-      items: requireDirectConversationItems(page),
-      next_page_id: null,
-    };
-  }
-
-  if (!isRecord(page)) {
+function readConversationSearchPage(response: unknown): AppConversationPage {
+  const page = Array.isArray(response) ? { items: response } : response;
+  if (!isRecord(page) || !Array.isArray(page.items)) {
     throw invalidConversationResponse();
   }
 
-  return {
-    items: requireDirectConversationItems(page.items),
+  const result = toConversationPage({
+    items: page.items
+      .filter(hasConversationId)
+      .map(requireDirectConversationInfo),
     next_page_id:
       typeof page.next_page_id === "string" ? page.next_page_id : null,
-  };
+  });
+  if (!Array.isArray(page.broken_items)) return result;
+
+  const healthyCount = result.items.length;
+  const existingIds = new Set(result.items.map(({ id }) => id));
+  for (const rawItem of page.broken_items) {
+    if (!hasConversationId(rawItem)) continue;
+    const { reason } = rawItem;
+    if (reason !== "metadata" && reason !== "state") continue;
+    const item = requireDirectConversationInfo(rawItem);
+    if (existingIds.has(item.id) || item.tags?.[LOCAL_PLANNER_PARENT_TAG_KEY]) {
+      continue;
+    }
+    existingIds.add(item.id);
+    result.items.push({
+      ...toAppConversation(item),
+      broken_reason: reason,
+      conversation_url: null,
+      session_api_key: null,
+      execution_status: null,
+      llm_model: null,
+    });
+  }
+  if (result.items.length > healthyCount) {
+    result.items.sort(
+      (left, right) =>
+        Date.parse(right.updated_at) - Date.parse(left.updated_at),
+    );
+  }
+  return result;
 }
 
 const RUNTIME_STATUSES = new Set<string>([
@@ -516,6 +570,23 @@ export interface CreateConversationOptions {
 }
 
 class AgentServerConversationService {
+  static async answerAskUser(
+    conversationId: string,
+    askId: string,
+    answer: { optionIndex?: number; text?: string },
+    runtime?: ConversationRuntimeContext | null,
+  ) {
+    if (
+      getActiveBackend().backend.kind === "cloud" &&
+      (!runtime?.conversationUrl || !runtime.sessionApiKey)
+    ) {
+      throw new Error("Conversation sandbox is still starting.");
+    }
+    return new ConversationClient(
+      getAgentServerClientOptions(runtime ?? {}),
+    ).answerAskUser(conversationId, askId, answer);
+  }
+
   static async sendMessage(
     conversationId: string,
     message: SendMessageRequest,
@@ -616,6 +687,9 @@ class AgentServerConversationService {
         selected_repository: metadata?.selected_repository ?? null,
         selected_branch: metadata?.selected_branch ?? null,
         git_provider: metadata?.git_provider ?? null,
+        ...(metadata?.git_provider_id != null
+          ? { git_provider_id: metadata.git_provider_id }
+          : {}),
         plugins: plugins ?? null,
         parent_conversation_id: parentConversationId ?? null,
         agent_type: agentType,
@@ -666,7 +740,7 @@ class AgentServerConversationService {
       profiles,
       agentLlmProfileRef,
     );
-    const conversationId = uuidv4();
+    const conversationId = randomUUID();
     const resolvedWorkspaceMode =
       workspaceMode ?? (workingDirOverride ? "local_repo" : "new_worktree");
     const inContainer = resolvedWorkspaceMode === "docker_container";
@@ -857,18 +931,20 @@ class AgentServerConversationService {
    */
   static async getLocalPlanningConversationIds(
     parentConversationId: string,
+    client?: ConversationClient,
   ): Promise<string[]> {
-    if (getActiveBackend().backend.kind === "cloud") return [];
+    if (!client && getActiveBackend().backend.kind === "cloud") return [];
 
     const ids = new Set<string>();
 
     try {
-      const [parent] = await this.batchGetAppConversations([
-        parentConversationId,
-      ]);
+      const [parent] = await this.batchGetAppConversations(
+        [parentConversationId],
+        client,
+      );
       const childIds = parent?.sub_conversation_ids ?? [];
       if (childIds.length > 0) {
-        const children = await this.batchGetAppConversations(childIds);
+        const children = await this.batchGetAppConversations(childIds, client);
         for (const child of children) {
           if (child && isPlannerConversationOf(child, parentConversationId)) {
             ids.add(child.id);
@@ -966,15 +1042,16 @@ class AgentServerConversationService {
 
   static async batchGetAppConversations(
     ids: string[],
+    client?: ConversationClient,
   ): Promise<(AppConversation | null)[]> {
     if (ids.length === 0) return [];
 
-    if (getActiveBackend().backend.kind === "cloud") {
+    if (!client && getActiveBackend().backend.kind === "cloud") {
       return batchGetCloudConversations(ids);
     }
 
-    const data: unknown = await new ConversationClient(
-      getAgentServerClientOptions(),
+    const data: unknown = await (
+      client ?? new ConversationClient(getAgentServerClientOptions())
     ).getConversations<DirectConversationInfo>(ids);
 
     return requireDirectConversationBatch(data).map((item) =>
@@ -997,6 +1074,7 @@ class AgentServerConversationService {
     repository: string | null,
     branch?: string | null,
     gitProvider?: Provider | null,
+    gitProviderId?: number | null,
   ): Promise<AppConversation> {
     // Cloud conversations keep the repository on the server, so other
     // browsers and server features see it. Best effort: an older server can
@@ -1009,6 +1087,7 @@ class AgentServerConversationService {
           repository,
           branch ?? null,
           gitProvider ?? null,
+          gitProviderId,
         );
       } catch (error) {
         console.warn(
@@ -1018,12 +1097,15 @@ class AgentServerConversationService {
       }
     }
     if (repository) {
-      const existing = getStoredConversationMetadata(conversationId);
+      // The previous id belongs to the previous repository, so drop it.
+      const { git_provider_id: _previous, ...existing } =
+        getStoredConversationMetadata(conversationId) ?? {};
       setStoredConversationMetadata(conversationId, {
-        ...(existing ?? {}),
+        ...existing,
         selected_repository: repository,
         selected_branch: branch ?? null,
         git_provider: gitProvider ?? null,
+        ...(gitProviderId != null ? { git_provider_id: gitProviderId } : {}),
       });
     } else {
       removeStoredConversationMetadata(conversationId);
@@ -1113,6 +1195,8 @@ class AgentServerConversationService {
       max_budget_per_run: data.max_budget_per_run,
       stats: data.stats ?? { usage_to_metrics: {} },
       available_models: toAcpModelOptions(data.available_models),
+      current_effort: data.current_effort ?? null,
+      available_efforts: toAcpEffortChoices(data.available_efforts),
     };
   }
 
@@ -1161,12 +1245,33 @@ class AgentServerConversationService {
       sort_order: ConversationSortOrder.UPDATED_AT_DESC,
     });
 
-    return toConversationPage(requireConversationSearchPage(data));
+    return readConversationSearchPage(data);
   }
 
-  static async deleteConversation(conversationId: string): Promise<void> {
-    if (getActiveBackend().backend.kind === "cloud") {
-      await deleteCloudConversation(conversationId);
+  static createConversationDeletionScope(): ConversationDeletionScope {
+    const { backend, orgId } = getActiveBackend();
+    if (backend.kind === "cloud") {
+      return {
+        kind: "cloud",
+        backend,
+        orgId: activeOrgForBackend(backend),
+      };
+    }
+    return {
+      kind: "local",
+      client: new ConversationClient(getAgentServerClientOptions()),
+      backend,
+      orgId,
+    };
+  }
+
+  static async deleteConversation(
+    conversationId: string,
+    scope: ConversationDeletionScope = this.createConversationDeletionScope(),
+    { broken = false }: { broken?: boolean } = {},
+  ): Promise<void> {
+    if (scope.kind === "cloud") {
+      await deleteCloudConversation(conversationId, scope);
       removeStoredConversationMetadata(conversationId);
       return;
     }
@@ -1175,10 +1280,14 @@ class AgentServerConversationService {
     // planner helper is hidden from the conversation list by its
     // `plannerparent` tag — so without this it would survive its parent as an
     // invisible, unreachable conversation (plus its events and state).
-    const planningConversationIds =
-      await this.getLocalPlanningConversationIds(conversationId);
+    const planningConversationIds = broken
+      ? []
+      : await this.getLocalPlanningConversationIds(
+          conversationId,
+          scope.client,
+        );
 
-    const client = new ConversationClient(getAgentServerClientOptions());
+    const { client } = scope;
     await Promise.all(
       planningConversationIds.map(async (planningConversationId) => {
         try {
@@ -1414,7 +1523,7 @@ class AgentServerConversationService {
       // the profile config would otherwise default it to stream=False.
       stream: true,
       // Avoid stale first-write-wins entries in the backend LLM registry.
-      usage_id: `profile:${profileName}:${uuidv4()}`,
+      usage_id: `profile:${profileName}:${randomUUID()}`,
     } as LLMConfig);
   }
 
@@ -1449,6 +1558,31 @@ class AgentServerConversationService {
     await new ConversationClient(getAgentServerClientOptions()).switchAcpModel(
       conversationId,
       model,
+    );
+  }
+
+  /**
+   * Switch a started ACP conversation's reasoning effort live (or persist it
+   * for one not yet run). The ACP analog of {@link switchAcpModel}.
+   */
+  static async switchAcpEffort(
+    conversationId: string,
+    effort: string,
+  ): Promise<void> {
+    const { backend } = getActiveBackend();
+    if (backend.kind === "cloud") {
+      await callCloudProxy({
+        backend,
+        method: "POST",
+        path: `/api/v1/app-conversations/${conversationId}/switch_acp_effort`,
+        body: { effort },
+      });
+      return;
+    }
+
+    await new ConversationClient(getAgentServerClientOptions()).switchAcpEffort(
+      conversationId,
+      effort,
     );
   }
 }

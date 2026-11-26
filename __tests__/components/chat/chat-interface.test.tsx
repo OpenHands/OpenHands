@@ -1,8 +1,9 @@
 import { useLayoutEffect } from "react";
 import { afterEach, beforeEach, describe, expect, it, test, vi } from "vitest";
 import {
-  fireEvent,
+  act,
   cleanup,
+  fireEvent,
   render,
   screen,
   waitFor,
@@ -34,17 +35,28 @@ import { useLoadOlderEvents } from "#/hooks/use-load-older-events";
 import { useTaskPolling } from "#/hooks/query/use-task-polling";
 import { AgentState } from "#/types/agent-state";
 import { useConversationStore } from "#/stores/conversation-store";
-import { getActiveBackend } from "#/api/backend-registry/active-store";
+import {
+  __resetActiveStoreForTests,
+  getActiveBackend,
+  setActiveSelection,
+  setRegisteredBackends,
+} from "#/api/backend-registry/active-store";
+import * as cloudOrganizationService from "#/api/cloud/organization-service.api";
+import { ActiveBackendProvider } from "#/contexts/active-backend-context";
 import {
   sessionActivityKey,
   useSessionActivityStore,
 } from "#/stores/session-activity-store";
 import { useGoalStore } from "#/stores/goal-store";
-import { act } from "@testing-library/react";
 import ProfilesService from "#/api/profiles-service/profiles-service.api";
-import { getConversationState } from "#/utils/conversation-local-storage";
+import {
+  getConversationState,
+  getConversationDraftRevision,
+  setConversationState,
+} from "#/utils/conversation-local-storage";
 
 import { makeDefaultLocalBackend } from "#/api/backend-registry/default-backend";
+import { experimentalFeaturesQueryKey } from "#/hooks/query/use-experimental-features";
 import { NO_BACKEND } from "#/api/backend-registry/active-store";
 import { SERVER_CONNECTION_ERROR_MESSAGE } from "#/constants/server-connection-error";
 import { I18nKey } from "#/i18n/declaration";
@@ -922,6 +934,58 @@ describe("ChatInterface - Pending message queue", () => {
     expect(messages[0]).toHaveTextContent("first");
     expect(messages[1]).toHaveTextContent("second");
   });
+
+  function seedResolvedConversation(sandboxStatus = "RUNNING") {
+    // The banner belongs to Projects, an experimental feature.
+    queryClient.setQueryData(
+      experimentalFeaturesQueryKey(makeDefaultLocalBackend() ?? NO_BACKEND),
+      [{ key: "projects", label: "Projects", description: "", enabled: true }],
+    );
+    queryClient.setQueryData(
+      [
+        "user",
+        "conversation",
+        "test-conversation-id",
+        (makeDefaultLocalBackend() ?? NO_BACKEND).id,
+        null,
+      ],
+      {
+        id: "test-conversation-id",
+        sandbox_status: sandboxStatus,
+        tags: { resolved: "auto", project: "abc" },
+      },
+    );
+  }
+
+  it("shows the resolved banner above a usable composer", () => {
+    seedResolvedConversation();
+
+    renderInterface();
+
+    const banner = screen.getByTestId("resolved-conversation-banner");
+    expect(banner).toHaveTextContent(I18nKey.CHAT_INTERFACE$RESOLVED_TITLE);
+    expect(screen.getByTestId("chat-input")).toHaveAttribute(
+      "contenteditable",
+      "true",
+    );
+    expect(
+      banner.compareDocumentPosition(screen.getByTestId("chat-input")) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  it("does not show the resolved banner on an archived conversation", () => {
+    seedResolvedConversation("MISSING");
+
+    renderInterface();
+
+    expect(
+      screen.getByTestId("archived-conversation-banner"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("resolved-conversation-banner"),
+    ).not.toBeInTheDocument();
+  });
 });
 
 describe("ChatInterface - Saved draft after submit", () => {
@@ -1532,6 +1596,72 @@ describe("ChatInterface - Build plan keyboard shortcut", () => {
 });
 
 describe("ChatInterface - initial attachment recovery", () => {
+  it("captures the submitted draft before an attachment upload yields to a newer edit", async () => {
+    localStorage.clear();
+    sessionStorage.clear();
+    useConversationStore.getState().resetConversationState();
+    useConversationStore.getState().clearMessageToSend();
+    useConversationStore.getState().clearAllFiles();
+    useErrorMessageStore.getState().removeErrorMessage();
+    useOptimisticUserMessageStore.getState().clearPendingMessages();
+    useEventStore.setState({ events: [], eventIds: new Set(), uiEvents: [] });
+    const file = new File(["notes"], "notes.txt");
+    useConversationStore.getState().addFiles([file]);
+    let finishUpload!: (result: {
+      skipped_files: [];
+      uploaded_files: string[];
+    }) => void;
+    const upload = vi.fn(
+      () =>
+        new Promise((resolve) => {
+          finishUpload = resolve;
+        }),
+    );
+    vi.mocked(useUnifiedUploadFiles).mockReturnValue({
+      mutateAsync: upload,
+      isLoading: false,
+    } as never);
+    vi.mocked(useConfig).mockReturnValue({ data: {} } as never);
+    mockSend.mockReset().mockResolvedValue({ queued: false });
+    setConversationState("test-conversation-id", {
+      draftMessage: "Read my notes",
+    });
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const page = renderWithQueryClient(<ChatInterface />, queryClient);
+    const input = screen.getByTestId("chat-input");
+    Object.defineProperty(input, "innerText", {
+      configurable: true,
+      get() {
+        return this.textContent ?? "";
+      },
+    });
+    input.textContent = "Read my notes";
+    fireEvent.input(input);
+    const submittedRevision = getConversationDraftRevision(
+      "test-conversation-id",
+    );
+    fireEvent.keyDown(input, { key: "Enter" });
+    await waitFor(() => expect(upload).toHaveBeenCalledOnce());
+
+    // The same text typed again while upload is in flight is a different draft.
+    input.textContent = "Read my notes";
+    fireEvent.input(input);
+    expect(getConversationDraftRevision("test-conversation-id")).not.toBe(
+      submittedRevision,
+    );
+    await act(async () =>
+      finishUpload({ skipped_files: [], uploaded_files: [file.name] }),
+    );
+    await waitFor(() => expect(mockSend).toHaveBeenCalledOnce());
+    expect(
+      useOptimisticUserMessageStore.getState().pendingMessages[0].draftRevision,
+    ).toBe(submittedRevision);
+    page.unmount();
+    queryClient.clear();
+  });
+
   it("keeps a second failed upload unsent and clears the error after a successful retry", async () => {
     localStorage.clear();
     sessionStorage.clear();
@@ -2142,4 +2272,80 @@ describe("ChatInterface - session connection handoff", () => {
       expect(screen.getByTestId("chat-message-sending")).toBeVisible();
     },
   );
+});
+
+describe("ChatInterface - Budget limit error", () => {
+  beforeEach(() => {
+    (useConfig as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
+      data: {},
+    });
+    (
+      useUnifiedUploadFiles as unknown as ReturnType<typeof vi.fn>
+    ).mockReturnValue({ mutateAsync: vi.fn(), isLoading: false });
+    vi.spyOn(ProfilesService, "listProfiles").mockResolvedValue({
+      profiles: [],
+      active_profile: null,
+    } as Awaited<ReturnType<typeof ProfilesService.listProfiles>>);
+    window.localStorage.clear();
+    __resetActiveStoreForTests();
+    setRegisteredBackends([
+      {
+        id: "ohe",
+        name: "OpenHands Enterprise",
+        host: "https://ohe.example.com",
+        apiKey: "bearer-token",
+        kind: "cloud",
+      },
+    ]);
+    setActiveSelection({ backendId: "ohe", orgId: "org-1" });
+  });
+
+  afterEach(() => {
+    cleanup();
+    vi.restoreAllMocks();
+    useErrorMessageStore.getState().removeErrorMessage();
+    window.localStorage.clear();
+    __resetActiveStoreForTests();
+  });
+
+  it("replaces LiteLLM's raw budget error with the readable one", async () => {
+    // Arrange
+    vi.spyOn(cloudOrganizationService, "getCloudMyBudget").mockResolvedValue({
+      enabled: true,
+      monthly_limit: 500,
+      limit_reached_instructions: "Contact #it-help",
+    });
+    useErrorMessageStore.setState({
+      errorMessage:
+        "litellm.RateLimitError: Budget has been exceeded! TeamMember=user-1:org-1 Current cost: 501, Max budget: 500",
+      errorType: "conversation",
+      errorCode: "LLMRateLimitError",
+    });
+
+    // Act
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <ActiveBackendProvider>
+          <MemoryRouter initialEntries={["/test-conversation-id"]}>
+            <Routes>
+              <Route path=":conversationId" element={<ChatInterface />} />
+            </Routes>
+          </MemoryRouter>
+        </ActiveBackendProvider>
+      </QueryClientProvider>,
+    );
+
+    // Assert
+    expect(
+      await screen.findByRole("link", {
+        name: I18nKey.ERROR$BUDGET_VIEW_YOUR_BUDGET,
+      }),
+    ).toHaveAttribute(
+      "href",
+      "https://ohe.example.com/settings/your-budget?org=org-1",
+    );
+    expect(
+      screen.getByTestId("error-message-banner-content"),
+    ).toHaveTextContent("Contact #it-help");
+  });
 });

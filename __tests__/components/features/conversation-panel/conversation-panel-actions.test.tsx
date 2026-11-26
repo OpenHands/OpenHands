@@ -65,6 +65,52 @@ vi.mock("#/utils/custom-toast-handlers", () => ({
 describe("ConversationPanel conversation actions", () => {
   setupConversationPanelTest();
 
+  it("inspects and deletes a corrupted row alongside an intact conversation", async () => {
+    const damaged = createMockConversation({
+      id: "1d5d3612-14f6-4730-86b3-62a74362659a",
+      title: "Fork from earlier message",
+      broken_reason: "state",
+    });
+    const intact = createMockConversation({
+      id: "intact",
+      title: "Keep this conversation",
+    });
+    const search = vi.mocked(
+      AgentServerConversationService.searchConversations,
+    );
+    search.mockResolvedValue({ items: [damaged, intact], next_page_id: null });
+    const deleteConversation = vi
+      .spyOn(AgentServerConversationService, "deleteConversation")
+      .mockImplementation(async () => {
+        search.mockResolvedValue({ items: [intact], next_page_id: null });
+      });
+    const user = userEvent.setup();
+    renderConversationPanel();
+
+    const summary = (
+      await screen.findByText("CONVERSATION_PANEL$CORRUPTED")
+    ).closest("summary")!;
+    await user.click(summary);
+    expect(
+      screen.getByText("CONVERSATION_PANEL$CORRUPTED_STATE"),
+    ).toBeVisible();
+    expect(screen.getByText(damaged.id)).toBeVisible();
+    await user.click(
+      screen.getByRole("button", { name: "COMMON$DELETE_CONVERSATION" }),
+    );
+    await user.click(screen.getByTestId("confirm-button"));
+
+    await waitFor(() =>
+      expect(screen.queryByText(damaged.title!)).not.toBeInTheDocument(),
+    );
+    expect(deleteConversation).toHaveBeenCalledExactlyOnceWith(
+      damaged.id,
+      expect.objectContaining({ kind: "local" }),
+      { broken: true },
+    );
+    expect(screen.getByText(intact.title!)).toBeVisible();
+  });
+
   it("starts the selected Cloud metadata request on navigation, but not a modified click", async () => {
     setRegisteredBackends([cloudBackend]);
     setActiveSelection({ backendId: cloudBackend.id, orgId: "org-2" });

@@ -1,4 +1,4 @@
-import { Tooltip } from "@heroui/react";
+import { Tooltip } from "#/components/shared/tooltip";
 import { useTranslation } from "react-i18next";
 import { Zap } from "lucide-react";
 import { I18nKey } from "#/i18n/declaration";
@@ -7,6 +7,8 @@ import { getAutomationRunDisplay } from "#/utils/automation-run-display";
 import { KebabMenu } from "./kebab-menu";
 import { useAutomationAccess } from "#/hooks/use-automation-access";
 import { useNavigation } from "#/context/navigation-context";
+import { withFactoryContext } from "#/constants/factories";
+import { useFactoryContext } from "#/hooks/use-factory-context";
 import { NavigationLink } from "#/components/shared/navigation-link";
 import PlayIcon from "#/icons/play.svg?react";
 import ClockIcon from "#/icons/clock.svg?react";
@@ -61,12 +63,15 @@ export function AutomationListRow({
   insights,
 }: AutomationListRowProps) {
   const { navigate } = useNavigation();
+  const factoryContext = useFactoryContext();
   const { t, i18n } = useTranslation("openhands");
   const { canManage, canEdit, canToggle } = useAutomationAccess(automation);
   const isDraft = isDraftAutomation(automation);
 
   const handleView = () => {
-    navigate?.(`/automations/${automation.id}`);
+    navigate?.(
+      withFactoryContext(`/automations/${automation.id}`, factoryContext),
+    );
   };
 
   const menuItems = buildAutomationMenuItems({
@@ -113,7 +118,10 @@ export function AutomationListRow({
     : null;
   const hasMeta =
     hasTriggerMeta || Boolean(whenLabel) || Boolean(latestRun?.status);
-  const detailHref = `/automations/${encodeURIComponent(automation.id)}`;
+  const detailHref = withFactoryContext(
+    `/automations/${encodeURIComponent(automation.id)}`,
+    factoryContext,
+  );
   const statusLabelKey = getRunStatusLabelKey(runState);
   const disableAnimation = import.meta.env.MODE === "test";
   const showDraftBadge = isDraft;

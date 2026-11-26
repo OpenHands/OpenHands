@@ -1,11 +1,13 @@
 import {
   type InfiniteData,
+  type QueryClient,
   useInfiniteQuery,
   useMutation,
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
 import AutomationService from "#/api/automation-service/automation-service.api";
+import { FACTORIES_QUERY_KEY } from "#/hooks/query/use-factories";
 import {
   getAutomationEndpoint,
   hasAutomationInterface,
@@ -16,7 +18,7 @@ import { useActiveBackend } from "#/contexts/active-backend-context";
 import { useTracking } from "#/hooks/use-tracking";
 import { uniqueById } from "#/utils/unique-by-id";
 import type {
-  AutomationCreatedByFilter,
+  AutomationRunAsFilter,
   AutomationSpec,
   AutomationTagCount,
   AutomationsResponse,
@@ -68,8 +70,10 @@ function joinAutomationPages(
 interface UseAutomationsOptions {
   /** Automations per request; at most 100. A count-only caller passes 1. */
   pageSize?: number;
-  createdBy?: AutomationCreatedByFilter;
+  runAs?: AutomationRunAsFilter;
   tag?: string;
+  /** Only the automations in this factory. */
+  factoryId?: string;
   enabled?: boolean;
 }
 
@@ -120,20 +124,27 @@ export function useAutomationDrafts(options: UseAutomationDraftsOptions = {}) {
 export function useAutomations(options: UseAutomationsOptions = {}) {
   const {
     pageSize = AUTOMATIONS_PAGE_SIZE,
-    createdBy,
+    runAs,
     tag,
+    factoryId,
     enabled = true,
   } = options;
   const active = useActiveBackend();
   return useInfiniteQuery({
     queryKey: [
       ...AUTOMATIONS_QUERY_KEY,
-      { pageSize, createdBy, tag },
+      { pageSize, runAs, tag, factoryId },
       active.backend.id,
       active.orgId,
     ],
     queryFn: ({ pageParam }) =>
-      AutomationService.getAutomations(pageSize, pageParam, createdBy, tag),
+      AutomationService.getAutomations(
+        pageSize,
+        pageParam,
+        runAs,
+        tag,
+        factoryId,
+      ),
     initialPageParam: 0,
     getNextPageParam: (lastPage, _pages, lastOffset) => {
       const nextOffset = lastOffset + lastPage.automations.length;
@@ -251,6 +262,20 @@ export function useChangeRunAs() {
   });
 }
 
+/** Put an automation in a factory, or take it out of its factory with `null`. */
+export function useChangeAutomationFactory() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, factoryId }: { id: string; factoryId: string | null }) =>
+      AutomationService.updateAutomation(id, { factory_id: factoryId }),
+    meta: { disableToast: true },
+    onSuccess: () => {
+      invalidateAutomationLists(queryClient);
+      queryClient.invalidateQueries({ queryKey: AUTOMATION_DETAIL_QUERY_KEY });
+    },
+  });
+}
+
 export function useDeleteAutomationDraft() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -274,17 +299,28 @@ export function useDispatchAutomationDraft() {
   });
 }
 
-export function useImportAutomation() {
+/** Refresh what a new automation changes: the lists and each factory's count. */
+export function invalidateAutomationLists(queryClient: QueryClient) {
+  queryClient.invalidateQueries({ queryKey: AUTOMATIONS_QUERY_KEY });
+  queryClient.invalidateQueries({ queryKey: FACTORIES_QUERY_KEY });
+}
+
+export function useImportAutomation({
+  factoryId,
+}: { factoryId?: string } = {}) {
   const queryClient = useQueryClient();
   const active = useActiveBackend();
   const { trackAutomationImported } = useTracking();
   return useMutation({
     mutationFn: (spec: AutomationSpec) =>
-      AutomationService.createAutomation({ ...spec, enabled: false }),
+      AutomationService.createAutomation(
+        { ...spec, enabled: false },
+        factoryId,
+      ),
     // Callers toast the API message themselves; skip the generic global toast.
     meta: { disableToast: true },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: AUTOMATIONS_QUERY_KEY });
+      invalidateAutomationLists(queryClient);
       trackAutomationImported({ backendKind: active.backend.kind });
     },
   });

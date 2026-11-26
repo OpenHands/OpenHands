@@ -275,6 +275,37 @@ describe("useClampDragSelection", () => {
     expect(selection.toString()).not.toContain("Disconnected");
   });
 
+  it("re-anchors when the drag-start row is virtualized out mid-drag", () => {
+    const { feed, message, chromeText } = mountChatPane();
+    renderHook(() => useClampDragSelection({ current: feed }));
+
+    // Start the drag on the message row and let one clamp pass with the focus
+    // still inside the feed, which captures the row's text node as the drag
+    // anchor without yet extending the selection.
+    mouseDownOn(feed, 10);
+    dragSelection(message.firstChild!, message.firstChild!, 3);
+    dragPointerTo(200);
+    // Now the focus escapes to the composer while the drag continues.
+    const selection = dragSelection(
+      message.firstChild!,
+      chromeText.firstChild!,
+      5,
+    );
+
+    // The row the drag began on is virtualized out and removed from the DOM,
+    // detaching the captured anchor node. The live selection anchor stays in
+    // the feed, so the clamp can re-anchor to it.
+    message.remove();
+    expect(feed.contains(message.firstChild!)).toBe(false);
+
+    dragPointerTo(900);
+
+    // Without re-anchoring, the detached anchor can no longer rebuild the range
+    // and the clamp gives up, letting the selection reach the composer.
+    expect(feed.contains(selection.focusNode)).toBe(true);
+    expect(selection.toString()).not.toContain("Disconnected");
+  });
+
   it("does not start a frame loop before the drag begins", async () => {
     const { feed, message, chromeText } = mountChatPane();
     renderHook(() => useClampDragSelection({ current: feed }));

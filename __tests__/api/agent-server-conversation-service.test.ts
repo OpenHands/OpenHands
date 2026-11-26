@@ -21,6 +21,7 @@ import {
 import type { Backend } from "#/api/backend-registry/types";
 import { clearCachedAgentServerInfo } from "#/api/agent-server-compatibility";
 import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
+import { getOrganizationSuspension } from "#/api/cloud/organization-suspension-store";
 import { AUTOMATION_SETUP_SYSTEM_SUFFIX } from "#/api/automation-form-client-tool";
 import HooksService from "#/api/hooks-service";
 import LLMSubscriptionService from "#/api/llm-subscription-service";
@@ -1265,6 +1266,41 @@ describe("AgentServerConversationService", () => {
       __resetActiveStoreForTests();
     });
 
+    it("keeps planning lookup and deletion on the original backend during a switch", async () => {
+      const original: Backend = { id: "delete-origin", kind: "local", name: "Original", host: "http://original.test", apiKey: "original-key" };
+      const next: Backend = { ...original, id: "delete-next", host: "http://next.test", apiKey: "next-key" };
+      setRegisteredBackends([original, next]);
+      setActiveSelection({ backendId: original.id });
+      let resolveParent!: (value: unknown) => void;
+      mockHttpGet.mockReturnValueOnce(new Promise(resolve => { resolveParent = resolve; }));
+      mockHttpGet.mockResolvedValueOnce({ data: [makeDirectConversation({ id: "planner", tags: { plannerparent: "parent" } })] });
+      mockHttpDelete.mockResolvedValue({ data: undefined });
+      const deletion = AgentServerConversationService.deleteConversation("parent");
+      setActiveSelection({ backendId: next.id });
+      resolveParent({ data: [makeDirectConversation({ id: "parent", sub_conversation_ids: ["planner"] })] });
+      await deletion;
+      expect(mockHttpDelete.mock.calls.map(call => call[0])).toEqual(["/api/conversations/planner", "/api/conversations/parent"]);
+      expect(vi.mocked(ConversationClient).mock.calls.map(([options]) => options?.host)).toEqual(expect.arrayContaining([original.host]));
+      expect(vi.mocked(ConversationClient).mock.calls.every(([options]) => options?.host === original.host)).toBe(true);
+    });
+
+    it("uses the captured Cloud organization and records suspension there after selection changes", async () => {
+      setRegisteredBackends([cloudBackend, localBackend]);
+      setActiveSelection({ backendId: cloudBackend.id, orgId: "delete-org" });
+      const scope = AgentServerConversationService.createConversationDeletionScope();
+      setActiveSelection({ backendId: cloudBackend.id, orgId: "other-org" });
+      const requests = captureRequests(["delete"], HttpResponse.json({ detail: "Organization is suspended" }, { status: 403 }));
+      await expect(AgentServerConversationService.deleteConversation("cloud-parent", scope)).rejects.toThrow();
+      expect(requests[0].url).toBe(`${cloudBackend.host}/api/v1/app-conversations/cloud-parent`);
+      expect(requests[0].headers["x-org-id"]).toBe("delete-org");
+      expect(getOrganizationSuspension(cloudBackend.id, "delete-org")).toBe("organization");
+      expect(getOrganizationSuspension(cloudBackend.id, "other-org")).toBeNull();
+      setActiveSelection({ backendId: localBackend.id });
+      server.use(http.delete(`${cloudBackend.host}/api/v1/app-conversations/cloud-parent`, () => new HttpResponse(null, { status: 204 })));
+      await AgentServerConversationService.deleteConversation("cloud-parent", scope);
+      expect(mockHttpDelete).not.toHaveBeenCalled();
+    });
+
     it("hits the local /api/conversations/{id} endpoint when active backend is local", async () => {
       mockHttpDelete.mockResolvedValue({ data: undefined });
 
@@ -1938,6 +1974,101 @@ describe("AgentServerConversationService", () => {
       });
     });
 
+    describe("git provider connection", () => {
+      const startedTask = {
+        id: "task-git",
+        status: "WORKING",
+        app_conversation_id: null,
+        agent_server_url: null,
+        request: {},
+        created_at: "2024-01-01",
+        updated_at: "2024-01-01",
+      };
+
+      it("names the connection the repository was picked from in the start request", async () => {
+        const requests = captureRequests(["post"], startedTask);
+
+        await AgentServerConversationService.createConversation({
+          metadata: {
+            selected_repository: "team/app",
+            selected_branch: "main",
+            git_provider: "gitlab",
+            git_provider_id: 9,
+          },
+        });
+
+        expect(requests[0].body).toMatchObject({
+          selected_repository: "team/app",
+          git_provider: "gitlab",
+          git_provider_id: 9,
+        });
+      });
+
+      it("leaves git_provider_id out of the start request when no connection was picked", async () => {
+        const requests = captureRequests(["post"], startedTask);
+
+        await AgentServerConversationService.createConversation({
+          metadata: {
+            selected_repository: "team/app",
+            selected_branch: "main",
+            git_provider: "gitlab",
+            git_provider_id: null,
+          },
+        });
+
+        expect(requests[0].body).not.toHaveProperty("git_provider_id");
+      });
+
+      it("saves the connection with a connected repository", async () => {
+        const requests = captureRequests(
+          ["patch", "get"],
+          [{ id: "conv-cloud-1" }],
+        );
+
+        await AgentServerConversationService.updateConversationRepository(
+          "conv-cloud-1",
+          "team/app",
+          "main",
+          "gitlab",
+          9,
+        );
+
+        expect(
+          requests.find((request) => request.method === "PATCH")?.body,
+        ).toEqual({
+          selected_repository: "team/app",
+          selected_branch: "main",
+          git_provider: "gitlab",
+          git_provider_id: 9,
+        });
+      });
+
+      it("keeps the connection on the stored selection and replaces it with the next repository", async () => {
+        captureRequests(["patch", "get"], [{ id: "conv-cloud-1" }]);
+
+        await AgentServerConversationService.updateConversationRepository(
+          "conv-cloud-1",
+          "team/app",
+          "main",
+          "gitlab",
+          9,
+        );
+        expect(
+          getStoredConversationMetadata("conv-cloud-1")?.git_provider_id,
+        ).toBe(9);
+
+        await AgentServerConversationService.updateConversationRepository(
+          "conv-cloud-1",
+          "OpenHands/agent-canvas",
+          "main",
+          "github",
+        );
+        expect(getStoredConversationMetadata("conv-cloud-1")).not.toHaveProperty(
+          "git_provider_id",
+        );
+      });
+    });
+
     it("leaves an ordinary cloud conversation's system message alone", async () => {
       const requests = captureRequests(["post"], {
         id: "task-chat",
@@ -2424,6 +2555,19 @@ describe("AgentServerConversationService", () => {
       expect(result.next_page_id).toBeNull();
     });
 
+    it("preserves the parent conversation link from conversation search", async () => {
+      mockSearchConversations.mockResolvedValue([
+        makeDirectConversation({
+          id: "child-conv",
+          parent_conversation_id: "parent-conv",
+        }),
+      ]);
+
+      const result = await AgentServerConversationService.searchConversations();
+
+      expect(result.items[0]?.parent_conversation_id).toBe("parent-conv");
+    });
+
     it("preserves a string cursor from a paginated conversation search", async () => {
       mockSearchConversations.mockResolvedValue({
         items: [makeDirectConversation({ id: "page-conv" })],
@@ -2441,6 +2585,47 @@ describe("AgentServerConversationService", () => {
         page_id: "current-page",
         sort_order: "UPDATED_AT_DESC",
       });
+    });
+
+    it("keeps healthy and identifiable broken rows when another row is malformed", async () => {
+      mockSearchConversations.mockResolvedValue({
+        items: [
+          null,
+          makeDirectConversation({ id: "healthy" }),
+          { title: "No ID" },
+        ],
+        broken_items: [
+          {
+            id: "damaged",
+            title: "Forked conversation",
+            reason: "state",
+            updated_at: "2099-01-01T00:00:00Z",
+          },
+        ],
+        next_page_id: "next-page",
+      });
+
+      const page = await AgentServerConversationService.searchConversations();
+
+      expect(page.items).toMatchObject([
+        {
+          id: "damaged",
+          title: "Forked conversation",
+          broken_reason: "state",
+          conversation_url: null,
+        },
+        { id: "healthy" },
+      ]);
+      expect(page.next_page_id).toBe("next-page");
+    });
+
+    it("propagates a backend error during conversation search", async () => {
+      const error = new Error("Unauthorized");
+      mockSearchConversations.mockRejectedValue(error);
+
+      await expect(
+        AgentServerConversationService.searchConversations(),
+      ).rejects.toBe(error);
     });
 
     it.each([
@@ -3207,6 +3392,23 @@ describe("AgentServerConversationService", () => {
         "/api/v1/app-conversations/conv-cloud/switch_acp_model",
       );
       expect(requests[0].body).toEqual({ model: "claude-opus-4-7" });
+    });
+
+    it("switches an ACP effort through the cloud app endpoint", async () => {
+      setRegisteredBackends([cloudBackend]);
+      setActiveSelection({ backendId: cloudBackend.id });
+      const requests = captureRequests(["post"], { success: true });
+
+      await AgentServerConversationService.switchAcpEffort(
+        "conv-cloud",
+        "high",
+      );
+
+      expect(requests).toHaveLength(1);
+      expect(requests[0].url).toContain(
+        "/api/v1/app-conversations/conv-cloud/switch_acp_effort",
+      );
+      expect(requests[0].body).toEqual({ effort: "high" });
     });
   });
 

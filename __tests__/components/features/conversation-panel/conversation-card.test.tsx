@@ -1,3 +1,4 @@
+import { HttpError } from "@openhands/typescript-client";
 import { screen, within } from "@testing-library/react";
 import {
   afterAll,
@@ -26,6 +27,35 @@ import { ActiveBackendProvider } from "#/contexts/active-backend-context";
 import { useFreeModelsStore } from "#/stores/free-models-store";
 import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
 import ConversationService from "#/api/conversation-service/conversation-service.api";
+import ProjectsService, {
+  type Project,
+} from "#/api/projects-service/projects-service.api";
+import { experimentalFeaturesService } from "#/api/experimental-features-service/experimental-features-service.api";
+
+/** Turn the backend's `projects` experimental feature on or off. */
+const setProjectsFeature = (enabled: boolean) =>
+  vi
+    .spyOn(experimentalFeaturesService, "listExperimentalFeatures")
+    .mockResolvedValue([
+      {
+        key: "projects",
+        label: "Projects",
+        description: "",
+        enabled,
+      },
+    ] as Awaited<
+      ReturnType<typeof experimentalFeaturesService.listExperimentalFeatures>
+    >);
+
+const project = (id: string, name: string): Project => ({
+  id,
+  name,
+  description: "",
+  coordinator_conversation_id: null,
+  worker_agent_profile_id: null,
+  created_at: "2026-11-09T00:00:00Z",
+  updated_at: "2026-11-09T00:00:00Z",
+});
 
 // We'll use the actual i18next implementation but override the translation function
 
@@ -73,12 +103,7 @@ describe("ConversationCard", () => {
   const onChangeTitle = vi.fn();
 
   beforeAll(() => {
-    vi.stubGlobal("window", {
-      open: vi.fn(),
-      addEventListener: vi.fn(),
-      removeEventListener: vi.fn(),
-      location: { origin: "http://localhost:3000" },
-    });
+    vi.spyOn(window, "open").mockImplementation(() => null);
   });
 
   afterEach(() => {
@@ -86,7 +111,7 @@ describe("ConversationCard", () => {
   });
 
   afterAll(() => {
-    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
   });
 
   it("should render the conversation card", () => {
@@ -141,6 +166,71 @@ describe("ConversationCard", () => {
     );
 
     screen.getByTestId("conversation-card-selected-repository");
+  });
+
+  it("names a conversation's project instead of showing its id", async () => {
+    setProjectsFeature(true);
+    vi.spyOn(ProjectsService, "listProjects").mockResolvedValue([
+      project("3cd1a23c-0000-4000-8000-000000000001", "Release 0.2"),
+    ]);
+    renderWithProviders(
+      <ConversationCard
+        title="Conversation 1"
+        lastUpdatedAt="2021-10-01T12:00:00Z"
+        selectedRepository={null}
+        showTags
+        tags={{ project: "3cd1a23c000040008000000000000001" }}
+      />,
+    );
+
+    const chip = await screen.findByTestId("conversation-card-tag-chip");
+    await vi.waitFor(() => expect(chip).toHaveTextContent("Release 0.2"));
+    expect(chip).not.toHaveTextContent("3cd1a23c");
+  });
+
+  it("hides the project chip while the backend has Projects turned off", async () => {
+    setProjectsFeature(false);
+    vi.spyOn(ProjectsService, "listProjects").mockRejectedValue(
+      new HttpError(404, "Not Found", { detail: "Not Found" }),
+    );
+    renderWithProviders(
+      <ConversationCard
+        title="Conversation 1"
+        lastUpdatedAt="2021-10-01T12:00:00Z"
+        selectedRepository={null}
+        showTags
+        tags={{ project: "3cd1a23c000040008000000000000001", team: "core" }}
+      />,
+    );
+
+    await vi.waitFor(() =>
+      expect(screen.getAllByTestId("conversation-card-tag-chip")).toHaveLength(
+        1,
+      ),
+    );
+    expect(
+      screen.getByTestId("conversation-card-tag-chip"),
+    ).not.toHaveTextContent("3cd1a23c");
+  });
+
+  it("keeps a project's id when the project list can't be read", async () => {
+    setProjectsFeature(true);
+    vi.spyOn(ProjectsService, "listProjects").mockRejectedValue(
+      new Error("network down"),
+    );
+    renderWithProviders(
+      <ConversationCard
+        title="Conversation 1"
+        lastUpdatedAt="2021-10-01T12:00:00Z"
+        selectedRepository={null}
+        showTags
+        tags={{ project: "3cd1a23c000040008000000000000001" }}
+      />,
+    );
+
+    expect(
+      await screen.findByTestId("conversation-card-tag-chip"),
+    ).toHaveTextContent("3cd1a23c");
   });
 
   it("styles repo and branch with the same raised pill chip as tags", () => {
@@ -796,6 +886,20 @@ describe("ConversationCard", () => {
     },
   );
 
+  it("keeps Stop for a running cloud sandbox after the agent is interrupted", () => {
+    renderWithProviders(
+      <ConversationCardActions
+        contextMenuOpen={true}
+        onContextMenuToggle={vi.fn()}
+        onStop={vi.fn()}
+        executionStatus={ExecutionStatus.PAUSED}
+        sandboxStatus="RUNNING"
+      />,
+    );
+
+    expect(screen.getByTestId("stop-button")).toBeInTheDocument();
+  });
+
   describe("stop button label by active backend", () => {
     const cloudBackend: Backend = {
       id: "prod",
@@ -826,7 +930,7 @@ describe("ConversationCard", () => {
       );
     });
 
-    it("uses COMMON$CLOSE_CONVERSATION_STOP_RUNTIME on a cloud backend", () => {
+    it("uses COMMON$STOP_SANDBOX on a cloud backend", () => {
       setRegisteredBackends([cloudBackend]);
       setActiveSelection({ backendId: cloudBackend.id });
 
@@ -842,7 +946,7 @@ describe("ConversationCard", () => {
       );
 
       expect(screen.getByTestId("stop-button")).toHaveTextContent(
-        "COMMON$CLOSE_CONVERSATION_STOP_RUNTIME",
+        "COMMON$STOP_SANDBOX",
       );
     });
   });

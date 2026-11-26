@@ -13,7 +13,7 @@ import {
   isClassifyAndSwitchLLMObservationEvent,
   isSwitchLLMObservationEvent,
 } from "#/types/agent-server/type-guards";
-import { shouldRenderEvent } from "#/components/conversation-events/chat/event-content-helpers/should-render-event";
+import { canAnchorAfterEvent } from "#/components/conversation-events/chat/event-content-helpers/should-render-event";
 
 export function recordModelSwitchMessage(
   conversationId: string,
@@ -140,7 +140,7 @@ export function seedModelSwitchesFromHistory(
         timestamp: event.timestamp,
       };
     }
-    if (shouldRenderEvent(event)) {
+    if (canAnchorAfterEvent(event)) {
       lastRenderableId = String(event.id);
     }
   }

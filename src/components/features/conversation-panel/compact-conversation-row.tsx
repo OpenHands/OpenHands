@@ -1,6 +1,6 @@
 import { ConversationTitleText } from "#/components/features/conversation/conversation-title-text";
 import React from "react";
-import { Tooltip } from "@heroui/react";
+import { Tooltip } from "#/components/shared/tooltip";
 import { useTranslation } from "react-i18next";
 import type { ACPModelOption } from "#/constants/acp-providers";
 import { NavigationLink } from "#/components/shared/navigation-link";

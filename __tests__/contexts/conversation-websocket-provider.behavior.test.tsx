@@ -1,5 +1,11 @@
 import React from "react";
-import { act, render, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  render,
+  renderHook,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   afterEach,
@@ -41,13 +47,17 @@ import {
   setRegisteredBackends,
 } from "#/api/backend-registry/active-store";
 import type { Backend } from "#/api/backend-registry/types";
+import { HttpError } from "@openhands/typescript-client";
 import EventService from "#/api/event-service/event-service.api";
 import { SERVER_CONNECTION_ERROR_MESSAGE } from "#/constants/server-connection-error";
 import { getStoredConversationMetadata } from "#/api/conversation-metadata-store";
 import {
   getConversationState,
+  getConversationDraftRevision,
   setConversationState,
 } from "#/utils/conversation-local-storage";
+
+import { useDraftPersistence } from "#/hooks/chat/use-draft-persistence";
 
 interface TestSocket {
   readonly readyState: number;
@@ -76,10 +86,22 @@ const socketCapture = vi.hoisted(() => ({
 const historyCapture = vi.hoisted(() => ({
   scope: "test-scope",
   persistedData: undefined as
-    { events: OpenHandsEvent[]; afterSeq?: number | null } | undefined,
+    | {
+        events: OpenHandsEvent[];
+        afterSeq?: number | null;
+        nextPageId?: string | null;
+        hasMore?: boolean;
+      }
+    | undefined,
   result: {
     data: { events: [] as OpenHandsEvent[] } as
-      { events: OpenHandsEvent[]; afterSeq?: number | null } | undefined,
+      | {
+          events: OpenHandsEvent[];
+          afterSeq?: number | null;
+          nextPageId?: string | null;
+          hasMore?: boolean;
+        }
+      | undefined,
     isPending: false,
     isFetching: false,
     isError: false,
@@ -425,6 +447,94 @@ describe("Conversation websocket behavior", () => {
   });
 
   it.each(["main", "planning"] as const)(
+    "confirms a %s message submitted before its draft debounce completes",
+    (target) => {
+      vi.useFakeTimers();
+      renderProvider({
+        subConversations: [makeSubConversation()],
+        subConversationIds: ["conv-planning"],
+      });
+      const input = document.createElement("div");
+      Object.defineProperty(input, "innerText", {
+        get() {
+          return this.textContent ?? "";
+        },
+      });
+      const inputRef = { current: input };
+      const composer = renderHook(() =>
+        useDraftPersistence("conv-main", inputRef),
+      );
+      input.textContent = "Sent before debounce";
+      act(() => composer.result.current.saveDraft());
+      const draftRevision = getConversationDraftRevision("conv-main");
+      useOptimisticUserMessageStore.getState().enqueuePendingMessage({
+        conversationId: "conv-main",
+        text: "Sent before debounce",
+        draftRevision,
+      });
+
+      act(() => vi.advanceTimersByTime(500));
+      expect(getConversationState("conv-main").draftMessage).toBe(
+        "Sent before debounce",
+      );
+      const dispatch = target === "main" ? dispatchMain : dispatchPlanning;
+      dispatch(makeMessageEvent("50", "user", ["Sent before debounce"]));
+      composer.unmount();
+      expect(getConversationState("conv-main").draftMessage).toBeNull();
+    },
+  );
+
+  it.each(["main", "planning"] as const)(
+    "clears only the confirmed draft revision on the %s socket",
+    (target) => {
+      renderProvider({
+        subConversations: [makeSubConversation()],
+        subConversationIds: ["conv-planning"],
+      });
+      const dispatch = target === "main" ? dispatchMain : dispatchPlanning;
+      const store = useOptimisticUserMessageStore.getState();
+      const submit = (text: string) => {
+        setConversationState("conv-main", { draftMessage: text });
+        store.enqueuePendingMessage({
+          conversationId: "conv-main",
+          text,
+          draftRevision: getConversationDraftRevision("conv-main"),
+        });
+      };
+
+      // An unchanged submitted draft is cleared on confirmation.
+      submit("First request");
+      dispatch(makeMessageEvent("51", "user", ["First request"]));
+      expect(getConversationState("conv-main").draftMessage).toBeNull();
+
+      // A different saved follow-up belongs to the composer, not that echo.
+      submit("Second request");
+      setConversationState("conv-main", { draftMessage: "New follow-up" });
+      dispatch(makeMessageEvent("52", "user", ["Second request"]));
+      expect(getConversationState("conv-main").draftMessage).toBe(
+        "New follow-up",
+      );
+
+      // Even identical text can be a new edit after submission.
+      submit("Repeated request");
+      setConversationState("conv-main", { draftMessage: "Repeated request" });
+      dispatch(makeMessageEvent("53", "user", ["Repeated request"]));
+      expect(getConversationState("conv-main").draftMessage).toBe(
+        "Repeated request",
+      );
+
+      // Another tab or replay has no local submitted revision to confirm.
+      dispatch(makeMessageEvent("54", "user", ["Repeated request"]));
+      expect(getConversationState("conv-main").draftMessage).toBe(
+        "Repeated request",
+      );
+      expect(
+        useOptimisticUserMessageStore.getState().pendingMessages,
+      ).toHaveLength(0);
+    },
+  );
+
+  it.each(["main", "planning"] as const)(
     "keeps %s replay out of live execution status, including after reconnect",
     async (target) => {
       renderProvider({
@@ -700,6 +810,38 @@ describe("Conversation websocket behavior", () => {
     expect(queryParamsOf(mainOptions())).toEqual({ after_seq: "-1" });
   });
 
+  it("explains a history load that failed on an unreadable event file", () => {
+    const reason = "Missing event file: events/event-00552-15c60853.json";
+    Object.assign(historyCapture.result, {
+      isError: true,
+      error: new HttpError(500, "Internal Server Error", {
+        detail: "Internal Server Error",
+        exception: reason,
+      }),
+    });
+
+    renderProvider();
+
+    expect(useErrorMessageStore.getState()).toMatchObject({
+      errorMessage: reason,
+      errorType: "conversation",
+    });
+  });
+
+  it("leaves other history load failures to socket recovery", () => {
+    Object.assign(historyCapture.result, {
+      isError: true,
+      error: new HttpError(500, "Internal Server Error", {
+        detail: "Internal Server Error",
+        exception: "disk is full",
+      }),
+    });
+
+    renderProvider();
+
+    expect(useErrorMessageStore.getState().errorMessage).toBeNull();
+  });
+
   it("waits for contiguous durable replay despite transient and out-of-order frames", () => {
     socketCapture.mainSocket = makeSocket();
     renderProvider();
@@ -860,9 +1002,16 @@ describe("Conversation websocket behavior", () => {
 
   it("accepts absent history and history without a selected conversation", () => {
     const addEvents = vi.spyOn(useEventStore.getState(), "addEvents");
+    historyCapture.result.data = {
+      events: [],
+      nextPageId: null,
+      hasMore: false,
+    };
     const empty = renderProvider();
-    expect(addEvents).not.toHaveBeenCalled();
+    expect(useEventStore.getState().events).toEqual([]);
+    expect(useEventStore.getState().historyPagination?.hasMore).toBe(false);
     empty.unmount();
+    addEvents.mockClear();
 
     socketCapture.callIndex = 0;
     historyCapture.result.data = undefined;
@@ -1259,6 +1408,7 @@ describe("Conversation websocket behavior", () => {
     await waitFor(() =>
       expect(screen.getByTestId("connection-state")).toHaveTextContent("OPEN"),
     );
+    dispatchMainFrame({ type: "sync", from_seq: null, through_seq: null });
     await expect(
       contextCapture.current?.sendMessage(makeSendRequest("new socket")),
     ).resolves.toEqual({ queued: false });
@@ -1279,6 +1429,7 @@ describe("Conversation websocket behavior", () => {
     socketCapture.mainSocket = mainSocket;
     socketCapture.planningSocket = planningSocket;
     renderProvider({ subConversations: [makeSubConversation()] });
+    dispatchMainFrame({ type: "sync", from_seq: null, through_seq: null });
 
     await expect(
       contextCapture.current?.sendMessage(makeSendRequest("code message")),
@@ -1294,6 +1445,30 @@ describe("Conversation websocket behavior", () => {
     expect(planningSocket.send).toHaveBeenCalledWith(
       JSON.stringify({ ...makeSendRequest("plan message"), run: true }),
     );
+  });
+
+  it("delivers over REST while an open socket has not been served yet", async () => {
+    const mainSocket = makeSocket();
+    socketCapture.mainSocket = mainSocket;
+    renderProvider();
+
+    // A running conversation can hold a new session socket unserved; a frame
+    // sent into it then is lost if the tab leaves first.
+    await expect(
+      contextCapture.current?.sendMessage(makeSendRequest("wait, actually")),
+    ).resolves.toEqual({ queued: true });
+    expect(mainSocket.send).not.toHaveBeenCalled();
+    expect(socketCapture.queueMessage).toHaveBeenCalledWith(
+      "conv-main",
+      { role: "user", content: makeSendRequest("wait, actually").content },
+      { run: true },
+    );
+
+    dispatchMainFrame({ type: "sync", from_seq: null, through_seq: null });
+    await expect(
+      contextCapture.current?.sendMessage(makeSendRequest("now live")),
+    ).resolves.toEqual({ queued: false });
+    expect(mainSocket.send).toHaveBeenCalledTimes(1);
   });
 
   it("queues messages over REST while the socket is unavailable", async () => {
@@ -1375,6 +1550,7 @@ describe("Conversation websocket behavior", () => {
     });
     socketCapture.mainSocket = socket;
     renderProvider();
+    dispatchMainFrame({ type: "sync", from_seq: null, through_seq: null });
 
     await expect(
       contextCapture.current?.sendMessage(makeSendRequest("hello")),
@@ -1453,10 +1629,12 @@ describe("Conversation websocket behavior", () => {
     );
     expect(socketCapture.trackError).toHaveBeenCalledTimes(2);
 
+    setConversationState("conv-main", { draftMessage: "hello world" });
     useOptimisticUserMessageStore.setState({
       pendingMessages: [
         {
           id: "pending-main",
+          draftRevision: getConversationDraftRevision("conv-main"),
           conversationId: "conv-main",
           text: "hello world",
           content: "hello world",
@@ -1467,7 +1645,6 @@ describe("Conversation websocket behavior", () => {
         },
       ],
     });
-    setConversationState("conv-main", { draftMessage: "hello world" });
     dispatchMain(makeMessageEvent("14", "user", ["hello", " world"]));
     expect(useOptimisticUserMessageStore.getState().pendingMessages).toEqual(
       [],
@@ -2442,10 +2619,12 @@ describe("Conversation websocket behavior", () => {
     );
     expect(socketCapture.trackError).toHaveBeenCalledTimes(2);
 
+    setConversationState("conv-main", { draftMessage: "plan this" });
     useOptimisticUserMessageStore.setState({
       pendingMessages: [
         {
           id: "pending-plan",
+          draftRevision: getConversationDraftRevision("conv-main"),
           conversationId: "conv-main",
           text: "plan this",
           content: "plan this",
@@ -2456,7 +2635,6 @@ describe("Conversation websocket behavior", () => {
         },
       ],
     });
-    setConversationState("conv-main", { draftMessage: "plan this" });
     dispatchPlanning(makeMessageEvent("40", "user", ["plan this"]));
     expect(useOptimisticUserMessageStore.getState().pendingMessages).toEqual(
       [],

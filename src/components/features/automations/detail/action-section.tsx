@@ -29,11 +29,14 @@ function AgentProfileFields({ id }: { id: string }) {
   if (profile) name = profile.name;
   else if (isLoading) name = "…";
   else name = t(I18nKey.AUTOMATIONS$UNAVAILABLE_AGENT_PROFILE, { id });
-  // An agent profile without its own LLM profile runs on the active one.
+  // An ACP agent runs its own model; an agent profile without its own LLM
+  // profile runs on the active one.
   const llmProfile =
-    profile?.llm_profile_ref ||
-    llmProfiles?.active_profile ||
-    t(I18nKey.COMMON$ACTIVE_PROFILE);
+    profile?.agent_kind === "acp"
+      ? t(I18nKey.CONVERSATION$ACP_AGENT_GENERIC)
+      : profile?.llm_profile_ref ||
+        llmProfiles?.active_profile ||
+        t(I18nKey.COMMON$ACTIVE_PROFILE);
 
   return (
     <>

@@ -1,5 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter, Route, Routes } from "react-router";
 import { HttpError } from "@openhands/typescript-client";
@@ -172,6 +178,50 @@ describe("AutomationGitSync — backend without the git-sync API", () => {
     ).toBeInTheDocument();
     // A permanent 404 is not worth retrying.
     expect(AutomationService.getGitSyncStatus).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("AutomationGitSync — keep activation status local", () => {
+  const KEEP_ACTIVATION_LOCAL_SWITCH = "git-sync-keep-activation-local-switch";
+
+  it("saves the option as the only changed setting", async () => {
+    // Arrange
+    vi.mocked(AutomationService.getGitSyncStatus).mockResolvedValue({
+      ...status,
+      keep_activation_local: false,
+    });
+    vi.mocked(AutomationService.updateGitSyncConfig).mockResolvedValue({
+      ...status,
+      keep_activation_local: true,
+    });
+    renderGitSync();
+    const keepActivationLocal = await screen.findByTestId(
+      KEEP_ACTIVATION_LOCAL_SWITCH,
+    );
+
+    // Act
+    fireEvent.click(keepActivationLocal);
+    fireEvent.click(screen.getByTestId("git-sync-save-button"));
+
+    // Assert
+    await waitFor(() =>
+      expect(AutomationService.updateGitSyncConfig).toHaveBeenCalledWith({
+        keep_activation_local: true,
+      }),
+    );
+  });
+
+  it("is not offered by a backend that does not report the option", async () => {
+    // Arrange: the default status comes from a backend without the field.
+    renderGitSync();
+
+    // Act
+    await screen.findByTestId("git-sync-repo-url-input");
+
+    // Assert
+    expect(
+      screen.queryByTestId(KEEP_ACTIVATION_LOCAL_SWITCH),
+    ).not.toBeInTheDocument();
   });
 });
 

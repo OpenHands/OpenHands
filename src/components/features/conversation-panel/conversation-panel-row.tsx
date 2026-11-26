@@ -1,5 +1,5 @@
 import React from "react";
-import { Tooltip } from "@heroui/react";
+import { Tooltip } from "#/components/shared/tooltip";
 import type { AppConversation } from "#/api/conversation-service/agent-server-conversation-service.types";
 import type { Provider } from "#/types/settings";
 import { NavigationLink } from "#/components/shared/navigation-link";
@@ -22,6 +22,7 @@ interface ConversationPanelRowProps {
   isArchived: boolean;
   explicitlyArchived: boolean;
   contextMenuOpen: boolean;
+  isInMobileDrawer: boolean;
   inPinnedSection: boolean;
   allowEditTags: boolean;
   showHoverMetadata: boolean;
@@ -53,6 +54,7 @@ export const ConversationPanelRow = React.memo(function ConversationPanelRow({
   isArchived,
   explicitlyArchived,
   contextMenuOpen,
+  isInMobileDrawer,
   inPinnedSection,
   allowEditTags,
   showHoverMetadata,
@@ -76,9 +78,9 @@ export const ConversationPanelRow = React.memo(function ConversationPanelRow({
   const sandboxId = conversation.sandbox_id;
   return (
     <Tooltip
-      placement="right-start"
-      // Clear the sidebar's resize handle so the preview never covers it.
-      offset={20}
+      placement={isInMobileDrawer ? "bottom-start" : "right-start"}
+      // Clear the desktop sidebar's resize handle.
+      offset={isInMobileDrawer ? undefined : 20}
       delay={1000}
       closeDelay={100}
       isDisabled={!showHoverMetadata || contextMenuOpen}
