@@ -28,6 +28,6 @@ if [ -f package-lock.json ]; then
 fi
 
 git config --global url."https://github.com/".insteadOf "ssh://git@github.com/"
-git config --global url."https://github.com/".insteadOf "git@github.com:"
+git config --global --add url."https://github.com/".insteadOf "git@github.com:"
 
 npm ci
