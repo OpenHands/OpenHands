@@ -92,6 +92,7 @@ describe("conversation-panel-preferences store", () => {
     expect(Object.keys(persisted.state).sort()).toEqual([
       "automationFilterMode",
       "conversationSort",
+      "groupBy",
       "groupFolderOrder",
       "olderConversationCutoff",
       "organizeMode",
