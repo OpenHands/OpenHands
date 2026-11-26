@@ -7,6 +7,7 @@ import type {
 } from "@openhands/typescript-client";
 import { getActiveBackend } from "../backend-registry/active-store";
 import type { Backend } from "../backend-registry/types";
+import { activeOrgForBackend } from "./client";
 import { callCloudProxy } from "./proxy";
 
 /**
@@ -27,20 +28,50 @@ import { callCloudProxy } from "./proxy";
 const SETTINGS_PROFILES_PATH = "/api/v1/settings/profiles";
 
 /**
+ * Org-gated LLM profiles when this backend is the active one and an org is
+ * bound; otherwise the per-user settings route. A cloud backend that is only
+ * connected (the parent conversation is local) has no active org, so child
+ * launches confirm models on the settings route for that API key.
+ */
+function llmProfilesPath(backend: Backend): string {
+  const orgId = activeOrgForBackend(backend);
+  return orgId
+    ? `/api/organizations/${encodeURIComponent(orgId)}/profiles`
+    : SETTINGS_PROFILES_PATH;
+}
+
+/**
  * Resolve the backend + base path for the active cloud backend's profiles:
  * the org-gated route when an org is bound, else the per-user settings route.
  */
 function cloudProfilesTarget(): { backend: Backend; base: string } {
-  const { backend, orgId } = getActiveBackend();
+  const { backend } = getActiveBackend();
   if (backend.kind !== "cloud") {
     throw new Error("Cloud profiles call requires a cloud backend.");
   }
-  return {
+  return { backend, base: llmProfilesPath(backend) };
+}
+
+/**
+ * List LLM profiles on a specific cloud backend.
+ *
+ * Used when a local parent launches a cloud child on a connected cloud
+ * backend that is not the active one. {@link fetchCloudProfiles} only reads
+ * the active backend. A miss on this list does not by itself reject the
+ * launch: the resolver still sends the saved agent profile id and reports
+ * that the model was not confirmed.
+ */
+export async function fetchCloudProfilesForBackend(
+  backend: Backend,
+): Promise<ProfileListResponse> {
+  if (backend.kind !== "cloud") {
+    throw new Error("Cloud profiles call requires a cloud backend.");
+  }
+  return callCloudProxy<ProfileListResponse>({
     backend,
-    base: orgId
-      ? `/api/organizations/${encodeURIComponent(orgId)}/profiles`
-      : SETTINGS_PROFILES_PATH,
-  };
+    method: "GET",
+    path: llmProfilesPath(backend),
+  });
 }
 
 export async function fetchCloudProfiles(): Promise<ProfileListResponse> {
