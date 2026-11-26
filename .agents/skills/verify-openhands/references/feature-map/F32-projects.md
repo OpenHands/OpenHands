@@ -50,12 +50,9 @@ Preconditions:
 - A local stack whose Agent Server serves Projects (`POST /api/projects`
   with `coordinator`) and meets the UI's minimum Agent Server version:
   `control-openhands api GET /api/settings/experimental` must list the key
-  `projects`. The released 1.63.1 server (the pin) does not; software-agent-sdk
-  `main` at `0988e97` (version 1.63.1) does, so launch with
-  `control-openhands launch --new --sdk-ref <a software-agent-sdk main commit that has projects_router.py>`.
-  The #6602 branch head reports 1.63.0, below the UI minimum, and every page
-  shows the backend-compatibility gate. Without such a backend only `F32.off`
-  can run; record the rest `blocked`.
+  `projects`. The pinned Agent Server (1.64.1) lists it, so a default
+  `control-openhands launch --new` runs every F32 recipe. On an Agent Server
+  that does not list it, only `F32.off` can run; record the rest `blocked`.
 - Canvas reads the flag through `@openhands/typescript-client`'s
   `listExperimentalFeatures`. A client without it reads every flag as off, so
   F32 shows nothing; record the client version with the run.
