@@ -812,3 +812,162 @@ describe("ingress --no-referrer-prefix", () => {
     expect(response.headers.get("referrer-policy")).toBeNull();
   });
 });
+
+describe("ingress loopback Host and Origin protection", () => {
+  let backend: Server | undefined;
+  let ingressProcess: ChildProcess | undefined;
+  let ingressPort: number;
+  let backendHits = 0;
+  let backendUpgrades = 0;
+
+  function rawHttp(
+    pathName: string,
+    headers: Record<string, string>,
+    method = "GET",
+  ) {
+    return new Promise<{ status: number; body: string }>((resolve, reject) => {
+      const req = request(
+        {
+          host: "127.0.0.1",
+          port: ingressPort,
+          path: pathName,
+          method,
+          headers,
+        },
+        (res) => {
+          let body = "";
+          res.setEncoding("utf8");
+          res.on("data", (chunk) => {
+            body += chunk;
+          });
+          res.on("end", () => resolve({ status: res.statusCode ?? 0, body }));
+        },
+      );
+      req.on("error", reject);
+      req.end();
+    });
+  }
+
+  function rawUpgrade(pathName: string, headers: Record<string, string>) {
+    return new Promise<{ status: number; upgraded: boolean }>(
+      (resolve, reject) => {
+        const req = request({
+          host: "127.0.0.1",
+          port: ingressPort,
+          path: pathName,
+          headers: {
+            Connection: "Upgrade",
+            Upgrade: "websocket",
+            "Sec-WebSocket-Key": "dGhlIHNhbXBsZSBub25jZQ==",
+            "Sec-WebSocket-Version": "13",
+            ...headers,
+          },
+        });
+        req.on("upgrade", (_res, socket) => {
+          socket.destroy();
+          resolve({ status: 101, upgraded: true });
+        });
+        req.on("response", (res) => {
+          res.resume();
+          resolve({ status: res.statusCode ?? 0, upgraded: false });
+        });
+        req.on("error", reject);
+        req.end();
+      },
+    );
+  }
+
+  beforeAll(async () => {
+    backend = createServer((_req, res) => {
+      backendHits += 1;
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ ok: true }));
+    });
+    backend.on("upgrade", (_req, socket) => {
+      backendUpgrades += 1;
+      socket.write(
+        "HTTP/1.1 101 Switching Protocols\r\n" +
+          "Upgrade: websocket\r\n" +
+          "Connection: Upgrade\r\n" +
+          "Sec-WebSocket-Accept: s3pPLMBiTxaQ9kYGzzhZRbK+xOo=\r\n\r\n",
+      );
+      socket.end();
+    });
+    const backendPort = await listenOnLoopback(backend);
+
+    ingressPort = await getFreePort();
+    ingressProcess = spawn(
+      process.execPath,
+      [
+        ingressScript,
+        "--port",
+        ingressPort.toString(),
+        "--host",
+        "127.0.0.1",
+        "--route",
+        `/api=${originForPort(backendPort)}`,
+        "--route",
+        `/sockets=${originForPort(backendPort)}`,
+        "--default",
+        originForPort(backendPort),
+      ],
+      { cwd: repoRoot, stdio: ["ignore", "pipe", "pipe"] },
+    );
+
+    await waitForPort(ingressPort, ingressProcess);
+  });
+
+  afterAll(async () => {
+    await stopChild(ingressProcess);
+    await closeServer(backend);
+  });
+
+  it("rejects DNS-rebound and userinfo-spoofed Host headers before forwarding upstream", async () => {
+    for (const badHost of [
+      "evil.example:8000",
+      `evil.example@127.0.0.1:${ingressPort}`,
+      ".localhost:8000",
+    ]) {
+      const apiRes = await rawHttp("/api/health", { Host: badHost });
+      expect(apiRes.status).toBe(403);
+
+      const defaultRes = await rawHttp("/", { Host: badHost });
+      expect(defaultRes.status).toBe(403);
+
+      const wsRes = await rawUpgrade("/sockets/events", { Host: badHost });
+      expect(wsRes).toEqual({ status: 403, upgraded: false });
+    }
+    expect(backendHits).toBe(0);
+    expect(backendUpgrades).toBe(0);
+  });
+
+  it("rejects cross-origin WebSocket upgrades and unsafe POSTs while permitting loopback traffic", async () => {
+    expect(
+      await rawUpgrade("/sockets/events", {
+        Host: `127.0.0.1:${ingressPort}`,
+        Origin: "https://evil.example",
+      }),
+    ).toEqual({ status: 403, upgraded: false });
+
+    const crossPost = await rawHttp(
+      "/api/conversations",
+      { Host: `127.0.0.1:${ingressPort}`, Origin: "https://evil.example" },
+      "POST",
+    );
+    expect(crossPost.status).toBe(403);
+    expect(backendHits).toBe(0);
+    expect(backendUpgrades).toBe(0);
+
+    expect(
+      await rawHttp("/", { Host: `localhost:${ingressPort}` }),
+    ).toMatchObject({ status: 200 });
+    expect(
+      await rawUpgrade("/sockets/events", {
+        Host: `127.0.0.1:${ingressPort}`,
+        Origin: `http://localhost:${ingressPort}`,
+      }),
+    ).toEqual({ status: 101, upgraded: true });
+    expect(backendHits).toBe(1);
+    expect(backendUpgrades).toBe(1);
+  });
+});

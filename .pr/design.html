@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Usage panel — per-model cost breakdown</title>
+<style>
+  :root {
+    color-scheme: light;
+    --border: #d9d9e3;
+    --muted: #6b7280;
+    --text: #111827;
+    --note: #6b7280;
+    --warn-bg: #fffbeb;
+    --warn-border: #f59e0b;
+  }
+  body {
+    font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    background: #f7f7f8;
+    color: var(--text);
+    margin: 0;
+    padding: 32px;
+  }
+  h1 { font-size: 18px; margin: 0 0 6px; }
+  p.lede { color: var(--muted); font-size: 13px; margin: 0 0 28px; max-width: 720px; }
+  .columns { display: flex; gap: 32px; flex-wrap: wrap; }
+  .panel {
+    background: #fff;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 18px;
+    width: 320px;
+    box-shadow: 0 1px 2px rgba(0,0,0,.04);
+  }
+  .panel h2 {
+    font-size: 12px; text-transform: uppercase; letter-spacing: .06em;
+    color: var(--muted); margin: 0 0 14px;
+  }
+  .row { display: flex; justify-content: space-between; padding: 5px 0; font-size: 14px; }
+  .row .label { color: var(--text); }
+  .row .value { font-weight: 600; }
+  .row.total { border-top: 1px solid var(--border); margin-top: 8px; padding-top: 10px; font-weight: 600; }
+  .row.sub { padding-left: 16px; color: var(--muted); font-size: 12.5px; }
+  .section-label { color: var(--muted); font-size: 12.5px; margin: 14px 0 4px; }
+  .note {
+    display: block; color: var(--note); font-size: 12px; line-height: 1.45;
+    margin-top: 10px; padding: 8px 10px;
+    background: var(--warn-bg); border-left: 3px solid var(--warn-border); border-radius: 4px;
+  }
+  .note.quiet { background: transparent; border-left: 3px solid var(--border); }
+  .badge {
+    display: inline-block; font-size: 11px; font-weight: 600; padding: 2px 8px;
+    border-radius: 999px; margin-bottom: 10px;
+  }
+  .badge.before { background: #fee2e2; color: #991b1b; }
+  .badge.after { background: #dcfce7; color: #166534; }
+  .strike { text-decoration: line-through; color: #991b1b; }
+</style>
+</head>
+<body>
+  <h1>Usage panel: make the cost figure honest and attributable</h1>
+  <p class="lede">
+    The combined Total Cost row is unchanged in value — it is still the agent-server's
+    <code>accumulated_cost</code>. What changes is what the panel tells you
+    <em>about</em> that number.
+  </p>
+
+  <div class="columns">
+    <div class="panel">
+      <span class="badge before">Before</span>
+      <h2>Usage</h2>
+      <div class="row"><span class="label">Input</span><span class="value">19,747,245</span></div>
+      <div class="row"><span class="label">Cache Hit</span><span class="value">18,989,568</span></div>
+      <div class="row"><span class="label">Cache Write</span><span class="value">0</span></div>
+      <div class="row"><span class="label">Output</span><span class="value">415,535</span></div>
+      <div class="row"><span class="label">Total</span><span class="value">20,162,780</span></div>
+      <div class="row total"><span class="label">Total Cost</span><span class="value">$0.0030</span></div>
+      <p style="color:#991b1b;font-size:12.5px;line-height:1.5">
+        20.1M tokens ↔ $0.0030, with no explanation of which model was priced
+        or that the provider pricing was unknown. Reads as "this session was free".
+      </p>
+    </div>
+
+    <div class="panel">
+      <span class="badge after">After — priced session</span>
+      <h2>Usage</h2>
+      <div class="row"><span class="label">Input</span><span class="value">19,747,245</span></div>
+      <div class="row"><span class="label">Cache Hit</span><span class="value">18,989,568</span></div>
+      <div class="row"><span class="label">Cache Write</span><span class="value">0</span></div>
+      <div class="row"><span class="label">Output</span><span class="value">415,535</span></div>
+      <div class="row"><span class="label">Total</span><span class="value">20,162,780</span></div>
+      <div class="row total"><span class="label">Total Cost</span><span class="value">$12.4030</span></div>
+      <span class="note quiet">
+        Estimated from model pricing — may differ from what your provider bills.
+      </span>
+      <div class="section-label">By model</div>
+      <div class="row"><span class="label">anthropic/claude-sonnet-4-5</span><span class="value">$12.4000</span></div>
+      <div class="row sub">Input 19,747,245 · Output 415,535</div>
+      <div class="row"><span class="label">openai/gpt-4o-mini</span><span class="value">$0.0030</span></div>
+      <div class="row sub">Input 84,102 · Output 12,300</div>
+    </div>
+
+    <div class="panel">
+      <span class="badge after">After — unknown pricing</span>
+      <h2>Usage</h2>
+      <div class="row"><span class="label">Input</span><span class="value">19,747,245</span></div>
+      <div class="row"><span class="label">Cache Hit</span><span class="value">18,989,568</span></div>
+      <div class="row"><span class="label">Cache Write</span><span class="value">0</span></div>
+      <div class="row"><span class="label">Output</span><span class="value">415,535</span></div>
+      <div class="row"><span class="label">Total</span><span class="value">20,162,780</span></div>
+      <div class="row total"><span class="label">Total Cost</span><span class="value">$0.0030</span></div>
+      <span class="note">
+        No cost data reported for the models used — pricing may be unavailable.
+      </span>
+      <p style="color:#374151;font-size:12.5px;line-height:1.5">
+        Shown only when tokens were recorded but the accumulated cost is exactly
+        0 — the Litellm "unknown model → 0.0" case, instead of a bare $0.0030.
+      </p>
+    </div>
+  </div>
+</body>
+</html>
