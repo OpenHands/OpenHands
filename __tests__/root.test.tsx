@@ -35,6 +35,12 @@ const rootMocks = vi.hoisted(() => ({
   showTelemetryBanner: false,
 }));
 
+const syncDocumentLanguageMock = vi.hoisted(() => vi.fn());
+
+vi.mock("#/hooks/use-sync-document-language", () => ({
+  useSyncDocumentLanguage: () => syncDocumentLanguageMock(),
+}));
+
 vi.mock("#/api/settings-service/settings-service.api", () => ({
   default: {
     getSettings: vi.fn(async () => rootMocks.settings.data),
@@ -300,6 +306,20 @@ describe("App root agent-server availability guard", () => {
     expect(
       screen.queryByTestId("manage-backends-modal"),
     ).not.toBeInTheDocument();
+  });
+
+  it("syncs the document language while first-run onboarding is shown", async () => {
+    vi.stubEnv("VITE_SESSION_API_KEY", "");
+    delete (window as unknown as Record<string, unknown>)
+      .__AGENT_CANVAS_SESSION_API_KEY__;
+    window.localStorage.clear();
+    __resetActiveStoreForTests();
+    syncDocumentLanguageMock.mockClear();
+
+    await renderApp(["/"]);
+
+    expect(await screen.findByTestId("onboarding-modal")).toBeInTheDocument();
+    expect(syncDocumentLanguageMock).toHaveBeenCalled();
   });
 
   it("collects local telemetry consent before showing first-run onboarding", async () => {
