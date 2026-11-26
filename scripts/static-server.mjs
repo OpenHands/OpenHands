@@ -34,7 +34,11 @@ import process from "node:process";
 import { pathToFileURL } from "node:url";
 import sirv from "sirv";
 
-import { applySessionKeyPolicy, DEFAULT_BIND_HOST } from "./bind-host.mjs";
+import {
+  applySessionKeyPolicy,
+  DEFAULT_BIND_HOST,
+  isForeignLoopbackRequest,
+} from "./bind-host.mjs";
 import { mountMarsWebBridge } from "./mars-web-bridge.mjs";
 import {
   createProxyHandlers,
@@ -667,6 +671,7 @@ async function handleStatic(
 // ─────────────────────────────────────────────────────────────────────────────
 
 export function startStaticServer(config) {
+  const host = config.host || DEFAULT_BIND_HOST;
   // Apply editor identity forwarding only when the configured editor route
   // wins. A more specific route can override it, even to the same backend.
   const label = `static:${config.port}`;
@@ -691,7 +696,7 @@ export function startStaticServer(config) {
   );
   const dirAbs = resolve(config.dir);
   const policy = applySessionKeyPolicy({
-    host: config.host,
+    host,
     sessionApiKey: config.sessionApiKey || null,
     authRequired: config.authRequired || false,
     allowLanSessionKey: config.allowLanSessionKey || false,
@@ -720,11 +725,16 @@ export function startStaticServer(config) {
   // bridge only ever checks a key the client sends — the one the user types
   // on the API key screen. A LAN bind with no key at all refuses to mount.
   const marsWeb = mountMarsWebBridge({
-    host: config.host,
+    host,
     sessionApiKey: config.sessionApiKey || null,
   });
 
   const server = createServer((req, res) => {
+    if (isForeignLoopbackRequest(req, host)) {
+      res.writeHead(403, { "Content-Type": "text/plain; charset=utf-8" });
+      res.end("Forbidden");
+      return;
+    }
     const url = req.url ?? "/";
     if (marsWeb?.handleHttp(req, res)) return;
     const matchedRoute = route(url);
@@ -766,6 +776,10 @@ export function startStaticServer(config) {
   });
 
   server.on("upgrade", (req, socket, head) => {
+    if (isForeignLoopbackRequest(req, host, { upgrade: true })) {
+      socket.end("HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n");
+      return;
+    }
     if (marsWeb?.handleUpgrade(req, socket, head)) return;
     const matchedRoute = route(req.url ?? "/");
     if (matchedRoute?.backend) {
@@ -781,11 +795,11 @@ export function startStaticServer(config) {
   });
 
   return new Promise((resolveListen) => {
-    server.listen(config.port, config.host, () => {
+    server.listen(config.port, host, () => {
       const displayPath = basePath === "/" ? "/" : `${basePath}/`;
       console.log("");
       console.log(
-        `Static-server + proxy listening on http://${config.host}:${config.port}${displayPath}`,
+        `Static-server + proxy listening on http://${host}:${config.port}${displayPath}`,
       );
       console.log(`  Static dir: ${dirAbs}`);
       console.log(`  Base path: ${basePath}`);

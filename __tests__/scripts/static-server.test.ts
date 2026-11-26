@@ -1182,9 +1182,21 @@ describe("static-server.mjs", () => {
       return buildDir;
     }
 
+    // These fixtures model the README Docker path and a TLS edge or reverse
+    // proxy in front of the static server, where the listener is reached
+    // off-loopback (the container binds `::`). The loopback Host and Origin
+    // guard in bind-host.mjs (#20060) is permissive on such binds by design,
+    // so these requests reach the editor route; the loopback-bind composition
+    // is pinned by its own test below.
+    async function startEditorServer(
+      overrides: Partial<Parameters<typeof startStaticServer>[0]> = {},
+    ) {
+      return startServer(makeBuildDir(), { host: "0.0.0.0", ...overrides });
+    }
+
     async function startEditorProxyRoute(upstreamQuery = "") {
       const upstreamOrigin = await startHttpServer(startEditorUpstream());
-      return startServer(makeBuildDir(), {
+      return startEditorServer({
         routes: { "/vscode": `${upstreamOrigin}${upstreamQuery}` },
         vscodeBasePath: "/vscode",
       });
@@ -1307,7 +1319,7 @@ describe("static-server.mjs", () => {
     });
 
     it("keeps the existing error label for editor proxy failures without an upstream response", async () => {
-      const origin = await startServer(makeBuildDir(), {
+      const origin = await startEditorServer({
         routes: { "/vscode": "not-a-url" },
         vscodeBasePath: "/vscode",
       });
@@ -1443,7 +1455,7 @@ describe("static-server.mjs", () => {
           failedHandshakes += 1;
         });
         const address = new URL(await startHttpServer(upstream));
-        const origin = await startServer(makeBuildDir(), {
+        const origin = await startEditorServer({
           routes: { "/vscode": `${scheme}://${hostname}:${address.port}` },
           vscodeBasePath: "/vscode",
         });
@@ -1569,7 +1581,7 @@ describe("static-server.mjs", () => {
 
     it("keeps one static diagnostics line counting both proxy policies", async () => {
       const upstream = await startHttpServer(startEditorUpstream());
-      const origin = await startServer(makeBuildDir(), {
+      const origin = await startEditorServer({
         routes: { "/proxy-test": upstream, "/vscode": upstream },
         vscodeBasePath: "/vscode",
       });
@@ -1630,7 +1642,7 @@ describe("static-server.mjs", () => {
         // node http calls on the product's /api paths, which would never reach
         // this server.
         const upstreamOrigin = await startHttpServer(startEditorUpstream());
-        const origin = await startServer(makeBuildDir(), {
+        const origin = await startEditorServer({
           routes: {
             "/proxy-test": upstreamOrigin,
             "/vscode-extra": upstreamOrigin,
@@ -1658,6 +1670,55 @@ describe("static-server.mjs", () => {
         expect(upgrade?.headers.host).toBe(upstreamHost);
         expect(upgrade?.headers["x-forwarded-host"]).toBeUndefined();
         expect(upgrade?.headers["x-forwarded-port"]).toBe(new URL(origin).port);
+      },
+    );
+
+    it.each([
+      { name: "matching loopback authority", status: 101 },
+      { name: "foreign Host only", host: "public.example", status: 403 },
+      {
+        name: "foreign Origin only",
+        clientOrigin: "https://public.example",
+        status: 403,
+      },
+      {
+        name: "allowlisted proxy authority",
+        host: "public.example",
+        clientOrigin: "https://public.example",
+        allowedHosts: "public.example",
+        status: 101,
+      },
+    ])(
+      "composes the loopback guard and editor forwarding: $name",
+      async ({ host, clientOrigin, allowedHosts, status }) => {
+        vi.stubEnv("OH_ALLOWED_HOSTS", allowedHosts);
+        try {
+          const upstreamOrigin = await startHttpServer(startEditorUpstream());
+          const origin = await startEditorServer({
+            host: "127.0.0.1",
+            routes: { "/vscode": upstreamOrigin },
+            vscodeBasePath: "/vscode",
+          });
+          const authority = host ?? new URL(origin).host;
+
+          const { statusLine } = await openUpgrade(origin, {
+            Host: authority,
+            Origin: clientOrigin ?? origin,
+          });
+
+          if (status === 403) {
+            expect(statusLine).toBe("HTTP/1.1 403 Forbidden");
+            expect(upstreamRequests).toEqual([]);
+          } else {
+            expect(statusLine).toBe("HTTP/1.1 101 Switching Protocols");
+            expect(upstreamRequests).toHaveLength(1);
+            expect(upstreamRequests[0].headers["x-forwarded-host"]).toBe(
+              authority,
+            );
+          }
+        } finally {
+          vi.unstubAllEnvs();
+        }
       },
     );
   });
@@ -1766,4 +1827,243 @@ describe("static-server.mjs MARS web bridge (Docker arguments)", () => {
       expect(response.headers.get("content-type")).toMatch(/text\/html/);
     },
   );
+});
+
+describe("static-server.mjs loopback Host and Origin protection", () => {
+  const servers: Server[] = [];
+  const tempDirs: string[] = [];
+
+  afterEach(async () => {
+    await Promise.all(
+      servers.splice(0).map(
+        (server) =>
+          new Promise<void>((resolve) => {
+            server.close(() => resolve());
+          }),
+      ),
+    );
+    for (const dir of tempDirs.splice(0)) {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  function sendRawHttp(
+    port: number,
+    pathName: string,
+    headers: Record<string, string>,
+    method = "GET",
+  ) {
+    return new Promise<{ status: number; body: string }>((resolve, reject) => {
+      const req = request(
+        { host: "127.0.0.1", port, path: pathName, method, headers },
+        (res) => {
+          let body = "";
+          res.setEncoding("utf8");
+          res.on("data", (chunk) => {
+            body += chunk;
+          });
+          res.on("end", () => resolve({ status: res.statusCode ?? 0, body }));
+        },
+      );
+      req.on("error", reject);
+      req.end();
+    });
+  }
+
+  function sendRawUpgrade(
+    port: number,
+    pathName: string,
+    headers: Record<string, string>,
+  ) {
+    return new Promise<{ status: number; upgraded: boolean }>(
+      (resolve, reject) => {
+        const req = request({
+          host: "127.0.0.1",
+          port,
+          path: pathName,
+          headers: {
+            Connection: "Upgrade",
+            Upgrade: "websocket",
+            "Sec-WebSocket-Key": "dGhlIHNhbXBsZSBub25jZQ==",
+            "Sec-WebSocket-Version": "13",
+            ...headers,
+          },
+        });
+        req.on("upgrade", (_res, socket) => {
+          socket.destroy();
+          resolve({ status: 101, upgraded: true });
+        });
+        req.on("response", (res) => {
+          res.resume();
+          resolve({ status: res.statusCode ?? 0, upgraded: false });
+        });
+        req.on("error", reject);
+        req.end();
+      },
+    );
+  }
+
+  it("rejects DNS-rebound and userinfo-spoofed Host headers on loopback without leaking the session key", async () => {
+    let backendHits = 0;
+    const backend = createServer((_req, res) => {
+      backendHits += 1;
+      res.writeHead(200);
+      res.end("ok");
+    });
+    await new Promise<void>((resolve) =>
+      backend.listen(0, "127.0.0.1", resolve),
+    );
+    servers.push(backend);
+    const backendAddr = backend.address();
+    if (!backendAddr || typeof backendAddr === "string") {
+      throw new Error("Backend did not bind to a port");
+    }
+
+    const buildDir = mkdtempSync(path.join(tmpdir(), "agent-canvas-dns-"));
+    tempDirs.push(buildDir);
+    writeFileSync(
+      path.join(buildDir, "index.html"),
+      "<html><head></head><body>app</body></html>",
+    );
+
+    const server = await startStaticServer({
+      port: 0,
+      host: "127.0.0.1",
+      dir: buildDir,
+      routes: { "/api": `http://127.0.0.1:${backendAddr.port}` },
+      sessionApiKey: "super-secret-loopback-key",
+    });
+    servers.push(server);
+    const addr = server.address();
+    if (!addr || typeof addr === "string") {
+      throw new Error("Static server did not bind to a port");
+    }
+
+    for (const badHost of [
+      "evil.example:8000",
+      "localhost.evil.example:8000",
+      `evil.example@127.0.0.1:${addr.port}`,
+      ".localhost:8000",
+    ]) {
+      const rootRes = await sendRawHttp(addr.port, "/", { Host: badHost });
+      expect(rootRes.status).toBe(403);
+      expect(rootRes.body).not.toContain("super-secret-loopback-key");
+
+      const apiRes = await sendRawHttp(addr.port, "/api/health", {
+        Host: badHost,
+      });
+      expect(apiRes.status).toBe(403);
+    }
+    expect(backendHits).toBe(0);
+
+    const okLocalhost = await sendRawHttp(addr.port, "/", {
+      Host: `app.localhost:${addr.port}`,
+    });
+    expect(okLocalhost.status).toBe(200);
+    expect(okLocalhost.body).toContain("super-secret-loopback-key");
+  });
+
+  it("rejects cross-origin WebSocket upgrades and unsafe POSTs on loopback while allowing reverse-proxy Hosts off-loopback", async () => {
+    let backendUpgrades = 0;
+    let backendPosts = 0;
+    const backend = createServer((req, res) => {
+      if (req.method === "POST") backendPosts += 1;
+      res.writeHead(200);
+      res.end("ok");
+    });
+    backend.on("upgrade", (_req, socket) => {
+      backendUpgrades += 1;
+      socket.write(
+        "HTTP/1.1 101 Switching Protocols\r\n" +
+          "Upgrade: websocket\r\n" +
+          "Connection: Upgrade\r\n" +
+          "Sec-WebSocket-Accept: s3pPLMBiTxaQ9kYGzzhZRbK+xOo=\r\n\r\n",
+      );
+      socket.end();
+    });
+    await new Promise<void>((resolve) =>
+      backend.listen(0, "127.0.0.1", resolve),
+    );
+    servers.push(backend);
+    const backendAddr = backend.address();
+    if (!backendAddr || typeof backendAddr === "string") {
+      throw new Error("Backend did not bind to a port");
+    }
+
+    const buildDir = mkdtempSync(path.join(tmpdir(), "agent-canvas-ws-"));
+    tempDirs.push(buildDir);
+    writeFileSync(
+      path.join(buildDir, "index.html"),
+      "<html><body></body></html>",
+    );
+
+    const loopbackServer = await startStaticServer({
+      port: 0,
+      host: "127.0.0.1",
+      dir: buildDir,
+      routes: {
+        "/api": `http://127.0.0.1:${backendAddr.port}`,
+        "/sockets": `http://127.0.0.1:${backendAddr.port}`,
+      },
+    });
+    servers.push(loopbackServer);
+    const lbAddr = loopbackServer.address();
+    if (!lbAddr || typeof lbAddr === "string") throw new Error("No port");
+
+    expect(
+      await sendRawUpgrade(lbAddr.port, "/sockets/events", {
+        Host: `127.0.0.1:${lbAddr.port}`,
+        Origin: "https://evil.example",
+      }),
+    ).toEqual({ status: 403, upgraded: false });
+
+    expect(
+      await sendRawUpgrade(lbAddr.port, "/sockets/events", {
+        Host: `127.0.0.1:${lbAddr.port}`,
+        Origin: "null",
+      }),
+    ).toEqual({ status: 403, upgraded: false });
+
+    const crossPost = await sendRawHttp(
+      lbAddr.port,
+      "/api/conversations",
+      { Host: `127.0.0.1:${lbAddr.port}`, Origin: "https://evil.example" },
+      "POST",
+    );
+    expect(crossPost.status).toBe(403);
+    expect(backendUpgrades).toBe(0);
+    expect(backendPosts).toBe(0);
+
+    // Cross-port loopback Origin (e.g. ingress proxying to static child) works.
+    expect(
+      await sendRawUpgrade(lbAddr.port, "/sockets/events", {
+        Host: `127.0.0.1:${lbAddr.port}`,
+        Origin: "http://localhost:8000",
+      }),
+    ).toEqual({ status: 101, upgraded: true });
+    expect(backendUpgrades).toBe(1);
+
+    // Off-loopback binds still accept reverse-proxy Host and Origin headers.
+    const lanWarn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      const lanServer = await startStaticServer({
+        port: 0,
+        host: "0.0.0.0",
+        dir: buildDir,
+        routes: { "/api": `http://127.0.0.1:${backendAddr.port}` },
+        authRequired: true,
+      });
+      servers.push(lanServer);
+      const lanAddr = lanServer.address();
+      if (!lanAddr || typeof lanAddr === "string") throw new Error("No port");
+
+      const proxied = await sendRawHttp(lanAddr.port, "/api/health", {
+        Host: "canvas.example.com",
+        Origin: "https://canvas.example.com",
+      });
+      expect(proxied.status).toBe(200);
+    } finally {
+      lanWarn.mockRestore();
+    }
+  });
 });

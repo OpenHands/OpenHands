@@ -98,6 +98,27 @@ export function renderWithProviders(
   return render(ui, { wrapper: Wrapper, ...rtlRenderOptions });
 }
 
+/**
+ * jsdom reports `clientWidth`/`clientHeight` as 0 for every element, so a
+ * scroll container has no measurable viewport. `@tanstack/virtual-core` reads
+ * those properties (since 3.19, replacing its earlier use of the bounding
+ * rect) and mounts nothing when the viewport is 0 — so a case that stubs
+ * `getBoundingClientRect` to model layout must mirror the sizes onto the
+ * client metrics too. Call this after installing the rect stub.
+ */
+export const mirrorRectToClientMetrics = () => {
+  vi.spyOn(Element.prototype, "clientHeight", "get").mockImplementation(
+    function (this: Element) {
+      return Math.round(this.getBoundingClientRect().height);
+    },
+  );
+  vi.spyOn(Element.prototype, "clientWidth", "get").mockImplementation(
+    function (this: Element) {
+      return Math.round(this.getBoundingClientRect().width);
+    },
+  );
+};
+
 export const createAxiosNotFoundErrorObject = () =>
   new AxiosError(
     "Request failed with status code 404",

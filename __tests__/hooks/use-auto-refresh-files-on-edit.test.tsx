@@ -76,7 +76,7 @@ describe("useAutoRefreshFilesOnEdit", () => {
   });
 
   it.each(["ExecuteBashObservation", "TerminalObservation"])(
-    "refreshes only the git diff queries when a %s arrives",
+    "refreshes git diff queries and the file tree when a %s arrives",
     (kind) => {
       // Arrange
       const client = new QueryClient();
@@ -93,9 +93,9 @@ describe("useAutoRefreshFilesOnEdit", () => {
           .addEvent(makeObservationEvent("1", kind, "git commit -m 'done'"));
       });
 
-      // Assert — the diff and commit-list queries refresh, and nothing
-      // else does (workspace file queries on every shell command would
-      // churn the Files tab; per-commit queries are immutable).
+      // Assert — the diff, commit-list, and workspace tree queries refresh.
+      // Per-file content still waits for file-editor observations so terminal
+      // commands do not cache-bust rich previews or iframes on every command.
       const invalidatedKeys = spy.mock.calls.map(
         (call) => (call[0] as { queryKey: unknown[] }).queryKey[0],
       );
@@ -103,9 +103,35 @@ describe("useAutoRefreshFilesOnEdit", () => {
         "file_changes",
         "file_diff",
         "git_commits",
+        "workspace-files",
       ]);
     },
   );
+
+  it("does not repeatedly refresh workspace files for the same bash observation", () => {
+    const client = new QueryClient();
+    const spy = vi.spyOn(client, "invalidateQueries");
+
+    const { rerender } = renderHook(() => useAutoRefreshFilesOnEdit(), {
+      wrapper: makeWrapper(client),
+    });
+
+    act(() => {
+      useEventStore
+        .getState()
+        .addEvent(
+          makeObservationEvent("1", "TerminalObservation", "touch x.md"),
+        );
+    });
+
+    const callsAfterBash = spy.mock.calls.length;
+    expect(callsAfterBash).toBeGreaterThan(0);
+
+    rerender();
+    rerender();
+
+    expect(spy.mock.calls.length).toBe(callsAfterBash);
+  });
 
   it("does not apply the file-editor read-only filter to bash commands", () => {
     // Arrange — `READ_ONLY_COMMANDS` matches editor sub-commands; for bash

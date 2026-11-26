@@ -4,6 +4,7 @@ import type { Backend } from "../backend-registry/types";
 import { callCloudProxy } from "./proxy";
 import type {
   CloudApiKeyMetadata,
+  CloudMyBudget,
   CloudOrganization,
   CloudOrganizationMember,
   CloudOrganizationsResponse,
@@ -145,6 +146,23 @@ export async function getCloudOrganizationMember(
     backend: target,
     method: "GET",
     path: `/api/organizations/${encodeURIComponent(orgId)}/members/${encodeURIComponent(userId)}`,
+  });
+}
+
+/**
+ * Fetch `GET /api/organizations/{orgId}/budgets/me`: the caller's own budget
+ * in `orgId`. Any org member may read it. Backends without budgets reject the
+ * call, so callers should treat a failure as "no budget details".
+ */
+export async function getCloudMyBudget(
+  orgId: string,
+  backend?: Backend,
+): Promise<CloudMyBudget> {
+  const target = resolveBackend(backend);
+  return callCloudProxy<CloudMyBudget>({
+    backend: target,
+    method: "GET",
+    path: `/api/organizations/${encodeURIComponent(orgId)}/budgets/me`,
   });
 }
 

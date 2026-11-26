@@ -8,8 +8,10 @@ import { CostSection } from "../metrics-modal/cost-section";
 import { UsageSection } from "../metrics-modal/usage-section";
 import { CompactContextButton } from "./compact-context-button";
 import { ContextMeter } from "./context-meter";
+import { ModelBreakdown } from "./model-breakdown";
 import { ProviderBalanceCard } from "./provider-balance-card";
 import { getContextWindowUsagePercentage } from "#/utils/format-token-count";
+import { isUnpricedUsage } from "#/utils/conversation-metrics";
 
 /**
  * "Usage" right-panel tab: context-fill meter with a manual "Compact
@@ -28,6 +30,7 @@ export function UsagePanel() {
   const isAcp = conversation?.agent_kind === "acp";
 
   const { usage } = metrics;
+  const breakdown = metrics.usage_breakdown ?? [];
   const hasMetrics = metrics.cost !== null || usage !== null;
 
   if (!hasMetrics) {
@@ -74,7 +77,23 @@ export function UsagePanel() {
             </span>
           )}
           {usage !== null && <UsageSection usage={usage} />}
-          <CostSection cost={metrics.cost} maxBudget={metrics.maxBudget} />
+          <CostSection
+            cost={metrics.cost}
+            maxBudget={metrics.maxBudget}
+            usageTokens={
+              usage !== null
+                ? usage.prompt_tokens + usage.completion_tokens
+                : null
+            }
+            hasUnpricedModel={breakdown.some((entry) =>
+              isUnpricedUsage(
+                entry.accumulatedCost,
+                entry.usage.prompt_tokens + entry.usage.completion_tokens,
+              ),
+            )}
+            showEstimateNote={!isAcp}
+          />
+          <ModelBreakdown entries={breakdown} />
         </div>
       </div>
 

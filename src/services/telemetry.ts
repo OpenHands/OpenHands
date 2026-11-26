@@ -50,6 +50,7 @@ import {
   type CloudTelemetryContextInput,
   type DeploymentKind,
 } from "#/services/telemetry-context";
+import { randomUUID } from "#/utils/random-uuid";
 
 const TELEMETRY_CONSENT_KEY = "openhands-telemetry-consent";
 const TELEMETRY_CONSENT_PENDING_CLOUD_SYNC_KEY =
@@ -118,6 +119,12 @@ let initializationPromise: Promise<PostHog | null> | null = null;
 let pendingBootstrap: BootstrapConfig | undefined;
 let telemetryConfig: TelemetryConfig = {};
 let telemetryDisabled = false;
+let cachedFeedbackSurvey: {
+  host: string;
+  apiKey: string;
+  surveyId: string;
+  question: { id: string; question: string };
+} | null = null;
 
 function removeStorageKeysWithPrefix(storage: Storage, prefix: string): void {
   const keysToRemove: string[] = [];
@@ -281,6 +288,7 @@ function propertiesEqual(
  * Passing false disables telemetry and install tracking for embedded hosts.
  */
 export function configureTelemetry(config: TelemetryConfiguration): void {
+  cachedFeedbackSurvey = null;
   if (config === false) {
     if (telemetryDisabled) return;
     telemetryDisabled = true;
@@ -899,6 +907,95 @@ export async function trackEvent(
   if (!posthog) return;
 
   posthog.capture(eventName, properties);
+}
+
+async function getFeedbackSurveyQuestion(
+  host: string,
+  apiKey: string,
+  surveyId: string,
+): Promise<{ id: string; question: string }> {
+  if (
+    cachedFeedbackSurvey?.host === host &&
+    cachedFeedbackSurvey.apiKey === apiKey &&
+    cachedFeedbackSurvey.surveyId === surveyId
+  ) {
+    return cachedFeedbackSurvey.question;
+  }
+
+  // This is PostHog's public survey endpoint, not an Agent Server API.
+  // eslint-disable-next-line local/no-direct-agent-server-fetch
+  const surveyResponse = await fetch(
+    `${host}/api/surveys/?token=${encodeURIComponent(apiKey)}`,
+    { credentials: "omit", referrerPolicy: "no-referrer" },
+  );
+  if (!surveyResponse.ok) throw new Error("Feedback survey unavailable");
+  const data = (await surveyResponse.json()) as {
+    surveys?: Array<{
+      id: string;
+      questions?: Array<{ id?: string; question?: string }>;
+    }>;
+  };
+  const survey = data.surveys?.find((item) => item.id === surveyId);
+  const question = survey?.questions?.[0];
+  if (survey?.questions?.length !== 1 || !question?.id || !question.question) {
+    throw new Error("Feedback survey unavailable");
+  }
+
+  const validatedQuestion = { id: question.id, question: question.question };
+  cachedFeedbackSurvey = {
+    host,
+    apiKey,
+    surveyId,
+    question: validatedQuestion,
+  };
+  return validatedQuestion;
+}
+
+/** Submit feedback without linking it to an analytics identity. */
+export async function submitPrivateFeedback(
+  message: string,
+  email?: string,
+): Promise<void> {
+  if (
+    isTelemetryHardDisabled() ||
+    import.meta.env.VITE_DO_NOT_TRACK === "1" ||
+    (typeof process !== "undefined" && process.env?.DO_NOT_TRACK === "1")
+  ) {
+    throw new Error("Feedback unavailable");
+  }
+  const contactEmail = email?.trim();
+  const surveyId = import.meta.env.VITE_POSTHOG_SURVEY_ID as string | undefined;
+  if (!surveyId) throw new Error("Feedback survey not configured");
+  const apiKey = telemetryConfig.apiKey || DEFAULT_POSTHOG_API_KEY;
+  const apiHost = telemetryConfig.apiHost || DEFAULT_POSTHOG_HOST;
+  const host = apiHost.replace(/\/+$/, "");
+  const question = await getFeedbackSurveyQuestion(host, apiKey, surveyId);
+  if (isTelemetryHardDisabled()) throw new Error("Feedback unavailable");
+
+  const response = await fetch(`${host}/capture/`, {
+    method: "POST",
+    credentials: "omit",
+    referrerPolicy: "no-referrer",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      api_key: apiKey,
+      event: "survey sent",
+      distinct_id: randomUUID(),
+      properties: {
+        $survey_id: surveyId,
+        $survey_questions: [{ id: question.id, question: question.question }],
+        $survey_response: message,
+        $survey_completed: true,
+        $process_person_profile: false,
+        feedback_source: "agent_canvas",
+        ...(contactEmail ? { feedback_email: contactEmail } : {}),
+      },
+      ip: false,
+    }),
+  });
+  if (!response.ok) throw new Error("Feedback submission failed");
+  const result = (await response.json()) as { status?: string } | null;
+  if (result?.status !== "Ok") throw new Error("Feedback submission failed");
 }
 
 /**

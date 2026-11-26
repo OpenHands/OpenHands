@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   createPlanningObservationEvent,
   createUserMessageEvent,
+  mirrorRectToClientMetrics,
   renderWithProviders,
 } from "test-utils";
 import { Messages } from "#/components/conversation-events/chat/messages";
@@ -107,6 +108,7 @@ describe("Messages model entries", () => {
       y: 0,
       toJSON: () => ({}),
     } as DOMRect);
+    mirrorRectToClientMetrics();
   });
 
   afterEach(() => {

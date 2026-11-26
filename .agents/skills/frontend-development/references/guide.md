@@ -87,6 +87,13 @@ names in `cn` so later caller utilities retain Tailwind's conflict precedence.
 
 Automation popover widths, run-phase limits and conversation hover-action reserves use the existing spacing scale (`min-w-40`, `min-w-64`, `max-w-112`, `max-w-48`, `min-w-15`) instead of equivalent arbitrary rem literals. Preserve each responsive hover/focus variant. Geometry is equivalent on the default spacing scale; explicit host scale overrides follow normal named-token behavior. Do not apply this substitution to fixed pixel geometry: a rem alias would change behavior when the embedding root font size differs.
 
+## Canvas version feedback
+
+The update card, version tile, and version dialog share named dark update
+colors. Preserve their light status roles, the version copy's existing
+`--oh-text` override, and the update dialog's `dialog-content-height` cap.
+All three owners reject new arbitrary values.
+
 ## Git control borders
 
 The repository button, unlinked branch chip, and Workspace mode button use
@@ -318,3 +325,9 @@ BrandButton/BrandBadge text retain these public roles, including host overrides.
 Do not substitute similarly colored Canvas or HeroUI roles. Caller color and
 font-size precedence stays covered by `cn` composition tests, and the scoped
 library CSS contract verifies the exact variable declarations.
+
+## Onboarding slide height
+
+The LLM setup and Say hello slides share `onboarding-step-height`. Keep the
+existing viewport-relative cap and rem offset so their content can scroll at
+short heights. Both slides reject new arbitrary values.

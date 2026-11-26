@@ -3,6 +3,20 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { createCommandMenuItems } from "#/components/features/command-menu/command-menu-items";
 import { OSS_NAV_ITEMS } from "#/constants/settings-nav";
 
+function createLocalCommandMenuItems({
+  includeDesktopSidebarToggle = true,
+  toggleSidebar = vi.fn(),
+}: {
+  includeDesktopSidebarToggle?: boolean;
+  toggleSidebar?: () => void;
+} = {}) {
+  return createCommandMenuItems({
+    toggleSidebar,
+    backendKind: "local",
+    includeDesktopSidebarToggle,
+  });
+}
+
 /**
  * The automation entry's title, description, and keywords are the interface
  * manifest's. Without one there is no copy to show and no surface to reach,
@@ -17,10 +31,7 @@ vi.mock("#/manifests/manifest-sources", async (importOriginal) => {
 describe("the command menu without an admitted interface manifest", () => {
   it("omits the automations entry and keeps the rest", () => {
     // Act
-    const items = createCommandMenuItems({
-      toggleSidebar: vi.fn(),
-      backendKind: "local",
-    });
+    const items = createLocalCommandMenuItems();
 
     // Assert
     expect(items.some((item) => item.id === "automations")).toBe(false);
@@ -43,10 +54,7 @@ describe("the command menu settings group", () => {
 
   it("lists every settings page when not locked to a Cloud host", () => {
     // Act
-    const items = createCommandMenuItems({
-      toggleSidebar: vi.fn(),
-      backendKind: "local",
-    });
+    const items = createLocalCommandMenuItems();
 
     // Assert
     expect(settingsItemIds(items)).toEqual([
@@ -65,10 +73,7 @@ describe("the command menu settings group", () => {
 
   it("offers an entry for every page the settings nav lists", () => {
     // Act
-    const routes = createCommandMenuItems({
-      toggleSidebar: vi.fn(),
-      backendKind: "local",
-    }).map((item) => item.to);
+    const routes = createLocalCommandMenuItems().map((item) => item.to);
 
     // Assert — Condenser is per agent profile on the default local backend.
     expect(routes).toEqual(
@@ -85,10 +90,7 @@ describe("the command menu settings group", () => {
     vi.stubEnv("VITE_LOCK_TO_CLOUD", "https://app.all-hands.dev");
 
     // Act
-    const items = createCommandMenuItems({
-      toggleSidebar: vi.fn(),
-      backendKind: "local",
-    });
+    const items = createLocalCommandMenuItems();
 
     // Assert
     expect(settingsItemIds(items)).toEqual(["settings", "app-settings"]);
@@ -100,5 +102,39 @@ describe("the command menu settings group", () => {
       "app-settings",
       "toggle-sidebar",
     ]);
+  });
+});
+
+describe("the command menu sidebar action", () => {
+  it("omits the desktop sidebar toggle when the sidebar rail is hidden", () => {
+    // Arrange
+    const toggleSidebar = vi.fn();
+
+    // Act
+    const items = createLocalCommandMenuItems({
+      includeDesktopSidebarToggle: false,
+      toggleSidebar,
+    });
+
+    // Assert
+    expect(items.find((item) => item.id === "toggle-sidebar")).toBeUndefined();
+    expect(toggleSidebar).not.toHaveBeenCalled();
+  });
+
+  it("keeps the desktop sidebar toggle when the sidebar rail is visible", () => {
+    // Arrange
+    const toggleSidebar = vi.fn();
+
+    // Act
+    const items = createLocalCommandMenuItems({
+      includeDesktopSidebarToggle: true,
+      toggleSidebar,
+    });
+    const toggleItem = items.find((item) => item.id === "toggle-sidebar");
+    toggleItem?.perform?.();
+
+    // Assert
+    expect(toggleItem).toBeDefined();
+    expect(toggleSidebar).toHaveBeenCalledOnce();
   });
 });

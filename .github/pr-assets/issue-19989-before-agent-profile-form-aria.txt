@@ -1,0 +1,299 @@
+http://127.0.0.1:18800/settings/agents
+- main:
+  - button "Back"
+  - heading "Add agent profile" [level=2]
+  - paragraph: Configure the agent below, then click Save to create this profile.
+  - text: Profile Name
+  - textbox "Profile Name":
+    - /placeholder: Enter profile name
+  - paragraph: Profile name must start with a letter or digit, and contain only letters, digits, dots, underscores, or hyphens (max 64 characters)
+  - text: Agent
+  - group:
+    - combobox "Agent": OpenHands
+    - button "Show suggestions"
+  - paragraph: Create an LLM profile first to define an OpenHands agent.
+  - text: System prompt
+  - group:
+    - combobox "Show suggestions": OpenHands default
+    - button "Show suggestions"
+  - text: Uses the built-in OpenHands instructions for coding, security and tool use. Model Router
+  - group:
+    - combobox "Show suggestions": "Off"
+    - button "Show suggestions"
+  - text: With a router selected, this agent can route each task to one of your LLM profiles. Routers are managed on the Model Router page. Parallel tool calls Optional
+  - spinbutton "Parallel tool calls Optional": "1"
+  - paragraph: Maximum number of tool calls the agent runs at the same time in one step. 1 runs them one after another (default). Higher values run tool calls in parallel; they share the conversation, files and working directory, so changes to shared state can conflict.
+  - text: Tools
+  - group:
+    - combobox "Show suggestions": Standard tools
+    - button "Show suggestions"
+  - list:
+    - listitem:
+      - checkbox "file_editor" [checked] [disabled]
+      - text: file_editor View, create and edit files.
+    - listitem:
+      - checkbox "task_tracker" [checked] [disabled]
+      - text: task_tracker Keep a running task list to organise multi-step work.
+    - listitem:
+      - checkbox "terminal" [checked] [disabled]
+      - text: terminal Run shell commands in a persistent terminal session.
+    - listitem:
+      - checkbox "browser_tool_set" [checked] [disabled]
+      - text: "browser_tool_set Browse the web: navigate pages, click, type and read content."
+    - listitem:
+      - checkbox "switch_llm" [checked] [disabled]
+      - text: switch_llm Let the agent switch the conversation to another saved LLM profile.
+  - text: This agent gets the tools the server considers standard, shown above. The list follows the server, so it can change when the server is upgraded. MCP servers
+  - group:
+    - combobox "Show suggestions": All servers
+    - button "Show suggestions"
+  - text: You have not configured any MCP servers yet. This agent can use every MCP server you have configured, including any that can make changes. Condenser
+  - tablist:
+    - tab "Basic" [selected]
+    - tab "All"
+  - checkbox "Enable Memory Condensation" [checked]
+  - text: Enable Memory Condensation
+  - paragraph: Enable the LLM summarizing condenser.
+  - text: Verification
+  - tablist:
+    - tab "Basic" [selected]
+    - tab "All"
+  - checkbox "Enable Critic"
+  - text: Enable Critic
+  - paragraph: Enable critic evaluation for the agent.
+  - text: Secrets
+  - group:
+    - combobox "Show suggestions": No profile restriction
+    - button "Show suggestions"
+  - list:
+    - listitem:
+      - checkbox "OPENHANDS_AUTOMATION_API_KEY" [checked] [disabled]
+      - text: OPENHANDS_AUTOMATION_API_KEY API key for authenticating with the automation backend
+  - text: Allows secrets supplied when the agent starts. For automations, choose secrets explicitly in this profile. Skills
+  - searchbox
+  - list:
+    - listitem:
+      - checkbox "add-javadoc"
+      - text: add-javadoc Catalog
+    - listitem:
+      - checkbox "add-skill" [checked]
+      - text: add-skill Catalog
+    - listitem:
+      - checkbox "agent-canvas-environment" [checked]
+      - text: agent-canvas-environment Catalog
+    - listitem:
+      - checkbox "agent-creator"
+      - text: agent-creator Catalog
+    - listitem:
+      - checkbox "agent-memory" [checked]
+      - text: agent-memory Catalog
+    - listitem:
+      - checkbox "agent-sdk-builder" [checked]
+      - text: agent-sdk-builder Catalog
+    - listitem:
+      - checkbox "azure-devops"
+      - text: azure-devops Catalog
+    - listitem:
+      - checkbox "bitbucket"
+      - text: bitbucket Catalog
+    - listitem:
+      - checkbox "bitbucket-cloud"
+      - text: bitbucket-cloud Catalog
+    - listitem:
+      - checkbox "bitbucket-data-center"
+      - text: bitbucket-data-center Catalog
+    - listitem:
+      - checkbox "canvas-extension-api" [checked]
+      - text: canvas-extension-api Catalog
+    - listitem:
+      - checkbox "code-review" [checked]
+      - text: code-review Catalog
+    - listitem:
+      - checkbox "code-simplifier"
+      - text: code-simplifier Catalog
+    - listitem:
+      - checkbox "comment-cleanup"
+      - text: comment-cleanup Catalog
+    - listitem:
+      - checkbox "cortex-training-rl"
+      - text: cortex-training-rl Catalog
+    - listitem:
+      - checkbox "cve-remediation-factory" [checked]
+      - text: cve-remediation-factory Catalog
+    - listitem:
+      - checkbox "datadog"
+      - text: datadog Catalog
+    - listitem:
+      - checkbox "deno"
+      - text: deno Catalog
+    - listitem:
+      - checkbox "discord"
+      - text: discord Catalog
+    - listitem:
+      - checkbox "docker" [checked]
+      - text: docker Catalog
+    - listitem:
+      - checkbox "evidence-based-citations"
+      - text: evidence-based-citations Catalog
+    - listitem:
+      - checkbox "flarglebargle"
+      - text: flarglebargle Catalog
+    - listitem:
+      - checkbox "frontend-design"
+      - text: frontend-design Catalog
+    - listitem:
+      - checkbox "github" [checked]
+      - text: github Catalog
+    - listitem:
+      - checkbox "github-actions"
+      - text: github-actions Catalog
+    - listitem:
+      - checkbox "github-agents-md-maintainer"
+      - text: github-agents-md-maintainer Catalog
+    - listitem:
+      - checkbox "github-comment-cleanup"
+      - text: github-comment-cleanup Catalog
+    - listitem:
+      - checkbox "github-delivery-watchdog"
+      - text: github-delivery-watchdog Catalog
+    - listitem:
+      - checkbox "github-issue-to-pr"
+      - text: github-issue-to-pr Catalog
+    - listitem:
+      - checkbox "github-issue-triage"
+      - text: github-issue-triage Catalog
+    - listitem:
+      - checkbox "github-pr-review"
+      - text: github-pr-review Catalog
+    - listitem:
+      - checkbox "github-pr-reviewer"
+      - text: github-pr-reviewer Catalog
+    - listitem:
+      - checkbox "github-repo-monitor"
+      - text: github-repo-monitor Catalog
+    - listitem:
+      - checkbox "github-stale-ci-pr-closer"
+      - text: github-stale-ci-pr-closer Catalog
+    - listitem:
+      - checkbox "gitlab"
+      - text: gitlab Catalog
+    - listitem:
+      - checkbox "gitlab-issue-to-mr"
+      - text: gitlab-issue-to-mr Catalog
+    - listitem:
+      - checkbox "incident-retrospective"
+      - text: incident-retrospective Catalog
+    - listitem:
+      - checkbox "iterate"
+      - text: iterate Catalog
+    - listitem:
+      - checkbox "jira-issue-to-pr"
+      - text: jira-issue-to-pr Catalog
+    - listitem:
+      - checkbox "jupyter"
+      - text: jupyter Catalog
+    - listitem:
+      - checkbox "kubernetes"
+      - text: kubernetes Catalog
+    - listitem:
+      - checkbox "learn-from-code-review"
+      - text: learn-from-code-review Catalog
+    - listitem:
+      - checkbox "linear"
+      - text: linear Catalog
+    - listitem:
+      - checkbox "linear-triage"
+      - text: linear-triage Catalog
+    - listitem:
+      - checkbox "news-digest"
+      - text: news-digest Catalog
+    - listitem:
+      - checkbox "notion"
+      - text: notion Catalog
+    - listitem:
+      - checkbox "npm"
+      - text: npm Catalog
+    - listitem:
+      - checkbox "openhands-api" [checked]
+      - text: openhands-api Catalog
+    - listitem:
+      - checkbox "openhands-automation" [checked]
+      - text: openhands-automation Catalog
+    - listitem:
+      - checkbox "openhands-enterprise-troubleshooting"
+      - text: openhands-enterprise-troubleshooting Catalog
+    - listitem:
+      - checkbox "openhands-sdk" [checked]
+      - text: openhands-sdk Catalog
+    - listitem:
+      - checkbox "pdflatex"
+      - text: pdflatex Catalog
+    - listitem:
+      - checkbox "plain-english-content"
+      - text: plain-english-content Catalog
+    - listitem:
+      - checkbox "prd"
+      - text: prd Catalog
+    - listitem:
+      - checkbox "qa-changes"
+      - text: qa-changes Catalog
+    - listitem:
+      - checkbox "release-notes"
+      - text: release-notes Catalog
+    - listitem:
+      - checkbox "research-brief"
+      - text: research-brief Catalog
+    - listitem:
+      - checkbox "security"
+      - text: security Catalog
+    - listitem:
+      - checkbox "show-me" [checked]
+      - text: show-me Catalog
+    - listitem:
+      - checkbox "simplified-technical-english"
+      - text: simplified-technical-english Catalog
+    - listitem:
+      - checkbox "skill-creator" [checked]
+      - text: skill-creator Catalog
+    - listitem:
+      - checkbox "slack-channel-monitor"
+      - text: slack-channel-monitor Catalog
+    - listitem:
+      - checkbox "slack-standup-digest"
+      - text: slack-standup-digest Catalog
+    - listitem:
+      - checkbox "software-factory" [checked]
+      - text: software-factory Catalog
+    - listitem:
+      - checkbox "spark-version-upgrade"
+      - text: spark-version-upgrade Catalog
+    - listitem:
+      - checkbox "ssh"
+      - text: ssh Catalog
+    - listitem:
+      - checkbox "swift-linux"
+      - text: swift-linux Catalog
+    - listitem:
+      - checkbox "technical-writing"
+      - text: technical-writing Catalog
+    - listitem:
+      - checkbox "theme-factory"
+      - text: theme-factory Catalog
+    - listitem:
+      - checkbox "ticket-to-code-change"
+      - text: ticket-to-code-change Catalog
+    - listitem:
+      - checkbox "upstream-fork-sync"
+      - text: upstream-fork-sync Catalog
+    - listitem:
+      - checkbox "use-jev"
+      - text: use-jev Catalog
+    - listitem:
+      - checkbox "uv"
+      - text: uv Catalog
+    - listitem:
+      - checkbox "vercel"
+      - text: vercel Catalog
+  - text: This agent loads the skills switched on here. New profiles start from the skills selected on the Skills page. Skills from a repository always load.
+  - button "Cancel"
+  - button "Save" [disabled]

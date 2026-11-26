@@ -7,7 +7,15 @@ import { ContextMenuListItem } from "../../context-menu/context-menu-list-item";
 import { I18nKey } from "#/i18n/declaration";
 import { ConversationNameContextMenuIconText } from "../../conversation/conversation-name-context-menu-icon-text";
 
-import { Archive, ArchiveRestore, Gauge, SquarePlus, Tags } from "lucide-react";
+import {
+  Archive,
+  ArchiveRestore,
+  Gauge,
+  Share2,
+  SquarePlus,
+  Tags,
+} from "lucide-react";
+import { ToggleSwitchVisual } from "#/ui/toggle-switch";
 import EditIcon from "#/icons/u-edit.svg?react";
 import SkillsIcon from "#/icons/skills.svg?react";
 import ToolsIcon from "#/icons/u-tools.svg?react";
@@ -32,6 +40,9 @@ interface ConversationCardContextMenuProps {
   onShowSkills?: (event: React.MouseEvent<HTMLButtonElement>) => void;
   onDownloadViaVSCode?: (event: React.MouseEvent<HTMLButtonElement>) => void;
   onDownloadConversation?: (event: React.MouseEvent<HTMLButtonElement>) => void;
+  /** Whether the conversation is shared with the org; drives the share switch. */
+  isShared?: boolean;
+  onToggleShared?: (event: React.MouseEvent<HTMLButtonElement>) => void;
   position?: "top" | "bottom";
   /**
    * Fixed coordinates for a portaled menu (conversation list overflow
@@ -55,6 +66,8 @@ export function ConversationCardContextMenu({
   onShowSkills,
   onDownloadViaVSCode,
   onDownloadConversation,
+  isShared = false,
+  onToggleShared,
   position = "bottom",
   floatingStyle,
   ignoreOutsideClickRef,
@@ -239,6 +252,19 @@ export function ConversationCardContextMenu({
                 icon={<Gauge size={16} />}
                 text={t(I18nKey.BUTTON$DISPLAY_COST)}
               />
+            </ContextMenuListItem>
+          ),
+          onToggleShared && (
+            <ContextMenuListItem
+              key="toggle-shared-button"
+              testId="toggle-shared-button"
+              onClick={onToggleShared}
+            >
+              <ConversationNameContextMenuIconText
+                icon={<Share2 size={16} />}
+                text={t(I18nKey.CONVERSATION$SHARE_WITH_ORG_USERS)}
+              />
+              <ToggleSwitchVisual enabled={isShared} size="sm" />
             </ContextMenuListItem>
           ),
           onArchive && (

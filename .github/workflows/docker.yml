@@ -202,6 +202,7 @@ jobs:
             OPENHANDS_BUILD_GIT_SHA=${{ env.RELEVANT_SHA }}
             OPENHANDS_BUILD_GIT_REF=${{ env.RELEVANT_REF }}
             VITE_POSTHOG_API_KEY=${{ steps.prep.outputs.posthog_api_key }}
+            VITE_POSTHOG_SURVEY_ID=${{ vars.POSTHOG_SURVEY_ID }}
             VITE_BASE_PATH=${{ steps.config.outputs.canvas_base_path }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
