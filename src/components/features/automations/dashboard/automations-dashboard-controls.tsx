@@ -3,6 +3,7 @@ import { ChevronDown, ListFilter } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { I18nKey } from "#/i18n/declaration";
 import { EnumFilterDropdown } from "#/components/shared/filters/enum-filter-dropdown";
+import { ToggleSwitch } from "#/components/features/automations/toggle-switch";
 import { useClickOutsideElement } from "#/hooks/use-click-outside-element";
 import type { DashboardSpec } from "#/manifests/automation-interface";
 import {
@@ -56,6 +57,14 @@ interface AutomationsDashboardControlsProps {
   onCreatedByChange: (value: DashboardCreatedByValue) => void;
   onTagChange: (value: string | null) => void;
   onSortChange: (value: DashboardSortValue) => void;
+  /**
+   * The switch that lists the automations in factories too. Omitted where the
+   * list never hides them, which also leaves it out of the panel.
+   */
+  factoryAutomations?: {
+    checked: boolean;
+    onChange: (checked: boolean) => void;
+  };
 }
 
 // No tag is empty, so the neutral option can stand for "any tag" in the
@@ -83,6 +92,7 @@ export function AutomationsDashboardControls({
   onCreatedByChange,
   onTagChange,
   onSortChange,
+  factoryAutomations,
 }: AutomationsDashboardControlsProps) {
   const { t } = useTranslation("openhands");
   const [open, setOpen] = useState(false);
@@ -112,6 +122,7 @@ export function AutomationsDashboardControls({
     createdByFilter && createdBy !== createdByFilter.options[0]?.value,
     tagFilter && tag !== null,
     sort !== spec.sort.default,
+    factoryAutomations?.checked,
   ].filter(Boolean).length;
   const filtersLabel = t(I18nKey.AUTOMATIONS$FILTERS);
   const defaultStatus = statusFilter?.options[0]?.value;
@@ -124,7 +135,9 @@ export function AutomationsDashboardControls({
     if (defaultCreatedBy) onCreatedByChange(defaultCreatedBy);
     if (tagFilter) onTagChange(null);
     onSortChange(spec.sort.default);
+    factoryAutomations?.onChange(false);
   };
+  const showFactoryLabel = t(I18nKey.AUTOMATIONS$SHOW_FACTORY_AUTOMATIONS);
 
   return (
     <div
@@ -241,6 +254,21 @@ export function AutomationsDashboardControls({
               fullWidth
             />
           </FilterField>
+          {factoryAutomations ? (
+            <div
+              data-testid="automations-show-factory-automations"
+              className="flex items-center justify-between gap-3 text-sm text-contrast"
+            >
+              <span className="whitespace-nowrap">{showFactoryLabel}</span>
+              <ToggleSwitch
+                enabled={factoryAutomations.checked}
+                label={showFactoryLabel}
+                onToggle={() =>
+                  factoryAutomations.onChange(!factoryAutomations.checked)
+                }
+              />
+            </div>
+          ) : null}
           {activeCount > 0 ? (
             <button
               type="button"

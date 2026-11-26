@@ -40,9 +40,23 @@ vi.mock("#/manifests/manifest-sources", async (importOriginal) => {
     await importOriginal<typeof import("#/manifests/manifest-sources")>();
   const { createInterfaceManifestWithSubPages } =
     await import("../manifests/manifest-test-data");
+  const manifest = createInterfaceManifestWithSubPages();
   return {
     ...actual,
-    AUTOMATION_INTERFACE_CANDIDATE: createInterfaceManifestWithSubPages(),
+    AUTOMATION_INTERFACE_CANDIDATE: {
+      ...manifest,
+      endpoints: { ...manifest.endpoints, tags: "/v1/tags" },
+      pages: {
+        ...manifest.pages,
+        list: {
+          ...manifest.pages.list,
+          filters: [
+            ...manifest.pages.list.filters!,
+            { id: "tag", label: "Filter by tag", allLabel: "Any tag" },
+          ],
+        },
+      },
+    },
   };
 });
 
@@ -501,6 +515,18 @@ describe("renaming a factory", () => {
 describe("Automate list and automations in factories", () => {
   const showFactoryAutomations = "automations-show-factory-automations";
 
+  const filtersTrigger = () =>
+    screen.getByRole("button", { name: "AUTOMATIONS$FILTERS" });
+
+  async function openFactoryAutomationsSwitch(
+    user: ReturnType<typeof userEvent.setup>,
+  ) {
+    await user.click(filtersTrigger());
+    return within(screen.getByTestId(showFactoryAutomations)).getByRole(
+      "switch",
+    );
+  }
+
   it("lists only the automations that are in no factory, and asks the server for them", async () => {
     // Act
     renderAt("/automate");
@@ -530,9 +556,7 @@ describe("Automate list and automations in factories", () => {
     await screen.findByTestId("automation-card-a-org");
 
     // Act
-    await user.click(
-      within(screen.getByTestId(showFactoryAutomations)).getByRole("switch"),
-    );
+    await user.click(await openFactoryAutomationsSwitch(user));
 
     // Assert
     expect(
@@ -548,6 +572,47 @@ describe("Automate list and automations in factories", () => {
       undefined,
       undefined,
     );
+  });
+
+  it("keeps the toggle in the Filters panel, counts it, and clears it with Reset all", async () => {
+    // Arrange
+    const user = userEvent.setup();
+    renderAt("/automate");
+    await screen.findByTestId("automation-card-a-org");
+    expect(screen.queryByTestId(showFactoryAutomations)).toBeNull();
+
+    // Act
+    const toggle = await openFactoryAutomationsSwitch(user);
+    await user.click(toggle);
+
+    // Assert
+    expect(toggle).toBeChecked();
+    expect(filtersTrigger()).toHaveTextContent("1");
+    await user.click(screen.getByTestId("automations-filters-reset"));
+    await waitFor(() =>
+      expect(
+        screen.queryByTestId("automation-card-a-reviewer"),
+      ).not.toBeInTheDocument(),
+    );
+    expect(
+      within(screen.getByTestId(showFactoryAutomations)).getByRole("switch"),
+    ).not.toBeChecked();
+  });
+
+  it("still offers Group by beside Filters when the org has tags", async () => {
+    // Arrange
+    vi.mocked(AutomationService.listAutomationTags).mockResolvedValue([
+      { tag: "software-factory", count: 2 },
+    ]);
+
+    // Act
+    renderAt("/automate");
+    await screen.findByTestId("automation-card-a-org");
+
+    // Assert
+    expect(await screen.findByTestId("automations-group-by")).toBeVisible();
+    expect(filtersTrigger()).toBeVisible();
+    expect(screen.queryByTestId(showFactoryAutomations)).toBeNull();
   });
 
   it("drops automations in factories that an older service still sends", async () => {
@@ -589,9 +654,7 @@ describe("Automate list and automations in factories", () => {
       screen.queryByTestId("automation-card-a-reviewer"),
     ).not.toBeInTheDocument();
     expect(notice).toBeVisible();
-    await user.click(
-      within(screen.getByTestId(showFactoryAutomations)).getByRole("switch"),
-    );
+    await user.click(await openFactoryAutomationsSwitch(user));
     expect(
       await screen.findByTestId("automation-card-a-reviewer"),
     ).toBeInTheDocument();

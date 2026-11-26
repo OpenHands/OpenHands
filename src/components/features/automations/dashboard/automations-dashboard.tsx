@@ -907,6 +907,14 @@ export function AutomationsDashboard({
             onCreatedByChange={setCreatedByFilter}
             onTagChange={setTagFilter}
             onSortChange={setSortValue}
+            factoryAutomations={
+              canHideFactoryAutomations
+                ? {
+                    checked: showFactoryAutomations,
+                    onChange: setShowFactoryAutomations,
+                  }
+                : undefined
+            }
           />
         )}
         {canGroupByTag && (
@@ -920,7 +928,7 @@ export function AutomationsDashboard({
             triggerClassName="h-9 py-0"
           />
         )}
-        {canHideFactoryAutomations && (
+        {canHideFactoryAutomations && !dashboard && (
           <ShowFactoryAutomationsToggle
             checked={showFactoryAutomations}
             onChange={setShowFactoryAutomations}
