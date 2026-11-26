@@ -26,7 +26,7 @@
     "@monaco-editor/react": "4.7.0",
     "@openhands/extensions": "0.44.0",
     "@openhands/typescript-client": "1.64.1",
-    "@react-router/node": "8.5.1",
+    "@react-router/node": "8.5.2",
     "@tailwindcss/vite": "4.3.3",
     "@tanstack/react-query": "5.108.0",
     "@tanstack/react-virtual": "3.14.26",
@@ -58,7 +58,7 @@
     "react-i18next": "18.0.2",
     "react-icons": "5.7.0",
     "react-markdown": "10.1.0",
-    "react-router": "8.5.1",
+    "react-router": "8.5.2",
     "react-syntax-highlighter": "16.1.2",
     "rehype-raw": "7.0.0",
     "rehype-sanitize": "6.0.0",
@@ -137,7 +137,7 @@
     "@eslint/eslintrc": "3.3.7",
     "@eslint/js": "10.0.1",
     "@playwright/test": "1.65.1",
-    "@react-router/dev": "8.5.1",
+    "@react-router/dev": "8.5.2",
     "@shadcn/lint": "0.2.5",
     "@stryker-mutator/core": "10.1.1",
     "@stryker-mutator/vitest-runner": "10.1.1",
@@ -277,6 +277,6 @@
   "peerDependencies": {
     "react": "19.3.1",
     "react-dom": "19.3.1",
-    "react-router": "8.5.1"
+    "react-router": "8.5.2"
   }
 }
