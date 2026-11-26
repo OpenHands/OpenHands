@@ -12,6 +12,7 @@ import { I18nKey } from "#/i18n/declaration";
 import { LanguageInput } from "#/components/features/settings/app-settings/language-input";
 import { ThemeInput } from "#/components/features/settings/app-settings/theme-input";
 import { GettingStartedChecklistSwitch } from "#/components/features/settings/app-settings/getting-started-checklist-switch";
+import { RecommendedAutomationsSwitch } from "#/components/features/settings/app-settings/recommended-automations-switch";
 import { VoiceInputSettings } from "#/components/features/settings/app-settings/voice-input-settings";
 import {
   displayErrorToast,
@@ -239,7 +240,9 @@ function AppSettingsForm() {
             {t(I18nKey.SETTINGS$SOUND_NOTIFICATIONS)}
           </SettingsSwitch>
 
-          <GettingStartedChecklistSwitch />
+          {/* Locked-to-Cloud never shows the checklist (OHE-3683). */}
+          {getLockedCloudHost() === null && <GettingStartedChecklistSwitch />}
+          <RecommendedAutomationsSwitch />
 
           <div className="border-t border-border pt-6 mt-2">
             <h3 className="text-lg font-medium mb-2">
@@ -269,7 +272,7 @@ function AppSettingsForm() {
             {getLockedCloudHost() === null && (
               <NavigationLink
                 to="/settings/llm"
-                className="mt-3 inline-block text-sm text-primary hover:underline"
+                className="mt-3 inline-block text-sm text-link hover:underline"
               >
                 {t(I18nKey.SETTINGS$MANAGE_LLM_PROFILES)}
               </NavigationLink>

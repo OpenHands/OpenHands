@@ -2,10 +2,12 @@ import React from "react";
 import {
   Bot,
   Brain,
+  Container,
   Home,
   Keyboard,
   KeyRound,
   ListTodo,
+  FlaskConical,
   PanelsTopLeft,
   Route,
   Search,
@@ -22,6 +24,7 @@ import {
   hasAutomationInterface,
 } from "#/manifests/automation-interface";
 import { getLockedCloudHost } from "#/api/agent-server-config";
+import type { BackendKind } from "#/api/backend-registry/types";
 import { LOCKED_CLOUD_SETTINGS_NAV_PATH } from "#/constants/settings-nav";
 import { isApplePlatform } from "#/utils/utils";
 
@@ -39,8 +42,10 @@ export const COMMAND_MENU_ROUTE = {
   condenserSettings: "/settings/condenser",
   agentContextSettings: "/settings/agent-context",
   verificationSettings: "/settings/verification",
+  runtimeSettings: "/settings/runtime",
   appSettings: "/settings/app",
   secretsSettings: "/settings/secrets",
+  experimentalSettings: "/settings/experimental",
 } as const;
 
 export type CommandMenuGroupId = "navigation" | "settings" | "actions";
@@ -56,8 +61,10 @@ export type CommandMenuItemId =
   | "condenser-settings"
   | "agent-context-settings"
   | "verification-settings"
+  | "runtime-settings"
   | "app-settings"
   | "secrets-settings"
+  | "experimental-settings"
   | "toggle-sidebar";
 
 export interface CommandMenuItemDefinition {
@@ -113,9 +120,23 @@ export const COMMAND_MENU_GROUP_ORDER: CommandMenuGroupId[] = [
 
 export const createCommandMenuItems = ({
   toggleSidebar,
+  backendKind,
+  includeDesktopSidebarToggle,
 }: {
   toggleSidebar: () => void;
+  backendKind: BackendKind;
+  includeDesktopSidebarToggle: boolean;
 }): CommandMenuItemDefinition[] => {
+  const desktopSidebarToggleItem: CommandMenuItemDefinition = {
+    id: "toggle-sidebar",
+    group: "actions",
+    titleKey: I18nKey.COMMAND_MENU$TOGGLE_SIDEBAR_TITLE,
+    descriptionKey: I18nKey.COMMAND_MENU$TOGGLE_SIDEBAR_DESCRIPTION,
+    keywordsKey: I18nKey.COMMAND_MENU$TOGGLE_SIDEBAR_KEYWORDS,
+    icon: <Keyboard size={ICON_SIZE} />,
+    perform: toggleSidebar,
+  };
+
   const items: CommandMenuItemDefinition[] = [
     {
       id: "new-chat",
@@ -223,6 +244,15 @@ export const createCommandMenuItems = ({
       to: COMMAND_MENU_ROUTE.verificationSettings,
     },
     {
+      id: "runtime-settings",
+      group: "settings",
+      titleKey: I18nKey.SETTINGS$NAV_RUNTIME,
+      descriptionKey: I18nKey.SETTINGS$PAGE_RUNTIME_SUBLINE,
+      keywordsKey: I18nKey.COMMAND_MENU$RUNTIME_SETTINGS_KEYWORDS,
+      icon: <Container size={ICON_SIZE} />,
+      to: COMMAND_MENU_ROUTE.runtimeSettings,
+    },
+    {
       id: "app-settings",
       group: "settings",
       titleKey: I18nKey.COMMAND_MENU$APP_SETTINGS_TITLE,
@@ -241,25 +271,31 @@ export const createCommandMenuItems = ({
       to: COMMAND_MENU_ROUTE.secretsSettings,
     },
     {
-      id: "toggle-sidebar",
-      group: "actions",
-      titleKey: I18nKey.COMMAND_MENU$TOGGLE_SIDEBAR_TITLE,
-      descriptionKey: I18nKey.COMMAND_MENU$TOGGLE_SIDEBAR_DESCRIPTION,
-      keywordsKey: I18nKey.COMMAND_MENU$TOGGLE_SIDEBAR_KEYWORDS,
-      icon: <Keyboard size={ICON_SIZE} />,
-      perform: toggleSidebar,
+      id: "experimental-settings",
+      group: "settings",
+      titleKey: I18nKey.SETTINGS$NAV_EXPERIMENTAL,
+      descriptionKey: I18nKey.SETTINGS$PAGE_EXPERIMENTAL_SUBLINE,
+      keywordsKey: I18nKey.COMMAND_MENU$EXPERIMENTAL_SETTINGS_KEYWORDS,
+      icon: <FlaskConical size={ICON_SIZE} />,
+      to: COMMAND_MENU_ROUTE.experimentalSettings,
     },
+    ...(includeDesktopSidebarToggle ? [desktopSidebarToggleItem] : []),
   ];
 
   // Locked-to-Cloud (SaaS / self-hosted OHE) lists only the Application page;
   // the OHE settings shell owns the rest (OHE-3168).
   const isLockedToCloud = getLockedCloudHost() !== null;
+  // Locally each agent profile has its own condenser.
+  const isCloud = backendKind === "cloud";
 
   return items.filter(
     (item) =>
-      !isLockedToCloud ||
-      item.group !== "settings" ||
-      item.to === COMMAND_MENU_ROUTE.settings ||
-      item.to === LOCKED_CLOUD_SETTINGS_NAV_PATH,
+      (isCloud || item.to !== COMMAND_MENU_ROUTE.condenserSettings) &&
+      // Experimental features live on a local agent server.
+      (!isCloud || item.to !== COMMAND_MENU_ROUTE.experimentalSettings) &&
+      (!isLockedToCloud ||
+        item.group !== "settings" ||
+        item.to === COMMAND_MENU_ROUTE.settings ||
+        item.to === LOCKED_CLOUD_SETTINGS_NAV_PATH),
   );
 };

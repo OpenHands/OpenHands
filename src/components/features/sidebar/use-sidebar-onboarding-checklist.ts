@@ -7,7 +7,9 @@ import { useAutomationHealth } from "#/hooks/query/use-automation-health";
 import { usePaginatedConversations } from "#/hooks/query/use-paginated-conversations";
 import { useSettings } from "#/hooks/query/use-settings";
 import { useLlmProfiles } from "#/hooks/query/use-llm-profiles";
+import { useSearchSecrets } from "#/hooks/query/use-get-secrets";
 import { useLlmConfigured } from "#/hooks/use-llm-configured";
+import { isSubscriptionCredential } from "#/constants/acp-providers";
 import { parseMcpConfig } from "#/utils/mcp-config";
 import { getLockedCloudHost } from "#/api/agent-server-config";
 import {
@@ -60,6 +62,7 @@ export function useSidebarOnboardingChecklist() {
   const { isConfigured: isLlmConfigured, isLoading: isLlmConfiguredLoading } =
     useLlmConfigured();
   const { data: profilesData, isLoading: isProfilesLoading } = useLlmProfiles();
+  const { data: secrets } = useSearchSecrets();
   const { data: conversationPage } = usePaginatedConversations(1);
   const { data: healthData } = useAutomationHealth();
   const isAutomationBackendHealthy = healthData?.status === "ok";
@@ -93,6 +96,9 @@ export function useSidebarOnboardingChecklist() {
         profilesData,
         isProfilesLoading,
       ),
+      "configure-subscription-agent": (secrets ?? []).some((secret) =>
+        isSubscriptionCredential(secret.name),
+      ),
       "connect-mcp": hasConfiguredMcpServers(
         settings?.agent_settings?.mcp_config,
       ),
@@ -110,33 +116,30 @@ export function useSidebarOnboardingChecklist() {
     isLlmConfiguredLoading,
     isProfilesLoading,
     profilesData,
+    secrets,
     settings,
     settings?.agent_settings?.mcp_config,
   ]);
 
-  // Locked-to-Cloud blocks the Canvas LLM and Agent settings pages these two
-  // items link to, and "customize-agent" only completes by visiting one
-  // (OHE-3457).
-  const isLockedToCloud = getLockedCloudHost() !== null;
-
   const items = useMemo(
     (): SidebarOnboardingChecklistItemState[] =>
-      SIDEBAR_ONBOARDING_CHECKLIST_ITEM_IDS.filter(
-        (id) =>
-          !isLockedToCloud ||
-          (id !== "configure-llm" && id !== "customize-agent"),
-      ).map((id) => ({
+      SIDEBAR_ONBOARDING_CHECKLIST_ITEM_IDS.map((id) => ({
         id,
         isComplete: completionById[id],
       })),
-    [completionById, isLockedToCloud],
+    [completionById],
   );
 
   const completedCount = items.filter((item) => item.isComplete).length;
   const isAllComplete = completedCount === items.length;
 
+  // A canvas locked to a Cloud host (SaaS / self-hosted OHE) never shows the
+  // checklist: the main app owns setup there (OHE-3457, OHE-3683).
+  const isLockedToCloud = getLockedCloudHost() !== null;
+
   // The Super Admin setup guide replaces this checklist while it is shown.
   const isVisible =
+    !isLockedToCloud &&
     onboardingCompleted &&
     !isDismissed &&
     !isAllComplete &&

@@ -1,6 +1,7 @@
 import { useTranslation } from "react-i18next";
 import { I18nKey } from "#/i18n/declaration";
 import BlockDrawerLeftIcon from "#/icons/block-drawer-left.svg?react";
+import { cn } from "#/utils/utils";
 import {
   mobileTopBarIconButtonClassName,
   mobileTopBarIconClassName,
@@ -9,10 +10,11 @@ import { useSidebarMobileNav } from "./sidebar-mobile-nav-context";
 
 export function SidebarMobileMenuToggle() {
   const { t } = useTranslation("openhands");
-  const { isOpen, toggle } = useSidebarMobileNav();
+  const { isOpen, toggle, toggleButtonRef } = useSidebarMobileNav();
 
   return (
     <button
+      ref={toggleButtonRef}
       type="button"
       data-testid="sidebar-mobile-menu-toggle"
       onClick={toggle}
@@ -20,9 +22,15 @@ export function SidebarMobileMenuToggle() {
       aria-label={
         isOpen ? t(I18nKey.SIDEBAR$CLOSE_MENU) : t(I18nKey.SIDEBAR$OPEN_MENU)
       }
-      className={mobileTopBarIconButtonClassName}
+      className={cn(
+        mobileTopBarIconButtonClassName,
+        "size-12 p-0 text-contrast",
+      )}
     >
-      <BlockDrawerLeftIcon className={mobileTopBarIconClassName} aria-hidden />
+      <BlockDrawerLeftIcon
+        className={cn(mobileTopBarIconClassName, "size-6")}
+        aria-hidden
+      />
     </button>
   );
 }

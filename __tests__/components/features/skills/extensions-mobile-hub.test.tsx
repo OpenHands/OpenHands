@@ -1,6 +1,8 @@
 import type { ReactNode } from "react";
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { http, HttpResponse } from "msw";
+import { server } from "#/mocks/node";
 import { MemoryRouter } from "react-router";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ActiveBackendProvider } from "#/contexts/active-backend-context";
@@ -97,6 +99,37 @@ describe("ExtensionsMobileHub", () => {
       expect(
         within(hub).queryByTestId("sidebar-extensions-/apps"),
       ).not.toBeInTheDocument();
+    });
+
+    it("links the MCP Servers item, under its own label, to {cloudHost}/settings/mcp on an Enterprise instance with organization MCP servers", async () => {
+      setRegisteredBackends([cloudBackend]);
+      setActiveSelection({ backendId: cloudBackend.id, orgId: "org-1" });
+      server.use(
+        http.get("*/api/v1/web-client/config", () =>
+          HttpResponse.json({
+            providers_configured: [],
+            feature_flags: {
+              deployment_mode: "self_hosted",
+              enable_org_mcp_servers: true,
+            },
+          }),
+        ),
+      );
+
+      renderMobileHub(<ExtensionsMobileHub />);
+
+      const hub = screen.getByTestId("extensions-mobile-hub");
+      await waitFor(() =>
+        expect(
+          within(hub).getByTestId("sidebar-extensions-/mcp"),
+        ).toHaveAttribute(
+          "href",
+          "https://app.all-hands.dev/settings/mcp?org=org-1",
+        ),
+      );
+      const mcpItem = within(hub).getByTestId("sidebar-extensions-/mcp");
+      expect(mcpItem).toHaveAttribute("target", "_blank");
+      expect(mcpItem).toHaveTextContent("MCP Servers");
     });
   });
 });

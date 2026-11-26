@@ -12,6 +12,24 @@ import { useDeleteMcpServer } from "#/hooks/mutation/use-delete-mcp-server";
 import type { MCPServerConfig } from "#/types/mcp-server";
 import { getMcpServerHealthKey } from "#/utils/mcp-server-health-key";
 
+const syncMocks = vi.hoisted(() => ({
+  updateDefaultAgentProfile: vi.fn(),
+  updateEveryAgentProfile: vi.fn(),
+}));
+vi.mock("#/hooks/mutation/sync-agent-profiles", async (importOriginal) => ({
+  ...(await importOriginal<
+    typeof import("#/hooks/mutation/sync-agent-profiles")
+  >()),
+  ...syncMocks,
+}));
+
+/** The `mcp_server_refs` the sync gives a profile restricted to these servers. */
+const syncedRefs = (refs: string[]) => {
+  expect(syncMocks.updateEveryAgentProfile).toHaveBeenCalledOnce();
+  const [, change] = syncMocks.updateEveryAgentProfile.mock.calls[0];
+  return change({ agent_kind: "openhands", mcp_server_refs: refs });
+};
+
 const createWrapper = () => {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
@@ -52,6 +70,25 @@ describe("useDeleteMcpServer", () => {
     expect(deleteSpy).toHaveBeenCalledOnce();
     expect(deleteSpy).toHaveBeenCalledWith("github");
     expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it("drops the deleted server from every profile that lists it", async () => {
+    vi.clearAllMocks();
+    vi.spyOn(SettingsService, "deleteMcpServer").mockResolvedValue(true);
+    const { result } = renderHook(() => useDeleteMcpServer(), {
+      wrapper: createWrapper(),
+    });
+
+    await result.current.mutateAsync({
+      id: "github",
+      type: "shttp",
+      name: "github",
+      url: "https://github.example/mcp",
+    });
+
+    expect(syncedRefs(["github", "docs"])).toEqual({
+      mcp_server_refs: ["docs"],
+    });
   });
 
   it("drops the deleted server's health verdict after success", async () => {

@@ -221,10 +221,12 @@ describe("LocalNewConversationMenu", () => {
 
     // Assert
     await waitFor(() => {
-      expect(createSpy).toHaveBeenCalledWith({
-        metadata: null,
-        workingDirOverride: "/workspace/project/repo1",
-      });
+      expect(createSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          metadata: null,
+          workingDirOverride: "/workspace/project/repo1",
+        }),
+      );
     });
     await waitFor(() => {
       expect(navigate).toHaveBeenCalledWith("/conversations/conv-123");

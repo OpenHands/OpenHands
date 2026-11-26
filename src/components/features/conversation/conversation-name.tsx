@@ -1,3 +1,5 @@
+import { ConversationTitleText } from "./conversation-title-text";
+import { useConversationDisplayTitleState } from "#/hooks/use-conversation-display-title";
 import React from "react";
 import { useTranslation } from "react-i18next";
 import { useActiveConversation } from "#/hooks/query/use-active-conversation";
@@ -14,11 +16,17 @@ import { HooksModal } from "../conversation-panel/hooks-modal";
 import { ConfirmDeleteModal } from "../conversation-panel/confirm-delete-modal";
 import { ConfirmStopModal } from "../conversation-panel/confirm-stop-modal";
 import { TranscriptExportModal } from "./transcript-export-modal";
+import { ProjectBadge } from "./project-badge";
 
 export function ConversationName() {
   const { t } = useTranslation("openhands");
   const { conversationId } = useConversationId();
   const { data: conversation } = useActiveConversation();
+  const getTitle = useConversationDisplayTitleState();
+  const { title: displayTitle, pending: titlePending } = getTitle(
+    conversationId,
+    conversation?.title,
+  );
   const { mutate: updateConversation } = useUpdateConversation();
 
   const [titleMode, setTitleMode] = React.useState<"view" | "edit">("view");
@@ -27,6 +35,8 @@ export function ConversationName() {
     React.useState(false);
   const inputRef = React.useRef<HTMLInputElement>(null);
   const ellipsisAnchorRef = React.useRef<HTMLButtonElement>(null);
+  const cancelTitleBlurRef = React.useRef(false);
+  const focusEllipsisAfterCancelRef = React.useRef(false);
 
   // Use the custom hook for context menu handlers
   const {
@@ -66,14 +76,25 @@ export function ConversationName() {
     onContextMenuToggle: setContextMenuOpen,
   });
 
-  const handleDoubleClick = () => {
+  const startEditingTitle = () => {
+    cancelTitleBlurRef.current = false;
+    focusEllipsisAfterCancelRef.current = false;
     setTitleMode("edit");
   };
 
+  const handleDoubleClick = () => {
+    startEditingTitle();
+  };
+
   const handleBlur = () => {
+    if (cancelTitleBlurRef.current) {
+      cancelTitleBlurRef.current = false;
+      return;
+    }
+
     if (inputRef.current?.value && conversationId) {
       const trimmed = inputRef.current.value.trim();
-      if (trimmed !== conversation?.title) {
+      if (trimmed !== displayTitle) {
         updateConversation(
           { conversationId, newTitle: trimmed },
           {
@@ -85,9 +106,24 @@ export function ConversationName() {
       }
     } else if (inputRef.current) {
       // reset the value if it's empty
-      inputRef.current.value = conversation?.title ?? "";
+      inputRef.current.value = displayTitle;
     }
 
+    setTitleMode("view");
+  };
+
+  const handleKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
+    if (event.nativeEvent.isComposing || event.key !== "Escape") {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+    cancelTitleBlurRef.current = true;
+    focusEllipsisAfterCancelRef.current = true;
+    const input = event.currentTarget;
+    input.value = displayTitle;
+    setContextMenuOpen(false);
     setTitleMode("view");
   };
 
@@ -117,7 +153,7 @@ export function ConversationName() {
   const handleRename = (event: React.MouseEvent<HTMLButtonElement>) => {
     event.preventDefault();
     event.stopPropagation();
-    setTitleMode("edit");
+    startEditingTitle();
     setContextMenuOpen(false);
   };
 
@@ -133,11 +169,24 @@ export function ConversationName() {
   React.useEffect(() => {
     if (titleMode === "edit") {
       inputRef.current?.focus();
+      return;
+    }
+
+    if (focusEllipsisAfterCancelRef.current) {
+      focusEllipsisAfterCancelRef.current = false;
+      ellipsisAnchorRef.current?.focus();
     }
   }, [titleMode]);
 
   if (!conversation) {
-    return null;
+    return (
+      <div className="flex items-center gap-2 h-5.5 text-base font-normal text-left pl-0 lg:pl-1 min-w-0">
+        <div className="text-contrast leading-5 truncate" title={displayTitle}>
+          <ConversationTitleText title={displayTitle} pending={titlePending} />
+        </div>
+        <div aria-hidden className="w-6 shrink-0" />
+      </div>
+    );
   }
 
   return (
@@ -146,15 +195,17 @@ export function ConversationName() {
         className="flex items-center gap-2 h-5.5 text-base font-normal text-left pl-0 lg:pl-1 min-w-0"
         data-testid="conversation-name"
       >
+        <ProjectBadge tags={conversation.tags} />
         {titleMode === "edit" ? (
           <input
             ref={inputRef}
             data-testid="conversation-name-input"
             onClick={handleInputClick}
             onBlur={handleBlur}
+            onKeyDown={handleKeyDown}
             onKeyUp={handleKeyUp}
             type="text"
-            defaultValue={conversation.title || ""}
+            defaultValue={displayTitle}
             className="text-contrast leading-5 bg-transparent border-none outline-none text-base font-normal w-fit max-w-fit field-sizing-content"
           />
         ) : (
@@ -162,9 +213,12 @@ export function ConversationName() {
             className="text-contrast leading-5 truncate"
             data-testid="conversation-name-title"
             onDoubleClick={handleDoubleClick}
-            title={conversation.title || ""}
+            title={displayTitle}
           >
-            {conversation.title}
+            <ConversationTitleText
+              title={displayTitle}
+              pending={titlePending}
+            />
           </div>
         )}
 
@@ -211,7 +265,7 @@ export function ConversationName() {
           conversationId={conversationId}
           conversationUrl={conversation.conversation_url}
           sessionApiKey={conversation.session_api_key}
-          conversationTitle={conversation.title}
+          conversationTitle={displayTitle}
           model={conversation.llm_model}
           onClose={() => setTranscriptExportModalVisible(false)}
         />

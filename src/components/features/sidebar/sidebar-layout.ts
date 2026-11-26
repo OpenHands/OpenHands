@@ -60,7 +60,7 @@ export function sidebarCollapsedIconGlyphClassName(active: boolean): string {
   return cn(
     // Full width inside the 36px-tall slot; `pl-2.5` aligns with expanded `px-2.5` rows.
     // Do not set a narrow `w-4.5` here — with horizontal padding it shrinks the glyph.
-    "relative z-[1] flex h-full w-full items-center justify-start pl-2.5 [&_svg]:shrink-0",
+    "relative z-1 flex h-full w-full items-center justify-start pl-2.5 [&_svg]:shrink-0",
     active
       ? "text-contrast font-normal"
       : "text-muted group-hover:text-contrast",
@@ -93,3 +93,10 @@ export const SIDEBAR_COLLAPSE_TOGGLE_OVERLAY_CLASS = cn(
   "cursor-pointer",
   "text-muted hover:text-contrast hover:bg-surface-raised",
 );
+
+/** Expanded desktop sidebar width, adjustable by dragging its right edge. */
+export const SIDEBAR_WIDTH_STORAGE_KEY = "openhands-sidebar-width";
+export const SIDEBAR_DEFAULT_WIDTH_PX = 300;
+export const SIDEBAR_MIN_WIDTH_PX = 240;
+export const SIDEBAR_MAX_WIDTH_PX = 560;
+export const SIDEBAR_RESIZE_HANDLE_TEST_ID = "sidebar-resize-handle";

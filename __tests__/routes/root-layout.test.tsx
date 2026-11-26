@@ -12,6 +12,7 @@ const useSettingsMock = vi.fn();
 const changeLanguageMock = vi.fn();
 const ensureActiveProfileMock = vi.fn();
 const migrateEnabledSkillsMock = vi.fn();
+const migrateDefaultAgentProfileMock = vi.fn();
 const syncTelemetryConsentMock = vi.fn();
 const syncAutomationTelemetryConsentMock = vi.fn();
 const telemetryIdentityMock = vi.fn();
@@ -27,6 +28,10 @@ vi.mock("#/hooks/query/use-settings", () => ({
 
 vi.mock("#/hooks/use-migrate-enabled-skills", () => ({
   useMigrateEnabledSkills: () => migrateEnabledSkillsMock(),
+}));
+
+vi.mock("#/hooks/use-migrate-default-agent-profile", () => ({
+  useMigrateDefaultAgentProfile: () => migrateDefaultAgentProfileMock(),
 }));
 
 vi.mock("#/hooks/use-sync-telemetry-consent", () => ({
@@ -65,9 +70,22 @@ vi.mock("#/components/features/sidebar/sidebar", () => ({
   Sidebar: () => <div data-testid="sidebar" />,
 }));
 
-vi.mock("#/components/features/sidebar/sidebar-mobile-menu-bar", () => ({
-  SidebarMobileMenuBar: () => <div data-testid="mobile-menu-bar" />,
-}));
+vi.mock("#/components/features/sidebar/sidebar-mobile-menu-bar", async () => {
+  const { useSidebarMobileNav } = await vi.importActual<
+    typeof import("#/components/features/sidebar/sidebar-mobile-nav-context")
+  >("#/components/features/sidebar/sidebar-mobile-nav-context");
+
+  return {
+    SidebarMobileMenuBar: () => {
+      const { open } = useSidebarMobileNav();
+      return (
+        <button type="button" data-testid="mobile-menu-bar" onClick={open}>
+          Open mobile nav
+        </button>
+      );
+    },
+  };
+});
 
 vi.mock("#/components/features/alerts/alert-banner", () => ({
   AlertBanner: ({
@@ -159,6 +177,17 @@ function renderMainApp(path = "/") {
       </ActiveBackendProvider>
     </QueryClientProvider>,
   );
+}
+
+function setViewportWidth(width: number) {
+  Object.defineProperty(window, "innerWidth", {
+    configurable: true,
+    writable: true,
+    value: width,
+  });
+  act(() => {
+    window.dispatchEvent(new Event("resize"));
+  });
 }
 
 function renderRouteError(thrown: unknown) {
@@ -259,6 +288,7 @@ describe("root layout", () => {
 
     expect(changeLanguageMock).toHaveBeenCalledWith("en");
     expect(migrateEnabledSkillsMock).toHaveBeenCalledOnce();
+    expect(migrateDefaultAgentProfileMock).toHaveBeenCalledOnce();
     expect(syncTelemetryConsentMock).toHaveBeenCalledOnce();
     expect(syncAutomationTelemetryConsentMock).toHaveBeenCalledOnce();
     expect(telemetryIdentityMock).toHaveBeenCalledOnce();
@@ -321,6 +351,46 @@ describe("root layout", () => {
     renderMainApp("/conversations/abc-123");
 
     expect(screen.queryByTestId("mobile-menu-bar")).not.toBeInTheDocument();
+  });
+
+  it("clears background inert state when an open mobile nav crosses the desktop breakpoint", () => {
+    const originalWidth = window.innerWidth;
+    try {
+      setViewportWidth(767);
+      renderMainApp();
+      const background = screen.getByTestId("mobile-nav-background-content");
+      expect(background).not.toHaveAttribute("inert");
+      expect(background).not.toHaveAttribute("aria-hidden");
+
+      fireEvent.click(screen.getByTestId("mobile-menu-bar"));
+      expect(background).toHaveAttribute("inert");
+      expect(background).toHaveAttribute("aria-hidden", "true");
+
+      setViewportWidth(768);
+      expect(background).not.toHaveAttribute("inert");
+      expect(background).not.toHaveAttribute("aria-hidden");
+    } finally {
+      setViewportWidth(originalWidth);
+    }
+  });
+
+  it("bounds conversation routes inside the dynamic safe-area viewport", () => {
+    renderMainApp("/conversations/abc-123");
+
+    expect(screen.getByTestId("root-layout")).toHaveClass(
+      "h-dvh",
+      "app-shell-safe-area",
+    );
+    expect(document.getElementById("root-outlet")).toHaveClass(
+      "min-h-0",
+      "overflow-hidden",
+    );
+  });
+
+  it("keeps non-conversation routes scrollable in the app outlet", () => {
+    renderMainApp("/settings");
+
+    expect(document.getElementById("root-outlet")).toHaveClass("overflow-auto");
   });
 
   it("does not hide the mobile menu for a nested non-conversation route", () => {
@@ -411,7 +481,9 @@ describe("root layout", () => {
         "aria-hidden",
         "true",
       );
-      expect(screen.getByTestId("root-layout")).toHaveClass("pt-7");
+      expect(screen.getByTestId("root-layout")).toHaveClass(
+        "app-shell-titlebar-inset",
+      );
     });
 
     it("adds no band in a browser tab, where the shell owns no window chrome", () => {
@@ -420,7 +492,9 @@ describe("root layout", () => {
       expect(
         screen.queryByTestId("titlebar-drag-region"),
       ).not.toBeInTheDocument();
-      expect(screen.getByTestId("root-layout")).not.toHaveClass("pt-7");
+      expect(screen.getByTestId("root-layout")).not.toHaveClass(
+        "app-shell-titlebar-inset",
+      );
     });
 
     it.each(["win32", "linux"])(
@@ -433,7 +507,9 @@ describe("root layout", () => {
         expect(
           screen.queryByTestId("titlebar-drag-region"),
         ).not.toBeInTheDocument();
-        expect(screen.getByTestId("root-layout")).not.toHaveClass("pt-7");
+        expect(screen.getByTestId("root-layout")).not.toHaveClass(
+          "app-shell-titlebar-inset",
+        );
       },
     );
 
@@ -454,7 +530,7 @@ describe("root layout", () => {
       expect(await screen.findByText("Kaboom")).toBeInTheDocument();
       expect(
         screen.getByTestId("titlebar-drag-region").parentElement,
-      ).toHaveClass("pt-7");
+      ).toHaveClass("app-shell-titlebar-inset");
     });
 
     it("drops the band once the window goes fullscreen, where macOS hides the traffic lights", async () => {
@@ -480,7 +556,9 @@ describe("root layout", () => {
       expect(
         screen.queryByTestId("titlebar-drag-region"),
       ).not.toBeInTheDocument();
-      expect(screen.getByTestId("root-layout")).not.toHaveClass("pt-7");
+      expect(screen.getByTestId("root-layout")).not.toHaveClass(
+        "app-shell-titlebar-inset",
+      );
 
       await act(async () => emit?.(false));
 
@@ -500,7 +578,9 @@ describe("root layout", () => {
       expect(
         screen.queryByTestId("titlebar-drag-region"),
       ).not.toBeInTheDocument();
-      expect(screen.getByTestId("root-layout")).not.toHaveClass("pt-7");
+      expect(screen.getByTestId("root-layout")).not.toHaveClass(
+        "app-shell-titlebar-inset",
+      );
     });
   });
 });

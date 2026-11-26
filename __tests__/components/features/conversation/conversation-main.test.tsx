@@ -1,4 +1,4 @@
-import { act, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { SidebarMobileNavProvider } from "#/components/features/sidebar/sidebar-mobile-nav-context";
@@ -8,6 +8,7 @@ import {
 } from "#/context/navigation-context";
 import { requestAutomationSetupAgent } from "#/components/features/automations/setup/automation-setup-agent-request";
 import { markAutomationSetupHandoff } from "#/api/automation-setup-handoff-store";
+import { initializeAutomationFormSession } from "#/api/automation-form-session";
 
 // Mutable mock state for controlling breakpoint
 let mockIsMobile = false;
@@ -113,7 +114,9 @@ vi.mock("#/components/features/chat/chat-interface", () => {
 vi.mock(
   "#/components/features/conversation/conversation-tabs/conversation-tab-content/conversation-tab-content",
   () => ({
-    ConversationTabContent: () => <div data-testid="tab-content" />,
+    ConversationTabContent: () => (
+      <input data-testid="tab-content" aria-label="Panel draft" />
+    ),
   }),
 );
 
@@ -141,12 +144,15 @@ vi.mock(
   () => {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { createPortal } = require("react-dom");
+    const automationDraftLabel = "Unsaved automation name";
     return {
       AutomationSetupPanel: ({
         conversationId,
+        draft,
         toolbarPortal,
       }: {
         conversationId?: string | null;
+        draft?: { form?: { name?: string } };
         toolbarPortal?: HTMLElement | null;
       }) => {
         automationSetupPanelRender(conversationId);
@@ -164,7 +170,12 @@ vi.mock(
             <div
               data-testid="automation-setup-panel"
               data-conversation-id={conversationId ?? ""}
-            />
+            >
+              <input
+                aria-label={automationDraftLabel}
+                defaultValue={draft?.form?.name ?? ""}
+              />
+            </div>
           </>
         );
       },
@@ -209,6 +220,35 @@ describe("ConversationMain - Layout Transition Stability", () => {
     mockSetIsRightPanelShown.mockClear();
   });
 
+  it("defers closed tabs until opened and preserves their state when closed again", async () => {
+    const user = userEvent.setup();
+    const { rerender } = renderConversationMain();
+    expect(screen.queryByTestId("tab-content")).not.toBeInTheDocument();
+
+    mockIsRightPanelShown = true;
+    rerender(conversationMainTree());
+    const panel = screen.getByRole("textbox", { name: "Panel draft" });
+    await user.type(panel, "unsaved draft");
+
+    mockIsRightPanelShown = false;
+    rerender(conversationMainTree());
+    expect(panel).toBeInTheDocument();
+    mockIsRightPanelShown = true;
+    rerender(conversationMainTree());
+    expect(screen.getByRole("textbox", { name: "Panel draft" })).toHaveValue(
+      "unsaved draft",
+    );
+
+    mockIsRightPanelShown = false;
+    rerender(conversationMainTree("conv-2"));
+    expect(screen.queryByTestId("tab-content")).not.toBeInTheDocument();
+    mockIsRightPanelShown = true;
+    rerender(conversationMainTree("conv-2"));
+    expect(screen.getByRole("textbox", { name: "Panel draft" })).toHaveValue(
+      "",
+    );
+  });
+
   it("opens automation setup mode when the conversation has a draft tag", async () => {
     mockActiveConversationTags = { automationsetup: "draft" };
 
@@ -238,6 +278,59 @@ describe("ConversationMain - Layout Transition Stability", () => {
     expect(
       screen.queryByTestId("automation-setup-topbar"),
     ).not.toBeInTheDocument();
+  });
+
+  it("keeps the existing mobile conversation header outside the scroll area", () => {
+    mockIsMobile = true;
+    renderConversationMain();
+
+    expect(screen.getByTestId("chat-pane-header")).toHaveClass("shrink-0");
+    expect(
+      screen.getByTestId("sidebar-mobile-menu-toggle"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("conversation-mobile-back-button"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("opens the navigation drawer on a rightward swipe from the chat's left third", () => {
+    mockIsMobile = true;
+    renderConversationMain();
+    vi.spyOn(
+      screen.getByTestId("conversation-chat-panel"),
+      "getBoundingClientRect",
+    ).mockReturnValue({ left: 0, top: 0, width: 390, height: 844 } as DOMRect);
+    const chat = screen.getByTestId("chat-interface");
+
+    fireEvent.touchStart(chat, {
+      touches: [{ identifier: 0, clientX: 40, clientY: 400 }],
+    });
+    fireEvent.touchEnd(chat, {
+      touches: [],
+      changedTouches: [{ identifier: 0, clientX: 200, clientY: 404 }],
+    });
+
+    expect(screen.getByTestId("sidebar-mobile-menu-toggle")).toHaveAttribute(
+      "aria-expanded",
+      "true",
+    );
+  });
+
+  it("renders at desktop width without the app shell's mobile navigation", () => {
+    render(
+      <NavigationProvider
+        value={{
+          currentPath: "/conversations/conv-1",
+          conversationId: "conv-1",
+          isNavigating: false,
+          navigate: mockNavigate,
+        }}
+      >
+        <ConversationMain />
+      </NavigationProvider>,
+    );
+
+    expect(screen.getByTestId("chat-interface")).toBeInTheDocument();
   });
 
   it.each([
@@ -326,6 +419,10 @@ describe("ConversationMain - Layout Transition Stability", () => {
     renderConversationMain();
 
     expect(screen.getByTestId("automation-setup-topbar")).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("conversation-mobile-back-button"),
+    ).not.toBeInTheDocument();
+
     expect(screen.getByTestId("automation-setup-panel")).toHaveAttribute(
       "data-conversation-id",
       "conv-1",
@@ -346,9 +443,9 @@ describe("ConversationMain - Layout Transition Stability", () => {
       screen.getByTestId("automation-setup-mobile-view-conversation"),
     );
 
-    expect(
-      screen.queryByTestId("automation-setup-mobile-form"),
-    ).not.toBeInTheDocument();
+    expect(screen.getByTestId("automation-setup-mobile-form")).toHaveClass(
+      "hidden",
+    );
     expect(
       screen.queryByTestId("automation-setup-docked-composer"),
     ).not.toBeInTheDocument();
@@ -383,9 +480,9 @@ describe("ConversationMain - Layout Transition Stability", () => {
 
     await user.click(screen.getByTestId("docked-composer-submit"));
 
-    expect(
-      screen.queryByTestId("automation-setup-mobile-form"),
-    ).not.toBeInTheDocument();
+    expect(screen.getByTestId("automation-setup-mobile-form")).toHaveClass(
+      "hidden",
+    );
 
     await user.click(screen.getByTestId("automation-setup-mobile-view-form"));
 
@@ -393,12 +490,43 @@ describe("ConversationMain - Layout Transition Stability", () => {
       requestAutomationSetupAgent();
     });
 
-    expect(
-      screen.queryByTestId("automation-setup-mobile-form"),
-    ).not.toBeInTheDocument();
+    expect(screen.getByTestId("automation-setup-mobile-form")).toHaveClass(
+      "hidden",
+    );
     expect(screen.getByTestId("conversation-chat-panel")).not.toHaveClass(
       "hidden",
     );
+  });
+
+  it("retains unsaved phone form edits across view switches and after returning", async () => {
+    const user = userEvent.setup();
+    mockIsMobile = true;
+    mockActiveConversationTags = { automation_setup: "true" };
+    markAutomationSetupHandoff("conv-1");
+    const rendered = renderConversationMain();
+    const name = await screen.findByRole("textbox", {
+      name: "Unsaved automation name",
+    });
+    await user.type(name, "Keep my draft");
+    await user.click(
+      screen.getByTestId("automation-setup-mobile-view-conversation"),
+    );
+    await user.click(screen.getByTestId("automation-setup-mobile-view-form"));
+    expect(
+      screen.getByRole("textbox", { name: "Unsaved automation name" }),
+    ).toHaveValue("Keep my draft");
+    // The real panel keeps its edits in the conversation's form session.
+    initializeAutomationFormSession("conv-1", {
+      prompt: "",
+      kind: "prompt",
+      form: { name: "Keep my draft" },
+    });
+    rendered.unmount();
+    markAutomationSetupHandoff("conv-1");
+    renderConversationMain();
+    expect(
+      await screen.findByRole("textbox", { name: "Unsaved automation name" }),
+    ).toHaveValue("Keep my draft");
   });
 
   it("expands the automation form to full width when hiding the agent", async () => {

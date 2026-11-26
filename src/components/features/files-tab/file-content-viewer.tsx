@@ -195,12 +195,12 @@ export function FileContentViewer({ path, viewMode }: FileContentViewerProps) {
     return (
       <div
         data-testid="file-content-viewer-markdown"
-        className="h-full w-full overflow-auto bg-surface text-foreground custom-scrollbar-always [--oh-scroll-fade-from:var(--oh-surface)]"
+        className="h-full w-full overflow-auto bg-surface text-foreground custom-scrollbar-always file-preview-markdown"
       >
         <div
           className={cn(
             "prose prose-sm max-w-none p-6",
-            "[--tw-prose-body:var(--oh-foreground)] [--tw-prose-bold:var(--oh-foreground)] [--tw-prose-headings:var(--oh-foreground)] [--tw-prose-lead:var(--oh-text-secondary)] [--tw-prose-counters:var(--oh-text-secondary)] [--tw-prose-quotes:var(--oh-foreground)] [--tw-prose-quote-borders:var(--oh-border-subtle)] [--tw-prose-bullets:var(--oh-muted)] [--tw-prose-hr:var(--oh-border-subtle)] [--tw-prose-captions:var(--oh-muted)] [--tw-prose-kbd:var(--oh-foreground)]",
+            "file-preview-prose",
             !isLightTheme && "prose-invert",
           )}
         >

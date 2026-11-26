@@ -1,5 +1,6 @@
+import React from "react";
 import { render, screen } from "@testing-library/react";
-import { describe, it, expect } from "vitest";
+import { afterEach, describe, it, expect, vi } from "vitest";
 import { sanitize } from "hast-util-sanitize";
 import type { Element, Root } from "hast";
 
@@ -7,6 +8,16 @@ import {
   MarkdownRenderer,
   MARKDOWN_SANITIZE_SCHEMA,
 } from "#/components/features/markdown/markdown-renderer";
+
+const mentionsFlag = vi.hoisted(() => ({ enabled: true }));
+
+vi.mock("#/hooks/query/use-experimental-features", async (importOriginal) => ({
+  ...(await importOriginal<
+    typeof import("#/hooks/query/use-experimental-features")
+  >()),
+  useIsExperimentalFeatureEnabled: (key: string) =>
+    key === "conversation_mentions" && mentionsFlag.enabled,
+}));
 
 describe("MarkdownRenderer", () => {
   it("renders GFM tables (a GFM-only feature)", () => {
@@ -317,8 +328,7 @@ describe("MARKDOWN_SANITIZE_SCHEMA", () => {
   });
 
   it("preserves rel even when it carries unusual but-safe tokens like `nofollow ugc`", () => {
-    // `rel` keywords never execute code or navigate, so allowing any
-    // value is safe. This locks that property in.
+    // Every `rel` keyword except `opener` passes through untouched.
     const tree = sanitize(
       makeAnchor({
         href: "https://example.com",
@@ -331,5 +341,231 @@ describe("MARKDOWN_SANITIZE_SCHEMA", () => {
     const relProp = a?.properties?.rel;
     const rel = Array.isArray(relProp) ? relProp.join(" ") : relProp;
     expect(rel).toBe("nofollow ugc");
+  });
+
+  it("drops a bare rel=opener", () => {
+    const tree = sanitize(
+      makeAnchor({
+        href: "https://example.com",
+        target: "_blank",
+        rel: "opener",
+      }),
+      MARKDOWN_SANITIZE_SCHEMA,
+    ) as Root;
+
+    const relProp = firstAnchor(tree)?.properties?.rel;
+    const rel = Array.isArray(relProp) ? relProp.join(" ") : relProp;
+    expect(rel ?? "").toBe("");
+  });
+
+  it("drops opener but keeps the other tokens when rel carries several", () => {
+    const tree = sanitize(
+      makeAnchor({
+        href: "https://example.com",
+        target: "_blank",
+        rel: ["noreferrer", "opener"],
+      }),
+      MARKDOWN_SANITIZE_SCHEMA,
+    ) as Root;
+
+    const relProp = firstAnchor(tree)?.properties?.rel;
+    const rel = Array.isArray(relProp) ? relProp.join(" ") : relProp;
+    expect(rel).toBe("noreferrer");
+  });
+
+  it("drops the whole rel when opener rides along in the string shape", () => {
+    // sanitize can't split a string `rel`, so the whole value goes.
+    const tree = sanitize(
+      makeAnchor({
+        href: "https://example.com",
+        target: "_blank",
+        rel: "noreferrer opener",
+      }),
+      MARKDOWN_SANITIZE_SCHEMA,
+    ) as Root;
+
+    const relProp = firstAnchor(tree)?.properties?.rel;
+    const rel = Array.isArray(relProp) ? relProp.join(" ") : relProp;
+    expect(rel ?? "").toBe("");
+  });
+
+  it("drops the string shape whichever end opener sits at, in any case", () => {
+    for (const value of ["opener noreferrer", "NOREFERRER OPENER", "OPENER"]) {
+      const tree = sanitize(
+        makeAnchor({ href: "https://example.com", rel: value }),
+        MARKDOWN_SANITIZE_SCHEMA,
+      ) as Root;
+
+      const relProp = firstAnchor(tree)?.properties?.rel;
+      const rel = Array.isArray(relProp) ? relProp.join(" ") : relProp;
+      expect(rel ?? "").toBe("");
+    }
+  });
+
+  it("keeps noopener, which merely contains the letters of opener", () => {
+    for (const value of ["noopener", "noopener noreferrer", "NOOPENER"]) {
+      const tree = sanitize(
+        makeAnchor({ href: "https://example.com", rel: value }),
+        MARKDOWN_SANITIZE_SCHEMA,
+      ) as Root;
+
+      const relProp = firstAnchor(tree)?.properties?.rel;
+      const rel = Array.isArray(relProp) ? relProp.join(" ") : relProp;
+      expect(rel).toBe(value);
+    }
+  });
+
+  it("matches rel=opener case-insensitively", () => {
+    const tree = sanitize(
+      makeAnchor({ href: "https://example.com", rel: "OPENER" }),
+      MARKDOWN_SANITIZE_SCHEMA,
+    ) as Root;
+
+    const relProp = firstAnchor(tree)?.properties?.rel;
+    const rel = Array.isArray(relProp) ? relProp.join(" ") : relProp;
+    expect(rel ?? "").toBe("");
+  });
+
+  it.each(["frame-name", "_top", "_parent"])("drops target=%s", (target) => {
+    const tree = sanitize(
+      makeAnchor({ href: "https://example.com", target }),
+      MARKDOWN_SANITIZE_SCHEMA,
+    ) as Root;
+
+    expect(firstAnchor(tree)?.properties?.target).toBeUndefined();
+  });
+
+  it.each(["_blank", "_self"])("keeps target=%s", (target) => {
+    const tree = sanitize(
+      makeAnchor({ href: "https://example.com", target }),
+      MARKDOWN_SANITIZE_SCHEMA,
+    ) as Root;
+
+    expect(firstAnchor(tree)?.properties?.target).toBe(target);
+  });
+});
+
+// Without `includeStandard` the `anchor` component isn't used, so the
+// schema alone decides what reaches the DOM.
+describe("MarkdownRenderer without includeStandard", () => {
+  it("does not let rel=opener reach the DOM", () => {
+    const { container } = render(
+      <MarkdownRenderer>
+        {`<a href="https://evil.example" target="_blank" rel="opener">x</a>`}
+      </MarkdownRenderer>,
+    );
+
+    const anchorEl = container.querySelector("a");
+    expect(anchorEl).not.toBeNull();
+    expect(anchorEl?.getAttribute("rel") ?? "").not.toContain("opener");
+  });
+
+  it("does not let an arbitrary target reach the DOM", () => {
+    const { container } = render(
+      <MarkdownRenderer>
+        {`<a href="https://evil.example" target="frame-name">x</a>`}
+      </MarkdownRenderer>,
+    );
+
+    expect(container.querySelector("a")?.getAttribute("target")).toBeNull();
+  });
+
+  it("still renders an ordinary external link", () => {
+    const { container } = render(
+      <MarkdownRenderer>
+        {`<a href="https://example.com" target="_blank" rel="noopener noreferrer">x</a>`}
+      </MarkdownRenderer>,
+    );
+
+    const anchorEl = container.querySelector("a");
+    expect(anchorEl?.getAttribute("href")).toBe("https://example.com");
+    expect(anchorEl?.getAttribute("target")).toBe("_blank");
+    expect(anchorEl?.getAttribute("rel")).toBe("noopener noreferrer");
+  });
+});
+
+describe("MarkdownRenderer conversation mentions", () => {
+  const hex = "4f2c9e0a1b2c4d5e8f90a1b2c3d4e5f6";
+
+  afterEach(() => {
+    mentionsFlag.enabled = true;
+  });
+
+  it("shows a mention as plain text while conversation mentions are off", () => {
+    mentionsFlag.enabled = false;
+    render(
+      <MarkdownRenderer>
+        {`Ask [Fix export](conversation:${hex}) first.`}
+      </MarkdownRenderer>,
+    );
+    expect(screen.queryByTestId("conversation-mention")).toBeNull();
+    expect(screen.getByTestId("conversation-mention-text").textContent).toBe(
+      "Fix export",
+    );
+  });
+
+  it.each([true, false])(
+    "opens [Title](conversation:<id>) in place (includeStandard %s)",
+    (includeStandard) => {
+      render(
+        <MarkdownRenderer includeStandard={includeStandard}>
+          {`Ask [Fix export](conversation:${hex}) first.`}
+        </MarkdownRenderer>,
+      );
+      const link = screen.getByTestId("conversation-mention");
+      expect(link.textContent).toBe("Fix export");
+      expect(link.getAttribute("href")).toMatch(
+        new RegExp(`/conversations/${hex}$`),
+      );
+      expect(link.getAttribute("target")).toBeNull();
+    },
+  );
+
+  it("keeps mentions working with a custom link renderer", () => {
+    function CustomLink({ href, children }: React.ComponentProps<"a">) {
+      return (
+        <a href={href} data-testid="custom-link">
+          {children}
+        </a>
+      );
+    }
+    render(
+      <MarkdownRenderer
+        components={{ a: CustomLink }}
+        content={`[A](conversation:${hex}) [docs](https://example.com)`}
+      />,
+    );
+    expect(screen.getByTestId("conversation-mention").textContent).toBe("A");
+    expect(screen.getByTestId("custom-link").textContent).toBe("docs");
+  });
+
+  it("accepts a dashed id and keeps other links external", () => {
+    render(
+      <MarkdownRenderer
+        includeStandard
+        content="[A](conversation:4f2c9e0a-1b2c-4d5e-8f90-a1b2c3d4e5f6) and [docs](https://example.com)"
+      />,
+    );
+    expect(
+      screen.getByTestId("conversation-mention").getAttribute("href"),
+    ).toMatch(new RegExp(`/conversations/${hex}$`));
+    const docs = screen.getByText("docs");
+    expect(docs.getAttribute("target")).toBe("_blank");
+  });
+
+  it("shows a malformed mention as its text, and keeps other schemes out", () => {
+    const { container } = render(
+      <MarkdownRenderer
+        includeStandard
+        content="[old notes](conversation:not-an-id) [y](javascript:alert(1))"
+      />,
+    );
+    expect(screen.queryByTestId("conversation-mention")).toBeNull();
+    expect(screen.getByText("old notes").closest("a")).toBeNull();
+    for (const a of container.querySelectorAll("a")) {
+      expect(a.getAttribute("href") ?? "").not.toMatch(
+        /^(javascript|conversation):/,
+      );
+    }
   });
 });

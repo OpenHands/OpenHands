@@ -1,13 +1,25 @@
+import { conversationHistoryQueryOptions } from "./conversation-history-query-options";
+import { persistedHistoryQueryOptions } from "./persisted-history-query-options";
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { useRef } from "react";
-import { Query, useQuery } from "@tanstack/react-query";
+import { useCallback, useRef } from "react";
+import { CONVERSATION_LAUNCH_PREFIX } from "#/stores/conversation-launch-store";
+import {
+  CancelledError,
+  Query,
+  type QueryFunctionContext,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import { AxiosError } from "axios";
 import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
 import { AppConversation } from "#/api/conversation-service/agent-server-conversation-service.types";
 import { useActiveBackend } from "#/contexts/active-backend-context";
-import { isRateLimitError } from "#/utils/rate-limit-retry";
+import { retryTransientRequest } from "#/utils/transient-error-retry";
 
-const MAX_RATE_LIMIT_RETRIES = 2;
+import type { ResolvedActiveBackend } from "#/api/backend-registry/types";
+import { getActiveBackend } from "#/api/backend-registry/active-store";
+import { CONVERSATION_QUERY_KEYS } from "./query-keys";
+
 const FIVE_MINUTES = 1000 * 60 * 5;
 const FIFTEEN_MINUTES = 1000 * 60 * 15;
 
@@ -20,11 +32,99 @@ type RefetchInterval = (
   >,
 ) => number;
 
+function userConversationQueryOptions(
+  cid: string | null,
+  active: ResolvedActiveBackend,
+) {
+  return {
+    queryKey: CONVERSATION_QUERY_KEYS.detail(
+      cid,
+      active.backend.id,
+      active.orgId,
+    ),
+    queryFn: async ({
+      client,
+      queryKey,
+    }: QueryFunctionContext<(string | null)[]>) => {
+      const current = getActiveBackend();
+      if (
+        current.backend.id !== active.backend.id ||
+        current.orgId !== active.orgId
+      ) {
+        void client.cancelQueries({ queryKey, exact: true });
+        throw new CancelledError({ revert: true });
+      }
+      if (
+        !cid ||
+        cid.startsWith("task-") ||
+        cid.startsWith(CONVERSATION_LAUNCH_PREFIX)
+      )
+        return null;
+
+      // Use the V1 batch API endpoint to get a single conversation
+      const results =
+        await AgentServerConversationService.batchGetAppConversations([cid]);
+      return results[0] ?? null;
+    },
+    retry: retryTransientRequest,
+    staleTime: FIVE_MINUTES,
+    gcTime: FIFTEEN_MINUTES,
+  };
+}
+
+export const usePrefetchUserConversation = () => {
+  const queryClient = useQueryClient();
+  const active = useActiveBackend();
+  return useCallback(
+    async (cid: string) => {
+      const current = getActiveBackend();
+      if (
+        active.backend.kind !== "cloud" ||
+        !active.orgId ||
+        current.backend.id !== active.backend.id ||
+        current.orgId !== active.orgId ||
+        !cid ||
+        cid.startsWith("task-") ||
+        cid.startsWith(CONVERSATION_LAUNCH_PREFIX)
+      ) {
+        return Promise.resolve();
+      }
+      const options = userConversationQueryOptions(cid, active);
+      await queryClient.prefetchQuery(options);
+      const selected = getActiveBackend();
+      if (
+        selected.backend.id !== active.backend.id ||
+        selected.orgId !== active.orgId ||
+        selected.backend.connectionRevision !==
+          active.backend.connectionRevision ||
+        !queryClient.getQueryData(options.queryKey)
+      )
+        return;
+      const conversation = queryClient.getQueryData<AppConversation | null>(
+        options.queryKey,
+      );
+      await Promise.all([
+        queryClient.prefetchQuery({
+          ...conversationHistoryQueryOptions(cid, conversation, active),
+          staleTime: 0,
+        }),
+        queryClient.prefetchQuery({
+          ...persistedHistoryQueryOptions(cid, active),
+          staleTime: 0,
+        }),
+      ]);
+    },
+    [active, queryClient],
+  );
+};
+
 export const useUserConversation = (
   cid: string | null,
   refetchInterval?: RefetchInterval,
 ) => {
   const active = useActiveBackend();
+  const isPendingId =
+    cid?.startsWith("task-") || cid?.startsWith(CONVERSATION_LAUNCH_PREFIX);
 
   // The cid belongs to whichever backend was active when the user opened this
   // conversation. If they switch to a *different* backend (e.g. cloud → local)
@@ -52,25 +152,8 @@ export const useUserConversation = (
     // shared cid key, which then makes the conversation route toast
     // "conversation not available or no permission" until the user
     // hard-refreshes the page. Mirrors `usePaginatedConversations`.
-    queryKey: ["user", "conversation", cid, active.backend.id, active.orgId],
-    queryFn: async () => {
-      if (!cid) return null;
-
-      // Use the V1 batch API endpoint to get a single conversation
-      const results =
-        await AgentServerConversationService.batchGetAppConversations([cid]);
-      return results[0] ?? null;
-    },
-    enabled:
-      !!cid &&
-      !cid.startsWith("task-") &&
-      !backendChanged &&
-      hasConversationScope,
-    // Rate limits (429) are transient and worth a couple of backed-off
-    // retries; any other failure (404, 5xx, network) fails immediately as
-    // before rather than masking a real problem.
-    retry: (failureCount, error) =>
-      failureCount < MAX_RATE_LIMIT_RETRIES && isRateLimitError(error),
+    ...userConversationQueryOptions(cid, active),
+    enabled: !!cid && !isPendingId && !backendChanged && hasConversationScope,
     // Freshness while it matters is already covered by `refetchInterval`
     // above. Refetching on every window focus too means every open
     // conversation tab/browser tab fires a request the instant it regains
@@ -78,7 +161,5 @@ export const useUserConversation = (
     // several tabs are open.
     refetchOnWindowFocus: false,
     refetchInterval,
-    staleTime: FIVE_MINUTES,
-    gcTime: FIFTEEN_MINUTES,
   });
 };

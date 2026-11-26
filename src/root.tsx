@@ -31,7 +31,11 @@ import {
   redirectToMainAppLogin,
   shouldUseMainAppCookieAuth,
 } from "#/api/main-app-auth";
-import { getEffectiveLocalBackend } from "#/api/backend-registry/active-store";
+import {
+  getEffectiveLocalBackend,
+  isNoBackend,
+} from "#/api/backend-registry/active-store";
+import type { Backend } from "#/api/backend-registry/types";
 import { useActiveBackendContext } from "#/contexts/active-backend-context";
 import {
   isCloudBackendApiKeyOrNetworkHealthError,
@@ -41,13 +45,17 @@ import {
 import { TOAST_OPTIONS } from "#/utils/custom-toast-handlers";
 import { LoadingSpinner } from "#/components/shared/loading-spinner";
 import { useConfig } from "#/hooks/query/use-config";
+import { useSettings } from "#/hooks/query/use-settings";
 import { useRestoreMarsTunnels } from "#/hooks/use-mars-tunnel-backend";
 import { QUERY_KEYS } from "#/hooks/query/query-keys";
 import { AgentServerUIRoot } from "#/components/providers";
 import { TelemetryConsentBanner } from "#/components/features/analytics/telemetry-consent-banner";
 import { buildAgentCanvasPath } from "#/utils/base-path";
 import { useOnboardingCompletion } from "#/components/features/onboarding/use-onboarding-completion";
-import { NavigationProvider } from "#/context/navigation-context";
+import {
+  NavigationProvider,
+  useCurrentPathGetter,
+} from "#/context/navigation-context";
 import {
   applyColorTheme,
   COLOR_THEME_BOOTSTRAP_SCRIPT,
@@ -96,7 +104,10 @@ export function Layout({ children }: { children: React.ReactNode }) {
     <html lang="en" suppressHydrationWarning>
       <head>
         <meta charSet="utf-8" />
-        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <meta
+          name="viewport"
+          content="width=device-width, initial-scale=1, viewport-fit=cover"
+        />
         <Meta />
         <Links />
         <script
@@ -104,7 +115,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
         />
       </head>
       <body data-agent-server-ui="" className="m-0">
-        <AgentServerUIRoot contentClassName="min-h-screen">
+        <AgentServerUIRoot contentClassName="h-dvh min-h-0">
           <ColorThemeApplier />
           {children}
           <Toaster toastOptions={TOAST_OPTIONS} />
@@ -168,6 +179,7 @@ function FirstRunOnboardingScreen({ onClose }: { onClose: () => void }) {
   const routerNavigation = useRouterNavigation();
   const conversationId =
     location.pathname.match(/^\/conversations\/([^/]+)/)?.[1] ?? null;
+  const getCurrentPath = useCurrentPathGetter(location.pathname);
   const navigationValue = React.useMemo(
     () => ({
       currentPath: location.pathname,
@@ -175,8 +187,15 @@ function FirstRunOnboardingScreen({ onClose }: { onClose: () => void }) {
       isNavigating: Boolean(routerNavigation.location),
       navigate: (to: string, options?: { replace?: boolean }) =>
         navigate(to, options),
+      getCurrentPath,
     }),
-    [conversationId, location.pathname, navigate, routerNavigation.location],
+    [
+      conversationId,
+      location.pathname,
+      navigate,
+      routerNavigation.location,
+      getCurrentPath,
+    ],
   );
 
   const lockedCloudHost = getLockedCloudHost();
@@ -218,11 +237,72 @@ function FirstRunOnboardingScreen({ onClose }: { onClose: () => void }) {
   );
 }
 
+function LocalFirstRunOnboardingSequence({
+  backend,
+  onClose,
+}: {
+  backend: Backend;
+  onClose: () => void;
+}) {
+  const settings = useSettings();
+  const [hasAnsweredTelemetry, setHasAnsweredTelemetry] = React.useState(false);
+
+  React.useEffect(() => {
+    setHasAnsweredTelemetry(false);
+  }, [backend.id]);
+
+  const needsTelemetryChoice =
+    settings.isSuccess &&
+    settings.data?.user_consents_to_analytics === null &&
+    !hasAnsweredTelemetry;
+
+  if (needsTelemetryChoice) {
+    return (
+      <>
+        <AgentServerBootstrapLoading />
+        <TelemetryConsentBanner
+          onChoice={() => setHasAnsweredTelemetry(true)}
+        />
+      </>
+    );
+  }
+
+  if (settings.isLoading) {
+    return <AgentServerBootstrapLoading />;
+  }
+
+  return <FirstRunOnboardingScreen onClose={onClose} />;
+}
+
+function FirstRunOnboardingSequence({
+  backend,
+  onClose,
+}: {
+  backend: Backend;
+  onClose: () => void;
+}) {
+  if (
+    getLockedCloudHost() !== null ||
+    backend.kind !== "local" ||
+    isNoBackend(backend)
+  ) {
+    return <FirstRunOnboardingScreen onClose={onClose} />;
+  }
+
+  return (
+    <LocalFirstRunOnboardingSequence backend={backend} onClose={onClose} />
+  );
+}
+
 export const links: LinksFunction = () => [
   {
     rel: "icon",
     type: "image/svg+xml",
     href: buildAgentCanvasPath("/favicon.svg"),
+  },
+  {
+    rel: "manifest",
+    href: buildAgentCanvasPath("/site.webmanifest"),
   },
 ];
 
@@ -250,8 +330,18 @@ export default function App() {
   // the cloud backend uses its own bearer token. Skip the API-key entry screen
   // in that case so Docker/public mode doesn't block cloud-only sessions.
   const isActiveCloudBackend = active.backend.kind === "cloud";
+  // A DigitalOcean MARS session is registered as an ordinary `kind: "local"`
+  // backend whose guest key is intentionally empty (the in-guest agent-server
+  // key is set by the sandbox template, not us; the DigitalOcean token is the
+  // authorization boundary). On a page with no baked session key it must not
+  // be mistaken for an unkeyed local backend: the same-origin `/mars/sessions/*`
+  // proxy is authenticated by the bridge cookie, not by a per-backend key.
+  const isActiveMarsSession = Boolean(active.backend.marsSessionId);
   const authMissing =
-    bakedKeyMissing && !hasRegisteredKey && !isActiveCloudBackend;
+    bakedKeyMissing &&
+    !hasRegisteredKey &&
+    !isActiveCloudBackend &&
+    !isActiveMarsSession;
   const restoringMarsTunnel = useRestoreMarsTunnels();
   const queryClient = useQueryClient();
   // In locked-to-Cloud mode the only valid backend is a Cloud backend whose
@@ -364,10 +454,10 @@ export default function App() {
 
   if (showFirstRunOnboarding) {
     return (
-      <>
-        <FirstRunOnboardingScreen onClose={markCompleted} />
-        <TelemetryConsentBanner />
-      </>
+      <FirstRunOnboardingSequence
+        backend={active.backend}
+        onClose={markCompleted}
+      />
     );
   }
 

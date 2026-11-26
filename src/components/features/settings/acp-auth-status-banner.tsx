@@ -60,7 +60,7 @@ export function AcpAuthStatusBanner({
         data-testid={`${testIdPrefix}-detected`}
         // Matches the onboarding "backend connected" success banner
         // (check-backend-step.tsx) for a consistent look.
-        className="flex items-start gap-2 rounded-xl border border-status-success/40 bg-status-success/5 px-4 py-3 text-sm text-feedback-success"
+        className="flex items-start gap-2 rounded-xl border border-status-success/40 bg-success-soft px-4 py-3 text-sm text-feedback-success"
       >
         <Check
           className="mt-0.5 size-4 shrink-0 text-status-success"

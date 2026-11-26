@@ -1,14 +1,15 @@
-import React from "react";
-import { useTranslation } from "react-i18next";
-import ArrowDown from "#/icons/angle-down-solid.svg?react";
-import ArrowUp from "#/icons/angle-up-solid.svg?react";
 import LightbulbIcon from "#/icons/lightbulb.svg?react";
+import { useTranslation } from "react-i18next";
+import { DisclosureCaret } from "#/components/shared/disclosure-caret";
+import { useRowExpansionKey } from "#/components/features/chat/row-expansion-context";
+import { usePersistentExpansion } from "#/stores/message-expansion-store";
 import { I18nKey } from "#/i18n/declaration";
 import { MarkdownRenderer } from "../../../features/markdown/markdown-renderer";
 
 interface CollapsibleThinkingProps {
   /** The thinking / reasoning content to display when expanded. */
   content: string;
+  expansionId?: string;
 }
 
 /**
@@ -16,15 +17,20 @@ interface CollapsibleThinkingProps {
  * section.  Collapsed by default so the chat stays compact — especially
  * useful when the thinking language differs from the conversation language.
  */
-export function CollapsibleThinking({ content }: CollapsibleThinkingProps) {
+export function CollapsibleThinking({
+  content,
+  expansionId = "reasoning",
+}: CollapsibleThinkingProps) {
   const { t } = useTranslation("openhands");
-  const [expanded, setExpanded] = React.useState(false);
+  const expansionKey = useRowExpansionKey(expansionId);
+  const [expanded, toggleExpanded] = usePersistentExpansion(
+    expansionKey,
+    false,
+  );
 
   if (!content.trim()) {
     return null;
   }
-
-  const Chevron = expanded ? ArrowUp : ArrowDown;
 
   return (
     <div
@@ -33,7 +39,7 @@ export function CollapsibleThinking({ content }: CollapsibleThinkingProps) {
     >
       <button
         type="button"
-        onClick={() => setExpanded((prev) => !prev)}
+        onClick={toggleExpanded}
         aria-expanded={expanded}
         aria-label={
           expanded ? t(I18nKey.THINKING$COLLAPSE) : t(I18nKey.THINKING$EXPAND)
@@ -41,11 +47,10 @@ export function CollapsibleThinking({ content }: CollapsibleThinkingProps) {
         data-testid="collapsible-thinking-toggle"
         className="w-full flex items-center gap-2 text-left cursor-pointer"
       >
-        <Chevron className="h-4 w-4 fill-muted flex-shrink-0" />
-        <LightbulbIcon className="h-4 w-4 fill-muted flex-shrink-0" />
         <span className="font-normal text-muted">
           {t(I18nKey.THINKING$TITLE)}
         </span>
+        <DisclosureCaret open={expanded} />
       </button>
 
       {expanded && (
@@ -53,6 +58,46 @@ export function CollapsibleThinking({ content }: CollapsibleThinkingProps) {
           <MarkdownRenderer>{content}</MarkdownRenderer>
         </div>
       )}
+    </div>
+  );
+}
+
+/**
+ * Reasoning text without a disclosure of its own, for a group whose header is
+ * already the "Thinking" disclosure.
+ */
+export function ThinkingContent({ content }: CollapsibleThinkingProps) {
+  if (!content.trim()) {
+    return null;
+  }
+
+  return (
+    <div className="py-2 text-sm text-muted" data-testid="thinking-content">
+      <MarkdownRenderer>{content}</MarkdownRenderer>
+    </div>
+  );
+}
+
+/**
+ * Reasoning shown at the top of a tool step's own details, so it is one click
+ * away on the step instead of a separate dropdown above it.
+ */
+export function StepThinking({ content }: CollapsibleThinkingProps) {
+  const { t } = useTranslation("openhands");
+
+  if (!content.trim()) {
+    return null;
+  }
+
+  return (
+    <div className="flex flex-col gap-0.5 text-xs" data-testid="step-thinking">
+      <span className="flex items-center gap-2 font-normal text-muted">
+        <LightbulbIcon className="h-4 w-4 fill-muted flex-shrink-0" />
+        {t(I18nKey.THINKING$TITLE)}
+      </span>
+      <div className="pl-6 text-muted">
+        <MarkdownRenderer>{content}</MarkdownRenderer>
+      </div>
     </div>
   );
 }

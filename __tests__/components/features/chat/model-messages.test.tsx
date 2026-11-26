@@ -32,6 +32,12 @@ describe("ModelMessages", () => {
       MODEL$NO_SAVED_PROFILES: "No saved profiles",
       MODEL$NO_PROFILES_HINT:
         "Use the LLM settings page to create a profile, then run /model <name> to switch.",
+      MODEL$USER_SWITCHED: "You switched models to <cmd>{{name}}</cmd>",
+      MODEL$AGENT_SWITCHED: "Agent switched models to <cmd>{{name}}</cmd>",
+      MODEL$ROUTER_SWITCHED:
+        "Model router switched models to <cmd>{{name}}</cmd>",
+      MODEL$AGENT_SWITCH_REASON: "Agent’s reason:",
+      MODEL$ROUTER_SWITCH_REASON: "Model router’s reason:",
       MODEL$SWITCHED_TO_PROFILE: "ℹ️ Switched to profile <cmd>{{name}}</cmd>",
     };
     i18n.addResourceBundle("en", "translation", resources, true, true);
@@ -106,8 +112,58 @@ describe("ModelMessages", () => {
     );
 
     expect(screen.getByTestId("model-messages")).toHaveTextContent(
-      "ℹ️ Switched to profile haiku",
+      "You switched models to haiku",
     );
+  });
+
+  it("shows an agent's rationale immediately as plain text", () => {
+    useModelStore.getState().recordSwitch(CONVERSATION_ID, null, "astra", {
+      initiator: "agent",
+      reason: "Careful audit <script>alert(1)</script>",
+    });
+    renderWithProviders(
+      <ModelMessages conversationId={CONVERSATION_ID} anchorEventId={null} />,
+    );
+    expect(screen.getByTestId("model-messages")).toHaveTextContent(
+      "Agent switched models to astra",
+    );
+    expect(screen.getByText("Agent’s reason:")).toBeVisible();
+    expect(
+      screen.getByText("Careful audit <script>alert(1)</script>"),
+    ).toBeVisible();
+    expect(document.querySelector("script")).toBeNull();
+  });
+
+  it("distinguishes router switches and omits unavailable reasons", () => {
+    useModelStore.getState().recordSwitch(CONVERSATION_ID, null, "fast", {
+      initiator: "router",
+    });
+    renderWithProviders(
+      <ModelMessages conversationId={CONVERSATION_ID} anchorEventId={null} />,
+    );
+    expect(screen.getByTestId("model-messages")).toHaveTextContent(
+      "Model router switched models to fast",
+    );
+    expect(screen.queryByText("Agent’s reason:")).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("Model router’s reason:"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("shows the router's chosen class as its reason when present", () => {
+    useModelStore.getState().recordSwitch(CONVERSATION_ID, null, "fast", {
+      initiator: "router",
+      reason: "model: fast",
+    });
+    renderWithProviders(
+      <ModelMessages conversationId={CONVERSATION_ID} anchorEventId={null} />,
+    );
+    expect(screen.getByTestId("model-messages")).toHaveTextContent(
+      "Model router switched models to fast",
+    );
+    expect(screen.getByText("Model router’s reason:")).toBeVisible();
+    expect(screen.getByText("model: fast")).toBeVisible();
+    expect(screen.queryByText("Agent’s reason:")).not.toBeInTheDocument();
   });
 
   it("labels a DB-flagged free OpenHands route in expanded profile diagnostics", async () => {
@@ -140,5 +196,36 @@ describe("ModelMessages", () => {
     expect(
       screen.getByText(/model:\s+openhands\/glm-5\.2 \(free\)/),
     ).toBeInTheDocument();
+  });
+
+  it("keeps profile expansion separate for two /model entries on one event", async () => {
+    const user = userEvent.setup();
+    // Both entries anchor to the same event and list a profile with the same
+    // name, so a key of just the profile name would make expanding one expand
+    // the other.
+    useModelStore.getState().show(CONVERSATION_ID, "event-1", [profiles[0]]);
+    useModelStore.getState().show(CONVERSATION_ID, "event-1", [profiles[0]]);
+
+    renderWithProviders(
+      <ModelMessages
+        conversationId={CONVERSATION_ID}
+        anchorEventId="event-1"
+      />,
+    );
+
+    // Expand both /model listings so both profile rows are mounted.
+    const expanders = screen.getAllByRole("button", { name: "BUTTON$EXPAND" });
+    await user.click(expanders[0]);
+    await user.click(expanders[1]);
+
+    const toggles = screen.getAllByRole("button", {
+      name: "Toggle details for haiku",
+    });
+    expect(toggles).toHaveLength(2);
+
+    await user.click(toggles[0]);
+
+    expect(toggles[0]).toHaveAttribute("aria-expanded", "true");
+    expect(toggles[1]).toHaveAttribute("aria-expanded", "false");
   });
 });

@@ -22,6 +22,7 @@ import { ConversationCardHeader } from "./conversation-card-header";
 import { ConversationCardActions } from "./conversation-card-actions";
 import { ConversationCardFooter } from "./conversation-card-footer";
 import { ConversationStatusBadges } from "./conversation-status-badges";
+import { isMissingSandboxStatus } from "#/utils/conversation-archive-status";
 import { useDownloadConversation } from "#/hooks/use-download-conversation";
 
 interface ConversationCardProps {
@@ -35,6 +36,12 @@ interface ConversationCardProps {
    */
   onUnarchive?: () => void;
   onStop?: () => void;
+  /**
+   * Starts a new conversation in this conversation's sandbox. The panel
+   * passes it only for Cloud rows whose sandbox can still be used, so the
+   * menu item disappears on Local backends and on missing/errored sandboxes.
+   */
+  onNewConversationInSandbox?: () => void;
   onChangeTitle?: (title: string) => void;
   /**
    * Opens the tag editor for this conversation. Local agent-server backends
@@ -44,10 +51,13 @@ interface ConversationCardProps {
   onEditTags?: () => void;
   showOptions?: boolean;
   title: string;
+  titlePending?: boolean;
   selectedRepository: RepositorySelection | null;
   lastUpdatedAt: string;
+  timestampLabel?: string;
   createdAt?: string;
   executionStatus?: ExecutionStatus | null;
+  isStarting?: boolean;
   sandboxStatus?: SandboxStatus | null;
   conversationId?: string;
   contextMenuOpen?: boolean;
@@ -63,11 +73,21 @@ interface ConversationCardProps {
   tags?: Record<string, string> | null;
   /** Gates the tag-chip row; wired to the panel's "Tags" metadata toggle. */
   showTags?: boolean;
+  /**
+   * The row's effective archived state. Leave undefined to let the card infer
+   * it from `sandboxStatus` (a missing, non-resumable runtime); pass it
+   * explicitly when the panel also knows about an explicit archive so the
+   * chip, dot, and dimmed title stay in agreement.
+   */
   isArchived?: boolean;
   isPinned?: boolean;
   onTogglePin?: () => void;
   /** When true and pinned, keep the pin icon visible without hovering. */
   alwaysShowPinIcon?: boolean;
+  /** Whether the conversation is shared with the org. */
+  isShared?: boolean;
+  /** Adds a "Share with Org users" switch to the menu; receives the new state. */
+  onToggleShared?: (isShared: boolean) => void;
 }
 
 export function ConversationCard({
@@ -76,15 +96,19 @@ export function ConversationCard({
   onArchive,
   onUnarchive,
   onStop,
+  onNewConversationInSandbox,
   onChangeTitle,
   onEditTags,
   showOptions,
   title,
+  titlePending,
   selectedRepository,
   lastUpdatedAt,
+  timestampLabel,
   createdAt,
   conversationId,
   executionStatus,
+  isStarting,
   sandboxStatus,
   contextMenuOpen = false,
   onContextMenuToggle,
@@ -98,10 +122,12 @@ export function ConversationCard({
   acpModels = null,
   tags = null,
   showTags = false,
-  isArchived = false,
+  isArchived,
   isPinned = false,
   onTogglePin,
   alwaysShowPinIcon = false,
+  isShared = false,
+  onToggleShared,
 }: ConversationCardProps) {
   const { t } = useTranslation("openhands");
   const { trackDownloadVsCodeButtonClicked } = useTracking();
@@ -111,6 +137,11 @@ export function ConversationCard({
   const displayTags = getDisplayConversationTags(tags);
   const hasDisplayTags = displayTags.length > 0;
   const showTagChipRow = showTags && hasDisplayTags;
+
+  // Effective archived state: an explicit prop (the panel passes the user's
+  // archive plus the missing-runtime inference), or the missing-runtime
+  // fallback for standalone callers that only pass `sandboxStatus`.
+  const effectiveArchived = isArchived ?? isMissingSandboxStatus(sandboxStatus);
 
   const onTitleSave = (newTitle: string) => {
     if (newTitle !== "" && newTitle !== title) {
@@ -147,6 +178,15 @@ export function ConversationCard({
     onContextMenuToggle?.(false);
   };
 
+  const handleNewConversationInSandbox = (
+    event: React.MouseEvent<HTMLButtonElement>,
+  ) => {
+    event.preventDefault();
+    event.stopPropagation();
+    onNewConversationInSandbox?.();
+    onContextMenuToggle?.(false);
+  };
+
   const handleEdit = (event: React.MouseEvent<HTMLButtonElement>) => {
     event.preventDefault();
     event.stopPropagation();
@@ -175,7 +215,7 @@ export function ConversationCard({
         if (data.vscode_url) {
           const transformedUrl = transformVSCodeUrl(data.vscode_url);
           if (transformedUrl) {
-            window.open(transformedUrl, "_blank");
+            window.open(transformedUrl, "_blank", "noopener,noreferrer");
           }
         }
         // VS Code URL not available
@@ -201,6 +241,13 @@ export function ConversationCard({
         // menu as on success instead of leaking the rejection.
       }
     }
+    onContextMenuToggle?.(false);
+  };
+
+  const handleToggleShared = (event: React.MouseEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    onToggleShared?.(!isShared);
     onContextMenuToggle?.(false);
   };
 
@@ -243,13 +290,14 @@ export function ConversationCard({
     onUnarchive ||
     onChangeTitle ||
     onEditTags ||
+    onToggleShared ||
     showOptions
   );
   const hasHoverActions = hasContextMenu || !!onTogglePin;
   const showPersistentPinIcon = alwaysShowPinIcon && isPinned && !!onTogglePin;
   const shouldRenderFooter =
     showRepositoryMetadata ||
-    isArchived ||
+    effectiveArchived ||
     (showLlmProfiles && (agentKind === "acp" || !!llmModel)) ||
     (showTagChipRow && displayTags.length > 0);
 
@@ -260,7 +308,7 @@ export function ConversationCard({
       data-active={isActive ? "true" : "false"}
       onClick={onClick}
       className={cn(
-        "group relative h-auto w-full cursor-pointer rounded-md py-1 pl-2 pr-1 transition-colors",
+        "group relative h-auto w-full cursor-pointer rounded-md py-1 pl-2 pr-1 transition-colors max-md:flex max-md:min-h-12 max-md:flex-col max-md:justify-center",
         !contextMenuOpen && "hover:bg-surface",
         (isActive || contextMenuOpen) && "bg-surface",
       )}
@@ -269,12 +317,17 @@ export function ConversationCard({
         <div className="flex items-center gap-2 flex-1 min-w-0 overflow-hidden">
           <ConversationCardHeader
             title={title}
+            titlePending={titlePending}
             titleMode={titleMode}
             onTitleSave={onTitleSave}
             executionStatus={executionStatus}
+            isStarting={isStarting}
             sandboxStatus={sandboxStatus}
+            isArchived={effectiveArchived}
           />
-          {sandboxStatus === "ERROR" && <ConversationStatusBadges />}
+          {sandboxStatus === "ERROR" && !effectiveArchived && (
+            <ConversationStatusBadges />
+          )}
         </div>
 
         <div
@@ -288,7 +341,7 @@ export function ConversationCard({
             // coarse-pointer devices also keep the reserve so the ellipsis stays
             // clickable without a hover pass.
             showPersistentPinIcon
-              ? "min-w-[3.75rem]"
+              ? "min-w-15"
               : hasHoverActions && hoverRevealReserveClassName(contextMenuOpen),
           )}
         >
@@ -299,7 +352,9 @@ export function ConversationCard({
                 hasHoverActions && hoverRevealYieldClassName(contextMenuOpen),
               )}
             >
-              <time>{formatTimeDelta(lastUpdatedAt ?? createdAt)}</time>
+              <time>
+                {timestampLabel ?? formatTimeDelta(lastUpdatedAt ?? createdAt)}
+              </time>
             </p>
           )}
 
@@ -326,11 +381,18 @@ export function ConversationCard({
                       onArchive={onArchive && handleArchive}
                       onUnarchive={onUnarchive && handleUnarchive}
                       onStop={onStop && handleStop}
+                      onNewConversationInSandbox={
+                        onNewConversationInSandbox &&
+                        handleNewConversationInSandbox
+                      }
                       onEdit={onChangeTitle && handleEdit}
                       onEditTags={onEditTags && handleEditTags}
                       onDownloadViaVSCode={handleDownloadViaVSCode}
                       onDownloadConversation={handleDownloadConversation}
+                      isShared={isShared}
+                      onToggleShared={onToggleShared && handleToggleShared}
                       executionStatus={executionStatus}
+                      sandboxStatus={sandboxStatus}
                       conversationId={conversationId}
                       showOptions={showOptions}
                     />
@@ -342,7 +404,10 @@ export function ConversationCard({
                       hoverRevealPinnedTimestampClassName(contextMenuOpen),
                     )}
                   >
-                    <time>{formatTimeDelta(lastUpdatedAt ?? createdAt)}</time>
+                    <time>
+                      {timestampLabel ??
+                        formatTimeDelta(lastUpdatedAt ?? createdAt)}
+                    </time>
                   </p>
                 </div>
               ) : null}
@@ -354,11 +419,17 @@ export function ConversationCard({
                   onArchive={onArchive && handleArchive}
                   onUnarchive={onUnarchive && handleUnarchive}
                   onStop={onStop && handleStop}
+                  onNewConversationInSandbox={
+                    onNewConversationInSandbox && handleNewConversationInSandbox
+                  }
                   onEdit={onChangeTitle && handleEdit}
                   onEditTags={onEditTags && handleEditTags}
                   onDownloadViaVSCode={handleDownloadViaVSCode}
                   onDownloadConversation={handleDownloadConversation}
+                  isShared={isShared}
+                  onToggleShared={onToggleShared && handleToggleShared}
                   executionStatus={executionStatus}
+                  sandboxStatus={sandboxStatus}
                   conversationId={conversationId}
                   showOptions={showOptions}
                 />
@@ -384,7 +455,7 @@ export function ConversationCard({
           acpModels={acpModels}
           tags={tags}
           showTags={showTagChipRow}
-          isArchived={isArchived}
+          isArchived={effectiveArchived}
         />
       )}
     </div>

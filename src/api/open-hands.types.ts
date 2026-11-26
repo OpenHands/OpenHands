@@ -12,11 +12,6 @@ export interface GetVSCodeUrlResponse {
   error?: string;
 }
 
-export interface GetTrajectoryResponse {
-  trajectory: unknown[] | null;
-  error?: string;
-}
-
 export interface RepositorySelection {
   selected_repository: string | null;
   selected_branch: string | null;
@@ -56,10 +51,7 @@ export interface Conversation {
 export type GitChangeStatus = "M" | "A" | "D" | "R" | "U";
 
 export type AgentServerGitChangeStatus =
-  | "MOVED"
-  | "ADDED"
-  | "DELETED"
-  | "UPDATED";
+  "MOVED" | "ADDED" | "DELETED" | "UPDATED";
 
 export interface GitChange {
   status: GitChangeStatus;

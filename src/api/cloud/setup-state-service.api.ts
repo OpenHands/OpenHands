@@ -25,3 +25,18 @@ export async function getCloudSetupState(
     guide_steps: state.guide_steps ?? null,
   };
 }
+
+/**
+ * Turn the setup guide off with `PATCH /api/admin/setup-state`. Super Admin
+ * instance settings turn it back on.
+ */
+export async function dismissCloudSetupGuide(
+  backend: Backend,
+): Promise<CloudSetupState> {
+  return callCloudProxy<CloudSetupState>({
+    backend,
+    method: "PATCH",
+    path: "/api/admin/setup-state",
+    body: { guide_dismissed: true },
+  });
+}

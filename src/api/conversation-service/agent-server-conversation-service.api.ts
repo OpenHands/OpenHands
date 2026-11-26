@@ -1,4 +1,5 @@
 import {
+  type ACPEffortOption,
   type ACPModelInfo,
   ConversationSortOrder,
   type ForkConversationRequest,
@@ -11,7 +12,7 @@ import {
   ProfilesClient,
   VSCodeClient,
 } from "@openhands/typescript-client/clients";
-import { v4 as uuidv4 } from "uuid";
+import { randomUUID } from "#/utils/random-uuid";
 import { AgentKind, Provider } from "#/types/settings";
 import type { ConversationRuntimeContext } from "#/api/conversation-file-upload.api";
 import { getAgentServerWorkingDir } from "../agent-server-config";
@@ -20,11 +21,13 @@ import {
   resolveNewConversationWorkspace,
 } from "../conversation-workspace";
 import HooksService from "../hooks-service";
+import type { Backend } from "../backend-registry/types";
 import {
   getActiveBackend,
   getEffectiveLocalBackend,
 } from "../backend-registry/active-store";
 import { callCloudProxy } from "../cloud/proxy";
+import { activeOrgForBackend } from "../cloud/client";
 import ProfilesService from "../profiles-service/profiles-service.api";
 import {
   batchGetCloudConversations,
@@ -35,14 +38,24 @@ import {
   readCloudConversationFile,
   searchCloudConversations,
   updateCloudConversationPublicFlag,
+  updateCloudConversationRepository,
+  updateCloudConversationTags,
   updateCloudConversationTitle,
 } from "../cloud/conversation-service.api";
 import {
+  conversationTagFlagPatch,
+  withConversationTagFlags,
+} from "#/utils/conversation-tag-flags";
+import {
   DirectConversationInfo,
+  GIT_PROVIDER_TAG_KEY,
+  REPOSITORY_TAG_KEY,
+  SELECTED_BRANCH_TAG_KEY,
   assertSubscriptionAuthReady,
   buildRouterAtStartSystemSuffix,
   buildStartConversationRequestWithEncryptedSettings,
   buildStartPlanningConversationRequestWithEncryptedSettings,
+  buildWorkspaceTags,
   emptyHooksResponse,
   fetchBackendExecutionRuntime,
   getDefaultConversationTitle,
@@ -66,10 +79,20 @@ import {
   type WorkspaceMode,
 } from "../conversation-metadata-store";
 import { resolveTitleLlmProfile } from "#/utils/title-llm-profile";
-import { toAcpModelOptions } from "#/constants/acp-providers";
-import { isPlannerConversationOf } from "#/utils/plan-file";
+import {
+  toAcpEffortChoices,
+  toAcpModelOptions,
+} from "#/constants/acp-providers";
+import {
+  isPlannerConversationOf,
+  LOCAL_PLANNER_PARENT_TAG_KEY,
+} from "#/utils/plan-file";
 import { buildAutomationSetupModeTags } from "#/utils/automation-draft-tags";
-import { AUTOMATION_FORM_UPDATE_CLIENT_TOOL } from "../automation-form-client-tool";
+import {
+  AUTOMATION_SETUP_SYSTEM_SUFFIX,
+  buildAutomationFormUpdateClientTool,
+} from "../automation-form-client-tool";
+import type { DeploymentCapabilities } from "#/manifests/types";
 import { CANVAS_UI_CLIENT_TOOL } from "../canvas-ui-client-tool";
 import { LAUNCH_CHILD_CONVERSATION_CLIENT_TOOL } from "../launch-child-conversation-client-tool";
 import type {
@@ -87,10 +110,27 @@ import type {
 } from "./agent-server-conversation-service.types";
 
 const DEFAULT_CONVERSATION_TIMESTAMP = "1970-01-01T00:00:00.000Z";
+
+/** Captured synchronously before a delete mutation's asynchronous callbacks. */
+export type ConversationDeletionScope =
+  | {
+      kind: "local";
+      client: ConversationClient;
+      backend: Backend;
+      orgId: string | null;
+    }
+  | {
+      kind: "cloud";
+      backend: Backend;
+      orgId: string | null;
+    };
 // Creating the first conversation right after a cold agent-server boot (fresh
 // machine or the packaged desktop app, where uvx may still be warming caches)
 // can exceed the client's 60s default timeout.
 const CREATE_CONVERSATION_TIMEOUT_MS = 5 * 60 * 1000;
+// The agent-server rejects the whole create request when any tag value is
+// longer than this (SDK `TAG_VALUE_MAX_LENGTH`).
+const TAG_VALUE_MAX_LENGTH = 256;
 const INVALID_CONVERSATION_RESPONSE_MESSAGE =
   "Unable to load conversations because the selected agent server returned " +
   "data this UI does not understand. Check the backend URL/session key and " +
@@ -113,6 +153,15 @@ function numberOrZero(value: unknown): number {
 
 function stringOrNull(value: unknown): string | null {
   return typeof value === "string" ? value : null;
+}
+
+function normalizeAcpEfforts(value: unknown): ACPEffortOption[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((entry) =>
+    isRecord(entry) && typeof entry.value === "string"
+      ? [{ value: entry.value, name: stringOrNull(entry.name) }]
+      : [],
+  );
 }
 
 function normalizeAcpModels(value: unknown): ACPModelInfo[] {
@@ -282,10 +331,23 @@ function normalizeLaunchedAgentProfile(
 }
 
 function normalizeAbsolutePath(path: string): string | null {
-  if (!path.startsWith("/")) return null;
+  const normalizedPath = path.replace(/\\/g, "/");
+
+  let root: string;
+  let remainder: string;
+
+  if (/^[A-Za-z]:\//.test(normalizedPath)) {
+    root = normalizedPath.slice(0, 3);
+    remainder = normalizedPath.slice(3);
+  } else if (normalizedPath.startsWith("/")) {
+    root = "/";
+    remainder = normalizedPath.slice(1);
+  } else {
+    return null;
+  }
 
   const segments: string[] = [];
-  for (const segment of path.split("/")) {
+  for (const segment of remainder.split("/")) {
     if (segment && segment !== ".") {
       if (segment === "..") {
         if (!segments.length) return null;
@@ -296,7 +358,7 @@ function normalizeAbsolutePath(path: string): string | null {
     }
   }
 
-  return `/${segments.join("/")}`;
+  return `${root}${segments.join("/")}`;
 }
 
 function requirePathInsideDirectory(path: string, directory: string): string {
@@ -315,8 +377,14 @@ function requirePathInsideDirectory(path: string, directory: string): string {
   return normalizedPath;
 }
 
+function hasConversationId(
+  item: unknown,
+): item is Record<string, unknown> & { id: string } {
+  return isRecord(item) && typeof item.id === "string" && !!item.id.trim();
+}
+
 function requireDirectConversationInfo(item: unknown): DirectConversationInfo {
-  if (!isRecord(item) || typeof item.id !== "string" || !item.id.trim()) {
+  if (!hasConversationId(item)) {
     throw invalidConversationResponse();
   }
 
@@ -326,6 +394,7 @@ function requireDirectConversationInfo(item: unknown): DirectConversationInfo {
     created_at: readTimestamp(item, "created_at", "createdAt"),
     updated_at: readTimestamp(item, "updated_at", "updatedAt"),
     execution_status: stringOrNull(item.execution_status),
+    max_budget_per_run: numberOrNull(item.max_budget_per_run),
     sandbox_status: stringOrNull(item.sandbox_status),
     runtime_info: normalizeRuntimeInfo(item.runtime_info),
     metrics: normalizeMetrics(item.metrics),
@@ -339,6 +408,7 @@ function requireDirectConversationInfo(item: unknown): DirectConversationInfo {
     sub_conversation_ids: normalizeSubConversationIds(
       item.sub_conversation_ids,
     ),
+    parent_conversation_id: stringOrNull(item.parent_conversation_id),
     // SDK-runtime ACP model fields (populated when the agent-server supports
     // ``ConversationInfo.current_model_*``). Consumed by the conversation
     // adapter to drive the per-card chip's model text. Older agent-servers
@@ -346,16 +416,9 @@ function requireDirectConversationInfo(item: unknown): DirectConversationInfo {
     current_model_id: stringOrNull(item.current_model_id),
     current_model_name: stringOrNull(item.current_model_name),
     available_models: normalizeAcpModels(item.available_models),
+    current_effort: stringOrNull(item.current_effort),
+    available_efforts: normalizeAcpEfforts(item.available_efforts),
   };
-}
-
-function requireDirectConversationItems(
-  items: unknown,
-): DirectConversationInfo[] {
-  if (!Array.isArray(items)) {
-    throw invalidConversationResponse();
-  }
-  return items.map(requireDirectConversationInfo);
 }
 
 /**
@@ -374,26 +437,48 @@ function requireDirectConversationBatch(
   );
 }
 
-function requireConversationSearchPage(page: unknown): {
-  items: DirectConversationInfo[];
-  next_page_id: string | null;
-} {
-  if (Array.isArray(page)) {
-    return {
-      items: requireDirectConversationItems(page),
-      next_page_id: null,
-    };
-  }
-
-  if (!isRecord(page)) {
+function readConversationSearchPage(response: unknown): AppConversationPage {
+  const page = Array.isArray(response) ? { items: response } : response;
+  if (!isRecord(page) || !Array.isArray(page.items)) {
     throw invalidConversationResponse();
   }
 
-  return {
-    items: requireDirectConversationItems(page.items),
+  const result = toConversationPage({
+    items: page.items
+      .filter(hasConversationId)
+      .map(requireDirectConversationInfo),
     next_page_id:
       typeof page.next_page_id === "string" ? page.next_page_id : null,
-  };
+  });
+  if (!Array.isArray(page.broken_items)) return result;
+
+  const healthyCount = result.items.length;
+  const existingIds = new Set(result.items.map(({ id }) => id));
+  for (const rawItem of page.broken_items) {
+    if (!hasConversationId(rawItem)) continue;
+    const { reason } = rawItem;
+    if (reason !== "metadata" && reason !== "state") continue;
+    const item = requireDirectConversationInfo(rawItem);
+    if (existingIds.has(item.id) || item.tags?.[LOCAL_PLANNER_PARENT_TAG_KEY]) {
+      continue;
+    }
+    existingIds.add(item.id);
+    result.items.push({
+      ...toAppConversation(item),
+      broken_reason: reason,
+      conversation_url: null,
+      session_api_key: null,
+      execution_status: null,
+      llm_model: null,
+    });
+  }
+  if (result.items.length > healthyCount) {
+    result.items.sort(
+      (left, right) =>
+        Date.parse(right.updated_at) - Date.parse(left.updated_at),
+    );
+  }
+  return result;
 }
 
 const RUNTIME_STATUSES = new Set<string>([
@@ -432,6 +517,9 @@ export interface CreateConversationOptions {
   initialUserMsg?: string;
   automationSetup?: boolean;
   automationSetupTags?: Record<string, string>;
+  automationSetupContext?: string;
+  /** The automation service's capabilities, for the setup assistant's form tool. */
+  automationSetupCapabilities?: DeploymentCapabilities | null;
   conversationInstructions?: string;
   plugins?: PluginSpec[];
   metadata?: ConversationMetadata | null;
@@ -440,22 +528,19 @@ export interface CreateConversationOptions {
   parentConversationId?: string;
   agentType?: "default" | "plan";
   sandboxId?: string;
-  // Launch from a saved AgentProfile (resolved server-side) instead of the
-  // current encrypted agent_settings (#3727). Supported on both local and the
-  // cloud app-server (OpenHands #15060): local threads it through the
-  // encrypted-settings builder; cloud sends it as a flat request field.
+  // The saved AgentProfile the server builds the agent from (#3727). Required
+  // on local; cloud without one launches the org's default (OpenHands #15060).
   agentProfileId?: string;
   agentProfileKind?: AgentKind;
   /**
-   * Whether the first message should be routed through the active Model
-   * Router. Only consumed on the cloud path — the local path reads the
-   * toggle from its own settings fetch. Threaded in by the caller from the
-   * warmed settings query to avoid a settings round-trip on the cloud hot
-   * path.
+   * Cloud only: whether the first message should be routed through the
+   * active Model Router. The local path reads the toggle from its own
+   * settings fetch. Threaded in by the caller from the warmed settings query
+   * to avoid a settings round-trip on the cloud hot path.
    */
   runRouterAtConversationStart?: boolean;
   /**
-   * Whether a Model Router meta-profile is currently active. The
+   * Cloud only: whether a Model Router meta-profile is currently active. The
    * route-at-start suffix is only emitted when this is true AND
    * ``runRouterAtConversationStart`` is on — without an active meta-profile
    * the agent-server does not attach ``route_task_to_model``, so the
@@ -463,15 +548,45 @@ export interface CreateConversationOptions {
    * by the caller from the warmed meta-profiles query.
    */
   hasActiveMetaProfile?: boolean;
+  /** Local only: the launched profile carries a Model Router. */
+  profileHasRouter?: boolean;
+  /**
+   * A home-page model pick was made before the first message, so the
+   * route-at-start suffix should be suppressed for this single launch. The
+   * home launch decides this once and threads it down so the local builder
+   * needn't read UI state — child/`/new` launches omit it and route as usual.
+   */
+  suppressRouterAtStart?: boolean;
+  /** Local only: the launched ACP profile's server, for the conversation tag. */
+  acpServer?: string;
   // The LLM profile the launched agent profile runs. When set and no explicit
   // title_llm_profile preference exists, title generation uses this profile so
   // both the agent and its title use the same model.
   agentLlmProfileRef?: string | null;
   /** Local only: run the agent profile with this LLM profile instead of its own. */
   agentLlmProfileOverride?: string;
+  /** Cloud only: run this conversation on the named LLM profile (`llm_profile`). */
+  llmProfile?: string;
 }
 
 class AgentServerConversationService {
+  static async answerAskUser(
+    conversationId: string,
+    askId: string,
+    answer: { optionIndex?: number; text?: string },
+    runtime?: ConversationRuntimeContext | null,
+  ) {
+    if (
+      getActiveBackend().backend.kind === "cloud" &&
+      (!runtime?.conversationUrl || !runtime.sessionApiKey)
+    ) {
+      throw new Error("Conversation sandbox is still starting.");
+    }
+    return new ConversationClient(
+      getAgentServerClientOptions(runtime ?? {}),
+    ).answerAskUser(conversationId, askId, answer);
+  }
+
   static async sendMessage(
     conversationId: string,
     message: SendMessageRequest,
@@ -516,6 +631,8 @@ class AgentServerConversationService {
       initialUserMsg,
       automationSetup,
       automationSetupTags,
+      automationSetupContext,
+      automationSetupCapabilities,
       conversationInstructions,
       plugins,
       metadata,
@@ -528,6 +645,9 @@ class AgentServerConversationService {
       agentProfileKind,
       agentLlmProfileRef,
       agentLlmProfileOverride,
+      profileHasRouter,
+      acpServer,
+      llmProfile,
     } = options;
 
     if (getActiveBackend().backend.kind === "cloud") {
@@ -546,21 +666,36 @@ class AgentServerConversationService {
         options.hasActiveMetaProfile ?? false,
       );
       const request: AppConversationStartRequest = {
+        generate_title_on_submit: true,
         initial_message: initialUserMsg
           ? {
               role: "user",
-              content: [{ type: "text", text: initialUserMsg }],
+              content: [
+                {
+                  type: "text",
+                  text:
+                    automationSetup &&
+                    agentProfileKind === "acp" &&
+                    automationSetupContext
+                      ? `${initialUserMsg}\n\n${automationSetupContext}`
+                      : initialUserMsg,
+                },
+              ],
             }
           : null,
         title: conversationInstructions ?? null,
         selected_repository: metadata?.selected_repository ?? null,
         selected_branch: metadata?.selected_branch ?? null,
         git_provider: metadata?.git_provider ?? null,
+        ...(metadata?.git_provider_id != null
+          ? { git_provider_id: metadata.git_provider_id }
+          : {}),
         plugins: plugins ?? null,
         parent_conversation_id: parentConversationId ?? null,
         agent_type: agentType,
         sandbox_id: sandboxId ?? null,
         agent_profile_id: agentProfileId ?? null,
+        ...(llmProfile ? { llm_profile: llmProfile } : {}),
         ...(routerAtStartSuffix
           ? {
               agent_launch_additions: {
@@ -577,14 +712,25 @@ class AgentServerConversationService {
               client_tools: [
                 CANVAS_UI_CLIENT_TOOL,
                 LAUNCH_CHILD_CONVERSATION_CLIENT_TOOL,
-                AUTOMATION_FORM_UPDATE_CLIENT_TOOL,
+                buildAutomationFormUpdateClientTool(
+                  automationSetupCapabilities,
+                ),
               ],
+              system_message_suffix: [
+                AUTOMATION_SETUP_SYSTEM_SUFFIX,
+                automationSetupContext,
+              ]
+                .filter(Boolean)
+                .join("\n\n"),
             }
           : {}),
       };
       return createCloudAppConversation(request);
     }
 
+    if (!agentProfileId) {
+      throw new Error("A local conversation needs an agent profile.");
+    }
     const [settings, profiles] = await Promise.all([
       SettingsService.getSettings(),
       ProfilesService.listProfiles().catch(() => undefined),
@@ -594,16 +740,25 @@ class AgentServerConversationService {
       profiles,
       agentLlmProfileRef,
     );
-    const conversationId = uuidv4();
-    const { workingDir, hooksProjectDir, isolated } =
+    const conversationId = randomUUID();
+    const resolvedWorkspaceMode =
+      workspaceMode ?? (workingDirOverride ? "local_repo" : "new_worktree");
+    const inContainer = resolvedWorkspaceMode === "docker_container";
+    const { workingDir, hooksProjectDir, isolated, runtimeSelectable } =
       await resolveNewConversationWorkspace({
         conversationId,
         workingDir: workingDirOverride,
         selectedRepository: metadata?.selected_repository,
         parentConversationId,
+        inContainer,
       });
-    const resolvedWorkspaceMode =
-      workspaceMode ?? (workingDirOverride ? "local_repo" : "new_worktree");
+    // A server offering both runtimes is told which one; whatever its default
+    // is, a host mode then runs on the host. Other servers keep their own.
+    const conversationRuntime = inContainer
+      ? "docker"
+      : runtimeSelectable
+        ? "local"
+        : undefined;
 
     // Use encrypted settings to avoid exposing secrets in the browser
     const payload = await buildStartConversationRequestWithEncryptedSettings({
@@ -611,6 +766,8 @@ class AgentServerConversationService {
       query: initialUserMsg,
       automationSetup,
       automationSetupTags,
+      automationSetupContext,
+      automationSetupCapabilities,
       conversationInstructions,
       plugins,
       conversationId,
@@ -625,20 +782,55 @@ class AgentServerConversationService {
       agentProfileId,
       agentProfileKind,
       llmProfileOverride: agentLlmProfileOverride,
+      profileHasRouter,
+      suppressRouterAtStart: options.suppressRouterAtStart,
+      acpServer,
       titleLlmProfile,
     });
+
+    // Persist the selected workspace as a server-side conversation tag so local
+    // sidebar grouping survives on another browser, device, or after cleared
+    // localStorage (#17386), and the repository the same way (#15598).
+    // localStorage below stays the warm cache for the creating client.
+    const metadataTags = buildWorkspaceTags(workingDirOverride);
+    if (metadata?.selected_repository) {
+      metadataTags[REPOSITORY_TAG_KEY] = metadata.selected_repository;
+    }
+    if (metadata?.selected_branch) {
+      metadataTags[SELECTED_BRANCH_TAG_KEY] = metadata.selected_branch;
+    }
+    if (metadata?.git_provider) {
+      metadataTags[GIT_PROVIDER_TAG_KEY] = metadata.git_provider;
+    }
+    // An over-long value (a deep workspace path, a long branch) stays in
+    // localStorage only, so it cannot block the conversation from starting.
+    for (const [key, value] of Object.entries(metadataTags)) {
+      if (value.length > TAG_VALUE_MAX_LENGTH) delete metadataTags[key];
+    }
+    if (Object.keys(metadataTags).length > 0) {
+      const existingTags =
+        payload.tags && typeof payload.tags === "object"
+          ? (payload.tags as Record<string, string>)
+          : {};
+      payload.tags = { ...existingTags, ...metadataTags };
+    }
 
     const telemetryDistinctId = await getTelemetryDistinctId();
     const data = await new ConversationClient(
       getAgentServerClientOptions({ timeout: CREATE_CONVERSATION_TIMEOUT_MS }),
     ).createConversation<DirectConversationInfo>({
       ...payload,
+      ...(conversationRuntime
+        ? { conversation_runtime: conversationRuntime }
+        : {}),
       ...(telemetryDistinctId ? { user_id: telemetryDistinctId } : {}),
     });
     const localBackend = getEffectiveLocalBackend();
     if (!localBackend) throw new NoBackendAvailableError();
 
-    if (metadata?.selected_repository || workingDirOverride) {
+    // A Docker conversation is recorded even without a workspace: hooks and
+    // restarts read its workspace_mode.
+    if (metadata?.selected_repository || workingDirOverride || inContainer) {
       // The agent-server runtime has no concept of selected repo/branch/
       // workspace, so persist the home-page selection client-side.
       // `toAppConversation` reads the repo/branch fields back to hydrate
@@ -663,8 +855,7 @@ class AgentServerConversationService {
       agent_server_url: localBackend.host,
       request: {
         initial_message: payload.initial_message as
-          | AppConversationStartRequest["initial_message"]
-          | undefined,
+          AppConversationStartRequest["initial_message"] | undefined,
         plugins: plugins ?? null,
       },
       created_at: data.created_at,
@@ -740,18 +931,20 @@ class AgentServerConversationService {
    */
   static async getLocalPlanningConversationIds(
     parentConversationId: string,
+    client?: ConversationClient,
   ): Promise<string[]> {
-    if (getActiveBackend().backend.kind === "cloud") return [];
+    if (!client && getActiveBackend().backend.kind === "cloud") return [];
 
     const ids = new Set<string>();
 
     try {
-      const [parent] = await this.batchGetAppConversations([
-        parentConversationId,
-      ]);
+      const [parent] = await this.batchGetAppConversations(
+        [parentConversationId],
+        client,
+      );
       const childIds = parent?.sub_conversation_ids ?? [];
       if (childIds.length > 0) {
-        const children = await this.batchGetAppConversations(childIds);
+        const children = await this.batchGetAppConversations(childIds, client);
         for (const child of children) {
           if (child && isPlannerConversationOf(child, parentConversationId)) {
             ids.add(child.id);
@@ -849,15 +1042,16 @@ class AgentServerConversationService {
 
   static async batchGetAppConversations(
     ids: string[],
+    client?: ConversationClient,
   ): Promise<(AppConversation | null)[]> {
     if (ids.length === 0) return [];
 
-    if (getActiveBackend().backend.kind === "cloud") {
+    if (!client && getActiveBackend().backend.kind === "cloud") {
       return batchGetCloudConversations(ids);
     }
 
-    const data: unknown = await new ConversationClient(
-      getAgentServerClientOptions(),
+    const data: unknown = await (
+      client ?? new ConversationClient(getAgentServerClientOptions())
     ).getConversations<DirectConversationInfo>(ids);
 
     return requireDirectConversationBatch(data).map((item) =>
@@ -879,15 +1073,39 @@ class AgentServerConversationService {
     conversationId: string,
     repository: string | null,
     branch?: string | null,
-    gitProvider?: string | null,
+    gitProvider?: Provider | null,
+    gitProviderId?: number | null,
   ): Promise<AppConversation> {
+    // Cloud conversations keep the repository on the server, so other
+    // browsers and server features see it. Best effort: an older server can
+    // reject some names (e.g. Azure DevOps org/project/repo), and Connect Repo
+    // must still work, so a failure keeps the local selection only.
+    if (getActiveBackend().backend.kind === "cloud") {
+      try {
+        await updateCloudConversationRepository(
+          conversationId,
+          repository,
+          branch ?? null,
+          gitProvider ?? null,
+          gitProviderId,
+        );
+      } catch (error) {
+        console.warn(
+          `Failed to save the repository of conversation ${conversationId}`,
+          error,
+        );
+      }
+    }
     if (repository) {
-      const existing = getStoredConversationMetadata(conversationId);
+      // The previous id belongs to the previous repository, so drop it.
+      const { git_provider_id: _previous, ...existing } =
+        getStoredConversationMetadata(conversationId) ?? {};
       setStoredConversationMetadata(conversationId, {
-        ...(existing ?? {}),
+        ...existing,
         selected_repository: repository,
         selected_branch: branch ?? null,
-        git_provider: (gitProvider as Provider | null | undefined) ?? null,
+        git_provider: gitProvider ?? null,
+        ...(gitProviderId != null ? { git_provider_id: gitProviderId } : {}),
       });
     } else {
       removeStoredConversationMetadata(conversationId);
@@ -942,8 +1160,10 @@ class AgentServerConversationService {
     if (!conversationId || !getEffectiveLocalBackend()) {
       return emptyHooksResponse();
     }
+    const metadata = getStoredConversationMetadata(conversationId);
     const projectDir = await resolveConversationHooksProjectDir(
-      getStoredConversationMetadata(conversationId)?.selected_workspace,
+      metadata?.selected_workspace,
+      metadata?.workspace_mode === "docker_container",
     );
     if (projectDir === null) return emptyHooksResponse();
     return toHooksResponse(await HooksService.fetchWorkspaceHooks(projectDir));
@@ -972,8 +1192,11 @@ class AgentServerConversationService {
       created_at: data.created_at,
       updated_at: data.updated_at,
       status: toRuntimeStatus(data.execution_status),
+      max_budget_per_run: data.max_budget_per_run,
       stats: data.stats ?? { usage_to_metrics: {} },
       available_models: toAcpModelOptions(data.available_models),
+      current_effort: data.current_effort ?? null,
+      available_efforts: toAcpEffortChoices(data.available_efforts),
     };
   }
 
@@ -1022,12 +1245,33 @@ class AgentServerConversationService {
       sort_order: ConversationSortOrder.UPDATED_AT_DESC,
     });
 
-    return toConversationPage(requireConversationSearchPage(data));
+    return readConversationSearchPage(data);
   }
 
-  static async deleteConversation(conversationId: string): Promise<void> {
-    if (getActiveBackend().backend.kind === "cloud") {
-      await deleteCloudConversation(conversationId);
+  static createConversationDeletionScope(): ConversationDeletionScope {
+    const { backend, orgId } = getActiveBackend();
+    if (backend.kind === "cloud") {
+      return {
+        kind: "cloud",
+        backend,
+        orgId: activeOrgForBackend(backend),
+      };
+    }
+    return {
+      kind: "local",
+      client: new ConversationClient(getAgentServerClientOptions()),
+      backend,
+      orgId,
+    };
+  }
+
+  static async deleteConversation(
+    conversationId: string,
+    scope: ConversationDeletionScope = this.createConversationDeletionScope(),
+    { broken = false }: { broken?: boolean } = {},
+  ): Promise<void> {
+    if (scope.kind === "cloud") {
+      await deleteCloudConversation(conversationId, scope);
       removeStoredConversationMetadata(conversationId);
       return;
     }
@@ -1036,10 +1280,14 @@ class AgentServerConversationService {
     // planner helper is hidden from the conversation list by its
     // `plannerparent` tag — so without this it would survive its parent as an
     // invisible, unreachable conversation (plus its events and state).
-    const planningConversationIds =
-      await this.getLocalPlanningConversationIds(conversationId);
+    const planningConversationIds = broken
+      ? []
+      : await this.getLocalPlanningConversationIds(
+          conversationId,
+          scope.client,
+        );
 
-    const client = new ConversationClient(getAgentServerClientOptions());
+    const { client } = scope;
     await Promise.all(
       planningConversationIds.map(async (planningConversationId) => {
         try {
@@ -1080,10 +1328,13 @@ class AgentServerConversationService {
   }
 
   /**
-   * Replaces the conversation's complete server-side tag map (the PATCH is
-   * replace-all, so callers must merge user edits with any reserved/internal
-   * keys before calling). Mirrors `updateConversationTitle`; local
-   * agent-server conversations only — Cloud conversations don't carry tags.
+   * Replaces the conversation's complete server-side tag map (the local
+   * agent-server PATCH is replace-all, so callers must merge user edits with
+   * any reserved/internal keys before calling). Mirrors
+   * `updateConversationTitle`; local agent-server conversations only — Cloud
+   * callers go through {@link updateConversationTagFlags} or
+   * {@link replaceConversationTags}, which use the app-server's merge patch
+   * instead.
    */
   static async updateConversationTags(
     conversationId: string,
@@ -1093,6 +1344,62 @@ class AgentServerConversationService {
       getAgentServerClientOptions(),
     ).updateConversation(conversationId, {
       tags,
+    });
+    const [conversation] = await this.batchGetAppConversations([
+      conversationId,
+    ]);
+    return requireAppConversation(conversation, conversationId);
+  }
+
+  /**
+   * Replaces the tag map `currentTags` with `nextTags` on either backend. The
+   * local agent-server receives `nextTags` (its PATCH is replace-all). The
+   * Cloud app-server's PATCH is a merge patch that rejects server-managed keys
+   * even when unchanged, so it receives only the keys that differ: their new
+   * value, or `null` for a key `nextTags` drops.
+   */
+  static async replaceConversationTags(
+    conversationId: string,
+    currentTags: Record<string, string> | null | undefined,
+    nextTags: Record<string, string>,
+  ): Promise<AppConversation> {
+    if (getActiveBackend().backend.kind === "cloud") {
+      const patch: Record<string, string | null> = {};
+      for (const [key, value] of Object.entries(nextTags)) {
+        if (currentTags?.[key] !== value) patch[key] = value;
+      }
+      for (const key of Object.keys(currentTags ?? {})) {
+        if (!(key in nextTags)) patch[key] = null;
+      }
+      return updateCloudConversationTags(conversationId, patch);
+    }
+    return this.updateConversationTags(conversationId, nextTags);
+  }
+
+  /**
+   * Sets or clears boolean conversation flags carried in server-side tags
+   * (e.g. `pinned` / `archived`; see `conversation-tag-flags.ts`). Works on
+   * both backends: the local agent-server receives the complete replacement
+   * map derived from `currentTags` (its PATCH is replace-all), while the
+   * Cloud app-server receives a merge patch that sets enabled keys and
+   * deletes disabled ones, leaving every other tag untouched.
+   */
+  static async updateConversationTagFlags(
+    conversationId: string,
+    currentTags: Record<string, string> | null | undefined,
+    changes: Record<string, boolean>,
+  ): Promise<AppConversation> {
+    if (getActiveBackend().backend.kind === "cloud") {
+      return updateCloudConversationTags(
+        conversationId,
+        conversationTagFlagPatch(changes),
+      );
+    }
+
+    await new ConversationClient(
+      getAgentServerClientOptions(),
+    ).updateConversation(conversationId, {
+      tags: withConversationTagFlags(currentTags, changes),
     });
     const [conversation] = await this.batchGetAppConversations([
       conversationId,
@@ -1216,7 +1523,7 @@ class AgentServerConversationService {
       // the profile config would otherwise default it to stream=False.
       stream: true,
       // Avoid stale first-write-wins entries in the backend LLM registry.
-      usage_id: `profile:${profileName}:${uuidv4()}`,
+      usage_id: `profile:${profileName}:${randomUUID()}`,
     } as LLMConfig);
   }
 
@@ -1251,6 +1558,31 @@ class AgentServerConversationService {
     await new ConversationClient(getAgentServerClientOptions()).switchAcpModel(
       conversationId,
       model,
+    );
+  }
+
+  /**
+   * Switch a started ACP conversation's reasoning effort live (or persist it
+   * for one not yet run). The ACP analog of {@link switchAcpModel}.
+   */
+  static async switchAcpEffort(
+    conversationId: string,
+    effort: string,
+  ): Promise<void> {
+    const { backend } = getActiveBackend();
+    if (backend.kind === "cloud") {
+      await callCloudProxy({
+        backend,
+        method: "POST",
+        path: `/api/v1/app-conversations/${conversationId}/switch_acp_effort`,
+        body: { effort },
+      });
+      return;
+    }
+
+    await new ConversationClient(getAgentServerClientOptions()).switchAcpEffort(
+      conversationId,
+      effort,
     );
   }
 }

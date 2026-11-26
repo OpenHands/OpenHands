@@ -20,6 +20,10 @@ import {
   BACKEND_REQUEST_TIMEOUT_MESSAGE,
   CORS_OR_NETWORK_ERROR_MESSAGE,
 } from "#/utils/user-facing-error";
+import {
+  clearPendingHomeModelPick,
+  hasPendingHomeModelPick,
+} from "#/hooks/use-chat-input-llm-profile-state";
 
 vi.mock("#/utils/custom-toast-handlers");
 
@@ -45,6 +49,21 @@ vi.mock("#/hooks/chat/model-command-event-anchor", () => ({
   getLastRenderableEventId: () => "evt-9",
 }));
 
+const updateDefaultAgentProfileMock = vi.hoisted(() => vi.fn());
+vi.mock("#/hooks/mutation/sync-agent-profiles", async (importOriginal) => ({
+  ...(await importOriginal<
+    typeof import("#/hooks/mutation/sync-agent-profiles")
+  >()),
+  updateDefaultAgentProfile: updateDefaultAgentProfileMock,
+}));
+
+/** The `default` fields the sync would change, from a stored LLM ref. */
+const mirroredFrom = (llmProfileRef: string) => {
+  expect(updateDefaultAgentProfileMock).toHaveBeenCalledOnce();
+  const [, change] = updateDefaultAgentProfileMock.mock.calls[0];
+  return change({ agent_kind: "openhands", llm_profile_ref: llmProfileRef });
+};
+
 const renderSwitchHook = () => {
   const queryClient = new QueryClient({
     defaultOptions: {
@@ -66,6 +85,7 @@ describe("useSwitchLlmProfile", () => {
     vi.clearAllMocks();
     window.localStorage.clear();
     SettingsService.invalidateCache();
+    clearPendingHomeModelPick("local", null);
   });
 
   it("invalidates the settings cache on the home-page activate path (conversationId === null)", async () => {
@@ -95,6 +115,7 @@ describe("useSwitchLlmProfile", () => {
     expect(invalidateQueriesSpy).toHaveBeenCalledWith({
       queryKey: SETTINGS_QUERY_KEYS.personal(),
     });
+    expect(mirroredFrom("old")).toEqual({ llm_profile_ref: "my-profile" });
 
     invalidateCacheSpy.mockRestore();
   });
@@ -126,6 +147,7 @@ describe("useSwitchLlmProfile", () => {
     expect(invalidateQueriesSpy).not.toHaveBeenCalledWith({
       queryKey: SETTINGS_QUERY_KEYS.personal(),
     });
+    expect(updateDefaultAgentProfileMock).not.toHaveBeenCalled();
 
     invalidateCacheSpy.mockRestore();
   });
@@ -390,5 +412,33 @@ describe("useSwitchLlmProfile", () => {
     await waitFor(() => expect(result.current.isError).toBe(true));
     expect(getStoredConversationMetadata("conv-1")).toBeNull();
     expect(recordModelSwitchMessage).not.toHaveBeenCalled();
+  });
+
+  it("does not set the home-pick flag (the UI handler does that, not the hook)", async () => {
+    // The flag lives in selectProfile in useChatInputLlmProfileState — the
+    // single chokepoint covering every home LLM pick path (member held pick,
+    // agent-profile-owned LLM, global activate). The hook itself no longer
+    // touches it, so a home switch leaves the flag alone.
+    vi.mocked(AgentServerConversationService.switchProfile).mockResolvedValue(
+      undefined as never,
+    );
+
+    const { result } = renderSwitchHook();
+    result.current.mutate({ conversationId: null, profileName: "Smart" });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(hasPendingHomeModelPick("local", null)).toBe(false);
+  });
+
+  it("does not mark a pick made inside an existing conversation", async () => {
+    vi.mocked(AgentServerConversationService.switchProfile).mockResolvedValue(
+      undefined as never,
+    );
+
+    const { result } = renderSwitchHook();
+    result.current.mutate({ conversationId: "conv-1", profileName: "Smart" });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(hasPendingHomeModelPick("local", null)).toBe(false);
   });
 });

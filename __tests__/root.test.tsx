@@ -1,9 +1,19 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { Children, type ReactElement, type ReactNode } from "react";
 import { createRoutesStub } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { http, HttpResponse } from "msw";
-import App, { links } from "#/root";
+import App, { Layout, links } from "#/root";
+import { AgentServerUIRoot } from "#/components/providers/agent-server-ui-root";
 import { server } from "#/mocks/node";
 import { __resetActiveStoreForTests } from "#/api/backend-registry/active-store";
 import { LOCKED_CLOUD_BACKEND_ID } from "#/api/backend-registry/default-backend";
@@ -15,6 +25,63 @@ import {
 import { CLOUD_BACKEND_LOGGED_OUT_ERROR } from "#/hooks/query/use-backends-health";
 import { ActiveBackendProvider } from "#/contexts/active-backend-context";
 import { ONBOARDING_COMPLETED_STORAGE_KEY } from "#/components/features/onboarding/use-onboarding-completion";
+
+const rootMocks = vi.hoisted(() => ({
+  settings: {
+    data: { user_consents_to_analytics: false as boolean | null },
+    isLoading: false,
+    isSuccess: true,
+  },
+  showTelemetryBanner: false,
+}));
+
+vi.mock("#/api/settings-service/settings-service.api", () => ({
+  default: {
+    getSettings: vi.fn(async () => rootMocks.settings.data),
+    saveSettings: vi.fn(async () => true),
+  },
+}));
+
+vi.mock(
+  "#/components/features/analytics/telemetry-consent-banner",
+  async () => {
+    const React = await import("react");
+
+    return {
+      TelemetryConsentBanner: ({
+        onChoice,
+      }: {
+        onChoice?: (granted: boolean) => void;
+      }) => {
+        if (!rootMocks.showTelemetryBanner) return null;
+
+        return React.createElement(
+          "div",
+          { role: "dialog", "aria-label": "Help improve OpenHands" },
+          React.createElement(
+            "form",
+            {
+              "data-testid": "telemetry-consent-form",
+              onSubmit: (event: { preventDefault: () => void }) => {
+                event.preventDefault();
+                rootMocks.showTelemetryBanner = false;
+                onChoice?.(true);
+              },
+            },
+            React.createElement(
+              "button",
+              {
+                type: "submit",
+                "data-testid": "confirm-telemetry-preferences",
+              },
+              "Confirm preferences",
+            ),
+          ),
+        );
+      },
+    };
+  },
+);
 
 const TRANSLATIONS: Record<string, string> = {
   BACKEND$MANAGE_TITLE: "Manage backends",
@@ -52,7 +119,11 @@ vi.mock("#/components/features/onboarding/onboarding-modal", async () => {
       const { navigate } = useNavigation();
       return React.createElement(
         "div",
-        { "data-testid": "onboarding-modal" },
+        {
+          "data-testid": "onboarding-modal",
+          role: "dialog",
+          "aria-label": "Welcome to OpenHands",
+        },
         React.createElement("div", {
           "data-testid": "onboarding-step-check-backend",
         }),
@@ -94,8 +165,8 @@ const RouterStub = createRoutesStub([
   },
 ]);
 
-const renderApp = (initialEntries: string[] = ["/"]) =>
-  render(<RouterStub initialEntries={initialEntries} />, {
+const renderApp = async (initialEntries: string[] = ["/"]) => {
+  const result = render(<RouterStub initialEntries={initialEntries} />, {
     wrapper: ({ children }) => (
       <QueryClientProvider
         client={
@@ -108,6 +179,11 @@ const renderApp = (initialEntries: string[] = ["/"]) =>
       </QueryClientProvider>
     ),
   });
+
+  // Wait for real lazy-loaded gates, not the query timeout for cold Vite imports.
+  await act(() => vi.dynamicImportSettled());
+  return result;
+};
 
 const COOKIE_DEPLOYMENT_ORIGIN = "https://pr-254.staging.openhands.dev";
 
@@ -151,6 +227,25 @@ describe("App root agent-server availability guard", () => {
       window as unknown as Record<string, unknown>
     ).__AGENT_CANVAS_SESSION_API_KEY__ = "test-session-key";
     __resetActiveStoreForTests();
+    rootMocks.settings = {
+      data: { user_consents_to_analytics: false },
+      isLoading: false,
+      isSuccess: true,
+    };
+    rootMocks.showTelemetryBanner = false;
+
+    server.use(
+      http.get("*/api/settings", () =>
+        HttpResponse.json({
+          agent_settings: {},
+          conversation_settings: {},
+          llm_api_key_is_set: false,
+          misc_settings: {
+            app_preferences: { user_consents_to_analytics: false },
+          },
+        }),
+      ),
+    );
   });
 
   afterEach(() => {
@@ -168,7 +263,7 @@ describe("App root agent-server availability guard", () => {
     window.localStorage.clear();
     __resetActiveStoreForTests();
 
-    renderApp(["/"]);
+    await renderApp(["/"]);
 
     await waitFor(() => {
       expect(
@@ -191,7 +286,7 @@ describe("App root agent-server availability guard", () => {
     window.localStorage.clear();
     __resetActiveStoreForTests();
 
-    renderApp(["/"]);
+    await renderApp(["/"]);
 
     await waitFor(() => {
       expect(
@@ -207,14 +302,57 @@ describe("App root agent-server availability guard", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("lets root-level onboarding navigate to the launched conversation before closing", async () => {
+  it("collects local telemetry consent before showing first-run onboarding", async () => {
+    rootMocks.settings = {
+      data: { user_consents_to_analytics: null },
+      isLoading: false,
+      isSuccess: true,
+    };
+    rootMocks.showTelemetryBanner = true;
+
     server.use(
+      http.get("*/api/settings", () =>
+        HttpResponse.json({
+          agent_settings: {},
+          conversation_settings: {},
+          llm_api_key_is_set: false,
+          misc_settings: {
+            app_preferences: { user_consents_to_analytics: null },
+          },
+        }),
+      ),
       http.get("*/server_info", () =>
-        HttpResponse.json({ uptime: 0, idle_time: 0, version: "1.52.0" }),
+        HttpResponse.json({ uptime: 0, idle_time: 0, version: "1.63.1" }),
       ),
     );
 
-    renderApp(["/"]);
+    await renderApp(["/"]);
+
+    expect(
+      await screen.findByTestId("telemetry-consent-form"),
+    ).toBeInTheDocument();
+    expect(screen.getAllByRole("dialog")).toHaveLength(1);
+    expect(screen.queryByTestId("onboarding-modal")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId("confirm-telemetry-preferences"));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("onboarding-modal")).toBeInTheDocument();
+    });
+    expect(
+      screen.queryByTestId("telemetry-consent-form"),
+    ).not.toBeInTheDocument();
+    expect(screen.getAllByRole("dialog")).toHaveLength(1);
+  });
+
+  it("lets root-level onboarding navigate to the launched conversation before closing", async () => {
+    server.use(
+      http.get("*/server_info", () =>
+        HttpResponse.json({ uptime: 0, idle_time: 0, version: "1.63.1" }),
+      ),
+    );
+
+    await renderApp(["/"]);
 
     fireEvent.click(await screen.findByTestId("mock-onboarding-launch"));
 
@@ -237,7 +375,7 @@ describe("App root agent-server availability guard", () => {
     window.localStorage.clear();
     __resetActiveStoreForTests();
 
-    renderApp(["/"]);
+    await renderApp(["/"]);
 
     await waitFor(() => {
       expect(
@@ -267,7 +405,7 @@ describe("App root agent-server availability guard", () => {
     window.localStorage.clear();
     __resetActiveStoreForTests();
 
-    renderApp(["/"]);
+    await renderApp(["/"]);
 
     await waitFor(() => {
       expect(
@@ -310,7 +448,7 @@ describe("App root agent-server availability guard", () => {
     );
     __resetActiveStoreForTests();
 
-    renderApp(["/"]);
+    await renderApp(["/"]);
 
     await waitFor(() => {
       expect(
@@ -356,14 +494,17 @@ describe("App root agent-server availability guard", () => {
           agent_settings: {
             llm: { model: "openai/gpt-5.5", api_key: "stored" },
           },
+          misc_settings: {
+            app_preferences: { user_consents_to_analytics: false },
+          },
         }),
       ),
       http.get("*/server_info", () =>
-        HttpResponse.json({ uptime: 0, idle_time: 0, version: "1.52.0" }),
+        HttpResponse.json({ uptime: 0, idle_time: 0, version: "1.63.1" }),
       ),
     );
 
-    renderApp(["/"]);
+    await renderApp(["/"]);
 
     await waitFor(() => {
       expect(
@@ -415,11 +556,11 @@ describe("App root agent-server availability guard", () => {
         }),
       ),
       http.get("*/server_info", () =>
-        HttpResponse.json({ uptime: 0, idle_time: 0, version: "1.52.0" }),
+        HttpResponse.json({ uptime: 0, idle_time: 0, version: "1.63.1" }),
       ),
     );
 
-    renderApp(["/"]);
+    await renderApp(["/"]);
 
     await waitFor(() => {
       expect(
@@ -450,7 +591,7 @@ describe("App root agent-server availability guard", () => {
     window.localStorage.setItem(ONBOARDING_COMPLETED_STORAGE_KEY, "1");
     __resetActiveStoreForTests();
 
-    renderApp(["/"]);
+    await renderApp(["/"]);
 
     await waitFor(() => {
       expect(
@@ -475,12 +616,90 @@ describe("App root agent-server availability guard", () => {
     window.localStorage.setItem(ONBOARDING_COMPLETED_STORAGE_KEY, "1");
     __resetActiveStoreForTests();
 
-    renderApp(["/"]);
+    await renderApp(["/"]);
 
     await waitFor(() => {
       expect(screen.getByTestId("api-key-entry-screen")).toBeInTheDocument();
     });
     expect(screen.queryByTestId("onboarding-modal")).not.toBeInTheDocument();
+  });
+
+  it("opens a ready DO session without the local API-key form when the backend carries a marsSessionId", async () => {
+    // A DigitalOcean MARS session is an ordinary `kind: "local"` backend with
+    // an intentionally empty guest key (the session's own agent-server key is
+    // set by the sandbox template, not us). On a page with no baked session
+    // key the auth gate must not treat it as an unkeyed local backend and show
+    // the full-screen local API-key form.
+    vi.stubEnv("VITE_AUTH_REQUIRED", "true");
+    vi.stubEnv("VITE_SESSION_API_KEY", "");
+    delete (window as unknown as Record<string, unknown>)
+      .__AGENT_CANVAS_SESSION_API_KEY__;
+    window.localStorage.clear();
+    window.localStorage.setItem(ONBOARDING_COMPLETED_STORAGE_KEY, "1");
+    window.localStorage.setItem(
+      "openhands-backends",
+      JSON.stringify([
+        {
+          id: "mars-session-1",
+          name: "DO session",
+          host: "http://127.0.0.1:8000",
+          apiKey: "",
+          kind: "local",
+          marsSessionId: "sess_1",
+          marsConfigId: "cfg_1",
+        },
+      ]),
+    );
+    window.localStorage.setItem(
+      "openhands-active-backend",
+      JSON.stringify({ backendId: "mars-session-1", orgId: null }),
+    );
+    __resetActiveStoreForTests();
+
+    renderApp(["/"]);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("app-outlet")).toBeInTheDocument();
+    });
+    expect(
+      screen.queryByTestId("api-key-entry-screen"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("still shows the API-key form for an ordinary keyless local backend", async () => {
+    // The marsSessionId exemption is scoped: an unrelated local backend with
+    // no key on a page with no baked key must still land on the local
+    // API-key form, not silently bypass the auth gate.
+    vi.stubEnv("VITE_AUTH_REQUIRED", "true");
+    vi.stubEnv("VITE_SESSION_API_KEY", "");
+    delete (window as unknown as Record<string, unknown>)
+      .__AGENT_CANVAS_SESSION_API_KEY__;
+    window.localStorage.clear();
+    window.localStorage.setItem(ONBOARDING_COMPLETED_STORAGE_KEY, "1");
+    window.localStorage.setItem(
+      "openhands-backends",
+      JSON.stringify([
+        {
+          id: "plain-local",
+          name: "Local server",
+          host: "http://127.0.0.1:8000",
+          apiKey: "",
+          kind: "local",
+        },
+      ]),
+    );
+    window.localStorage.setItem(
+      "openhands-active-backend",
+      JSON.stringify({ backendId: "plain-local", orgId: null }),
+    );
+    __resetActiveStoreForTests();
+
+    renderApp(["/"]);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("api-key-entry-screen")).toBeInTheDocument();
+    });
+    expect(screen.queryByTestId("app-outlet")).not.toBeInTheDocument();
   });
 
   it("shows the manage-backends modal when the connected server reports an old version", async () => {
@@ -491,7 +710,7 @@ describe("App root agent-server availability guard", () => {
       ),
     );
 
-    renderApp(["/"]);
+    await renderApp(["/"]);
 
     await waitFor(() => {
       expect(
@@ -513,7 +732,7 @@ describe("App root agent-server availability guard", () => {
       ),
     );
 
-    renderApp(["/"]);
+    await renderApp(["/"]);
 
     await waitFor(() => {
       expect(
@@ -536,7 +755,7 @@ describe("App root agent-server availability guard", () => {
       }),
     );
 
-    renderApp(["/"]);
+    await renderApp(["/"]);
 
     await waitFor(() => {
       expect(
@@ -584,7 +803,7 @@ describe("App root agent-server availability guard", () => {
       ),
     );
 
-    renderApp(["/"]);
+    await renderApp(["/"]);
 
     await waitFor(() => {
       expect(
@@ -628,7 +847,7 @@ describe("App root agent-server availability guard", () => {
       ),
     );
 
-    renderApp(["/"]);
+    await renderApp(["/"]);
 
     await waitFor(() => {
       expect(
@@ -645,7 +864,7 @@ describe("App root agent-server availability guard", () => {
   it("renders the routed page when the agent server is reachable", async () => {
     window.localStorage.setItem(ONBOARDING_COMPLETED_STORAGE_KEY, "1");
 
-    renderApp(["/"]);
+    await renderApp(["/"]);
 
     await waitFor(() => {
       expect(screen.getByTestId("app-outlet")).toBeInTheDocument();
@@ -678,14 +897,17 @@ describe("App root agent-server availability guard", () => {
           agent_settings: {
             llm: { model: "openai/gpt-5.5", api_key: "stored" },
           },
+          misc_settings: {
+            app_preferences: { user_consents_to_analytics: false },
+          },
         }),
       ),
       http.get("*/server_info", () =>
-        HttpResponse.json({ uptime: 0, idle_time: 0, version: "1.52.0" }),
+        HttpResponse.json({ uptime: 0, idle_time: 0, version: "1.63.1" }),
       ),
     );
 
-    renderApp(["/"]);
+    await renderApp(["/"]);
 
     await waitFor(() => {
       expect(
@@ -706,7 +928,7 @@ describe("App root agent-server availability guard", () => {
       .__AGENT_CANVAS_SESSION_API_KEY__;
     __resetActiveStoreForTests();
 
-    renderApp(["/"]);
+    await renderApp(["/"]);
 
     await waitFor(() => {
       expect(
@@ -755,7 +977,7 @@ describe("App root agent-server availability guard", () => {
     );
     __resetActiveStoreForTests();
 
-    renderApp(["/"]);
+    await renderApp(["/"]);
 
     await waitFor(() => {
       expect(assign).toHaveBeenCalledWith(
@@ -786,7 +1008,7 @@ describe("App root agent-server availability guard", () => {
     );
 
     // Act
-    renderApp(["/"]);
+    await renderApp(["/"]);
 
     // Assert: main-app login, not the device-flow recovery modal.
     await waitFor(() => {
@@ -821,7 +1043,7 @@ describe("App root agent-server availability guard", () => {
     );
 
     // Act
-    renderApp(["/"]);
+    await renderApp(["/"]);
 
     // Assert: the stale health verdict must not bounce a valid session to
     // /login (which would loop back via returnTo); the app renders instead.
@@ -880,7 +1102,7 @@ describe("App root agent-server availability guard", () => {
       ),
     );
 
-    renderApp(["/"]);
+    await renderApp(["/"]);
 
     // The first-run onboarding screen must NOT be mounted (no reopen),
     // and the routed app must render instead.
@@ -891,6 +1113,23 @@ describe("App root agent-server availability guard", () => {
       screen.queryByTestId("first-run-onboarding-screen"),
     ).not.toBeInTheDocument();
     expect(screen.queryByTestId("onboarding-modal")).not.toBeInTheDocument();
+  });
+});
+
+describe("App root viewport sizing", () => {
+  it("uses a dynamic viewport constraint for the outer UI wrapper", () => {
+    const layout = Layout({ children: <div /> }) as ReactElement<{
+      children: ReactNode;
+    }>;
+    const body = Children.toArray(layout.props.children)[1] as ReactElement<{
+      children: ReactNode;
+    }>;
+    const uiRoot = Children.toArray(body.props.children)[0] as ReactElement<{
+      contentClassName: string;
+    }>;
+
+    expect(uiRoot.type).toBe(AgentServerUIRoot);
+    expect(uiRoot.props.contentClassName).toBe("h-dvh min-h-0");
   });
 });
 
@@ -920,7 +1159,37 @@ describe("App root document links", () => {
       type: "image/svg+xml",
       href: "/canvas/favicon.svg",
     });
+    expect(documentLinks).toContainEqual({
+      rel: "manifest",
+      href: "/canvas/site.webmanifest",
+    });
 
     vi.unstubAllEnvs();
+  });
+
+  it("provides install metadata and relative icon assets", () => {
+    const manifest = JSON.parse(
+      readFileSync("public/site.webmanifest", "utf8"),
+    );
+
+    expect(manifest).toMatchObject({
+      name: expect.any(String),
+      short_name: expect.any(String),
+      description: expect.any(String),
+      start_url: "./",
+      scope: "./",
+      display: "standalone",
+      categories: ["productivity"],
+    });
+    expect(manifest.name).not.toBe("");
+    expect(manifest.short_name).not.toBe("");
+
+    for (const icon of manifest.icons) {
+      expect(icon.src).not.toMatch(/^\//);
+      const png = readFileSync(resolve("public", icon.src));
+      expect(png.subarray(1, 4).toString()).toBe("PNG");
+      expect(png.readUInt32BE(16)).toBe(Number(icon.sizes.split("x")[0]));
+      expect(png.readUInt32BE(20)).toBe(Number(icon.sizes.split("x")[1]));
+    }
   });
 });

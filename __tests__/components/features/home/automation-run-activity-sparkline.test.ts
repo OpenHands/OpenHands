@@ -1,5 +1,13 @@
-import { describe, expect, it } from "vitest";
+import { readFile } from "node:fs/promises";
+import { resolve } from "node:path";
+import { compile } from "@tailwindcss/node";
+import { createElement } from "react";
+import { act, screen } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
+import { renderWithProviders } from "../../../../test-utils";
+import { AutomationRunActivitySparkline } from "#/components/features/home/featured-automations/automation-run-activity-sparkline";
 import {
+  AUTOMATION_RUN_ACTIVITY_TRACK_PX,
   AUTOMATION_RUN_ACTIVITY_MAX_BAR_PX,
   AUTOMATION_RUN_ACTIVITY_MIN_BAR_PX,
   AUTOMATION_RUN_ACTIVITY_UNKNOWN_BAR_PX,
@@ -21,6 +29,24 @@ function makeRun(overrides: Partial<AutomationRun> = {}): AutomationRun {
     completed_at: "2026-08-01T10:05:00.000Z",
     ...overrides,
   };
+}
+
+function renderedHeightPx(
+  compiler: Awaited<ReturnType<typeof compile>>,
+  element: HTMLElement,
+): number {
+  const css = compiler.build([...element.classList]);
+  const declarations = [...css.matchAll(/\.((?:\\.|[\w-])+)\s*\{([^}]+)\}/g)]
+    .filter(([, selector]) =>
+      element.classList.contains(selector.replace(/\\(.)/g, "$1")),
+    )
+    .map(([, , body]) => body)
+    .join("\n");
+  const height = /(?:^|\n)\s*height:\s*var\((--[\w-]+)\);/.exec(declarations);
+  expect(height).not.toBeNull();
+  const value = element.style.getPropertyValue(height![1]);
+  expect(value).toMatch(/^\d+(?:\.\d+)?px$/);
+  return Number.parseFloat(value);
 }
 
 describe("getAutomationRunDurationMs", () => {
@@ -110,5 +136,104 @@ describe("barColorClassForStatus", () => {
   it("uses warning color for partial and unknown task outcomes", () => {
     expect(barColorClassForStatus("partial_success")).toContain("bg-warning");
     expect(barColorClassForStatus("unknown")).toContain("bg-warning");
+  });
+});
+
+describe("AutomationRunActivitySparkline", () => {
+  it("builds short, long and unknown bar heights from their rendered CSS properties", async () => {
+    // Arrange: different durations use the shared metrics without prescribing
+    // the utility spelling or repeating the property's name.
+    const runs = [
+      makeRun({ id: "short", completed_at: "2026-08-01T10:00:01.000Z" }),
+      makeRun({ id: "long", completed_at: "2026-08-01T12:00:00.000Z" }),
+      makeRun({ id: "unknown", started_at: undefined, completed_at: null }),
+    ];
+    const compiler = await compile(
+      await readFile(resolve("src/tailwind.css"), "utf8"),
+      { base: resolve("src"), onDependency: () => {} },
+    );
+    renderWithProviders(
+      createElement(AutomationRunActivitySparkline, {
+        automationId: "automation-1",
+        runs,
+      }),
+    );
+
+    // Act + Assert: each native link's rendered bar supplies the value consumed
+    // by its compiled height rule, including the unknown-duration fallback.
+    for (const run of runs) {
+      const link = screen
+        .getAllByRole("link")
+        .find((element) =>
+          element.getAttribute("href")?.endsWith(`?run=${run.id}`),
+        );
+      const bar = link!.firstElementChild as HTMLElement;
+      expect(renderedHeightPx(compiler, bar)).toBe(
+        durationMsToSparklineBarHeightPx(getAutomationRunDurationMs(run)),
+      );
+    }
+  });
+
+  it("updates a running bar's CSS height on the one-second elapsed-time tick", async () => {
+    // Arrange: compile before fake timers so stylesheet loading stays real.
+    const compiler = await compile(
+      await readFile(resolve("src/tailwind.css"), "utf8"),
+      { base: resolve("src"), onDependency: () => {} },
+    );
+    const run = makeRun({
+      status: AutomationRunStatus.RUNNING,
+      completed_at: null,
+    });
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(Date.parse(run.started_at!) + 1_000);
+      const { unmount } = renderWithProviders(
+        createElement(AutomationRunActivitySparkline, {
+          automationId: "automation-1",
+          runs: [run],
+        }),
+      );
+      const bar = screen.getByRole("link").firstElementChild as HTMLElement;
+      const initialHeight = renderedHeightPx(compiler, bar);
+
+      // Act + Assert: no earlier render, then the live timer refreshes the
+      // property's duration-derived height without a new run-list response.
+      act(() => vi.advanceTimersByTime(999));
+      expect(renderedHeightPx(compiler, bar)).toBe(initialHeight);
+      act(() => vi.advanceTimersByTime(1));
+      const updatedHeight = renderedHeightPx(compiler, bar);
+      expect(updatedHeight).toBe(
+        durationMsToSparklineBarHeightPx(
+          getAutomationRunDurationMs(run, Date.now()),
+        ),
+      );
+      expect(updatedHeight).toBeGreaterThan(initialHeight);
+      unmount();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("builds the track height from the custom property supplied by the rendered component", async () => {
+    // Arrange: use the real component and production stylesheet, without
+    // prescribing a utility spelling or repeating its custom-property name.
+    renderWithProviders(
+      createElement(AutomationRunActivitySparkline, {
+        automationId: "automation-1",
+        runs: [makeRun()],
+        testId: "run-activity-track",
+      }),
+    );
+    const track = screen.getByTestId("run-activity-track");
+    const compiler = await compile(
+      await readFile(resolve("src/tailwind.css"), "utf8"),
+      { base: resolve("src"), onDependency: () => {} },
+    );
+
+    // Act + Assert: the emitted height rule consumes the property's real value.
+    // Removing the class or misspelling either side breaks this contract.
+    expect(renderedHeightPx(compiler, track)).toBe(
+      AUTOMATION_RUN_ACTIVITY_TRACK_PX,
+    );
   });
 });

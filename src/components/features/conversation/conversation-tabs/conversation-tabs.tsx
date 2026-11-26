@@ -7,7 +7,13 @@ import {
 } from "react";
 import { useTranslation } from "react-i18next";
 import { LayoutGroup } from "framer-motion";
-import { Gauge, Globe, ListTodo, SquareChevronRight } from "lucide-react";
+import {
+  FolderKanban,
+  Gauge,
+  Globe,
+  ListTodo,
+  SquareChevronRight,
+} from "lucide-react";
 import { LuFileDiff } from "react-icons/lu";
 import DocumentIcon from "#/icons/document.svg?react";
 import DoubleCheckIcon from "#/icons/double-check.svg?react";
@@ -24,6 +30,7 @@ import { ConversationTabsContextMenu } from "./conversation-tabs-context-menu";
 import { useConversationId } from "#/hooks/use-conversation-id";
 import { useSelectConversationTab } from "#/hooks/use-select-conversation-tab";
 import { useTaskList } from "#/hooks/use-task-list";
+import { useConversationProjectId } from "#/hooks/query/use-conversation-project";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import { useHandleBuildPlanClick } from "#/hooks/use-handle-build-plan-click";
 import { useAgentState, usePlanningAgentState } from "#/hooks/use-agent-state";
@@ -48,6 +55,7 @@ export function ConversationTabs({
     useConversationLocalStorageState(conversationId);
 
   const { hasTaskList } = useTaskList();
+  const projectId = useConversationProjectId();
   const { backend } = useActiveBackend();
 
   const { handleBuildPlanClick } = useHandleBuildPlanClick();
@@ -88,8 +96,9 @@ export function ConversationTabs({
 
   const { t, i18n } = useTranslation("openhands");
 
-  // `files` is intentionally the leftmost tab — it's the primary entry
-  // point for inspecting agent output (workspace files + git diff).
+  // `files` is intentionally the leftmost of the conversation's own tabs —
+  // it's the primary entry point for inspecting agent output (workspace
+  // files + git diff). Only a project conversation's Project tab precedes it.
   const tabs = [
     {
       tabValue: "files",
@@ -148,9 +157,23 @@ export function ConversationTabs({
     },
   ];
 
+  if (projectId) {
+    // In a project conversation the project leads: it is what the user
+    // glances at between messages, and it must not fall into the overflow.
+    tabs.unshift({
+      tabValue: "project",
+      isActive: isTabActive("project"),
+      icon: FolderKanban,
+      onClick: () => selectTab("project"),
+      tooltipContent: t(CONVERSATION_TAB_LABEL_KEYS.project),
+      tooltipAriaLabel: t(CONVERSATION_TAB_LABEL_KEYS.project),
+      label: t(CONVERSATION_TAB_LABEL_KEYS.project),
+    });
+  }
+
   if (hasTaskList) {
     // Insert after the file-related tabs.
-    tabs.splice(2, 0, {
+    tabs.splice(tabs.findIndex((tab) => tab.tabValue === "commits") + 1, 0, {
       tabValue: "tasklist",
       isActive: isTabActive("tasklist"),
       icon: DoubleCheckIcon,
@@ -258,7 +281,19 @@ export function ConversationTabs({
   ]);
 
   const safeInlineTabCount = Math.min(inlineTabCount, visibleTabs.length);
-  const inlineTabs = visibleTabs.slice(0, safeInlineTabCount);
+  const initialInlineTabs = visibleTabs.slice(0, safeInlineTabCount);
+  const selectedVisibleTab = visibleTabs.find(
+    (tab) => tab.tabValue === selectedTab,
+  );
+  const inlineTabs =
+    safeInlineTabCount > 0 &&
+    selectedVisibleTab &&
+    !initialInlineTabs.some((tab) => tab.tabValue === selectedTab)
+      ? [
+          ...initialInlineTabs.slice(0, safeInlineTabCount - 1),
+          selectedVisibleTab,
+        ]
+      : initialInlineTabs;
 
   // Roving tabindex: the strip is a single tab stop. It sits on the selected
   // tab — drawer open or not, since the strip stays in the accessibility tree
@@ -449,7 +484,7 @@ export function ConversationTabs({
             )}
             data-testid="planner-tab-build-button"
           >
-            <Typography.Text className="text-[11px] font-normal leading-5 text-contrast-foreground">
+            <Typography.Text className="text-2xs font-normal leading-5 text-contrast-foreground">
               {/* eslint-disable-next-line i18next/no-literal-string */}
               {t(I18nKey.COMMON$BUILD)} ⌘↩
             </Typography.Text>

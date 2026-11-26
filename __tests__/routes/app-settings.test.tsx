@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import AppSettingsScreen from "#/routes/app-settings";
 import SettingsService from "#/api/settings-service/settings-service.api";
 import { MOCK_DEFAULT_USER_SETTINGS } from "#/mocks/handlers";
@@ -11,6 +11,10 @@ import {
   displayErrorToast,
   displaySuccessToast,
 } from "#/utils/custom-toast-handlers";
+import {
+  TRANSCRIPTION_API_KEY_STORAGE_KEY,
+  TRANSCRIPTION_ENDPOINT_STORAGE_KEY,
+} from "#/utils/transcription-endpoint-storage";
 
 vi.mock("#/utils/custom-toast-handlers", () => ({
   displayErrorToast: vi.fn(),
@@ -80,6 +84,10 @@ describe("AppSettingsScreen", () => {
     vi.restoreAllMocks();
     activeBackendState.id = "local";
     activeBackendState.kind = "local";
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
   });
 
   it("keeps edits after a failed save and lets the user retry successfully", async () => {
@@ -174,6 +182,62 @@ describe("AppSettingsScreen", () => {
     ).toHaveValue("SETTINGS$TITLE_GENERATION_AUTOMATIC");
   });
 
+  it("keeps voice input auto-save separate from the application form after reload", async () => {
+    const user = userEvent.setup();
+    window.localStorage.clear();
+    window.sessionStorage.clear();
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(buildSettings());
+    const saveSettingsSpy = vi
+      .spyOn(SettingsService, "saveSettings")
+      .mockResolvedValue(true);
+
+    const { unmount } = renderAppSettingsScreen();
+    const baseUrlInput = await screen.findByTestId(
+      "transcription-base-url-input",
+    );
+    const apiKeyInput = screen.getByTestId("transcription-api-key-input");
+    const modelInput = screen.getByTestId("transcription-model-input");
+
+    expect(screen.getByTestId("voice-input-autosave-notice")).toHaveTextContent(
+      "SETTINGS$VOICE_INPUT_AUTOSAVE_NOTICE",
+    );
+    expect(baseUrlInput).toHaveAccessibleDescription(
+      "SETTINGS$VOICE_INPUT_AUTOSAVE_NOTICE",
+    );
+
+    await user.type(baseUrlInput, "http://127.0.0.1:9/v1");
+    await user.type(apiKeyInput, "fake-whisper-key");
+    await user.type(modelInput, "fake-whisper-model");
+
+    expect(screen.getByTestId("submit-button")).toBeDisabled();
+    expect(saveSettingsSpy).not.toHaveBeenCalled();
+    expect(
+      JSON.parse(
+        window.localStorage.getItem(TRANSCRIPTION_ENDPOINT_STORAGE_KEY) ?? "{}",
+      ),
+    ).toEqual({
+      baseUrl: "http://127.0.0.1:9/v1",
+      model: "fake-whisper-model",
+    });
+    expect(
+      window.sessionStorage.getItem(TRANSCRIPTION_API_KEY_STORAGE_KEY),
+    ).toBe("fake-whisper-key");
+
+    unmount();
+    renderAppSettingsScreen();
+
+    expect(
+      await screen.findByTestId("transcription-base-url-input"),
+    ).toHaveValue("http://127.0.0.1:9/v1");
+    expect(screen.getByTestId("transcription-api-key-input")).toHaveValue(
+      "fake-whisper-key",
+    );
+    expect(screen.getByTestId("transcription-model-input")).toHaveValue(
+      "fake-whisper-model",
+    );
+    expect(screen.getByTestId("submit-button")).toBeDisabled();
+  });
+
   it("renders the analytics toggle as checked and disabled for cloud backends", async () => {
     activeBackendState.kind = "cloud";
     vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
@@ -192,6 +256,21 @@ describe("AppSettingsScreen", () => {
 
     await userEvent.click(analyticsSwitch);
     expect(submitButton).toBeDisabled();
+  });
+
+  it("hides the Getting Started checklist switch on a canvas locked to its Cloud host", async () => {
+    vi.stubEnv("VITE_LOCK_TO_CLOUD", "https://app.all-hands.dev");
+    activeBackendState.kind = "cloud";
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(buildSettings());
+
+    renderAppSettingsScreen();
+
+    expect(
+      await screen.findByTestId("enable-sound-notifications-switch"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("show-getting-started-checklist-switch"),
+    ).not.toBeInTheDocument();
   });
 
   it("does not submit analytics consent for cloud backends", async () => {

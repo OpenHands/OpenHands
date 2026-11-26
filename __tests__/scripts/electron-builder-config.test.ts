@@ -7,7 +7,14 @@
 // These tests therefore build a fake bundle under os.tmpdir() and verify
 // resolution with a real `node --eval` from that location.
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -45,7 +52,11 @@ function appDirFor(platform: string, appOutDir: string) {
 function resolveRuntimeImports(appDir: string) {
   return spawnSync(
     process.execPath,
-    ["--input-type=module", "-e", 'await import("sirv"); await import("httpxy");'],
+    [
+      "--input-type=module",
+      "-e",
+      'await import("sirv"); await import("httpxy");',
+    ],
     { cwd: appDir, stdio: "pipe" },
   );
 }
@@ -55,7 +66,15 @@ function resolveRuntimeImports(appDir: string) {
  * its npm-cli.js marker, as download-node.mjs produces on macOS/Linux.
  */
 function writeFakeNpmCli(resourcesDir: string, nodeDirName: string) {
-  const npmCli = join(resourcesDir, nodeDirName, "lib", "node_modules", "npm", "bin", "npm-cli.js");
+  const npmCli = join(
+    resourcesDir,
+    nodeDirName,
+    "lib",
+    "node_modules",
+    "npm",
+    "bin",
+    "npm-cli.js",
+  );
   mkdirSync(dirname(npmCli), { recursive: true });
   writeFileSync(npmCli, "// fake npm-cli.js\n");
 }
@@ -107,8 +126,18 @@ describe("electron-builder afterPack hook", () => {
     await afterPack(makeContext("linux", tmp));
 
     expect(existsSync(junkPkg)).toBe(false);
-    expect(existsSync(join(appDir, "node_modules", "sirv", "package.json"))).toBe(true);
-    expect(existsSync(join(appDir, "node_modules", "httpxy", "package.json"))).toBe(true);
+    expect(
+      existsSync(join(appDir, "node_modules", "sirv", "package.json")),
+    ).toBe(true);
+    expect(
+      existsSync(join(appDir, "node_modules", "httpxy", "package.json")),
+    ).toBe(true);
+    // The agent-server reads the public skills from it (EXTENSIONS_PATH).
+    expect(
+      existsSync(
+        join(appDir, "node_modules", "@openhands", "extensions", "skills"),
+      ),
+    ).toBe(true);
   });
 
   it("verifies npm in every per-arch node dir of a universal bundle", async () => {
@@ -118,7 +147,9 @@ describe("electron-builder afterPack hook", () => {
     writeFakeNpmCli(resourcesDir, "node-arm64");
     writeFakeNpmCli(resourcesDir, "node-x64");
 
-    await expect(afterPack(makeContext("darwin", tmp))).resolves.toBeUndefined();
+    await expect(
+      afterPack(makeContext("darwin", tmp)),
+    ).resolves.toBeUndefined();
   });
 
   it("fails the build when one per-arch node dir of a universal bundle is missing npm", async () => {
@@ -141,7 +172,9 @@ describe("electron-builder afterPack hook", () => {
     mkdirSync(join(resourcesDir, "app"), { recursive: true });
     writeFakeNpmCli(resourcesDir, "node");
 
-    await expect(afterPack(makeContext("darwin", tmp))).resolves.toBeUndefined();
+    await expect(
+      afterPack(makeContext("darwin", tmp)),
+    ).resolves.toBeUndefined();
   });
 });
 
@@ -210,7 +243,10 @@ describe("extraResources mode switch", () => {
 describe("desktop app name", () => {
   it("keeps electron/package.json productName in sync with the builder config", () => {
     const appManifest = JSON.parse(
-      readFileSync(join(import.meta.dirname, "../../electron/package.json"), "utf8"),
+      readFileSync(
+        join(import.meta.dirname, "../../electron/package.json"),
+        "utf8",
+      ),
     );
 
     expect(appManifest.productName).toBe(config.productName);

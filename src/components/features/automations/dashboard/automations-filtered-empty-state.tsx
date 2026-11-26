@@ -3,6 +3,8 @@ import { I18nKey } from "#/i18n/declaration";
 
 interface AutomationsFilteredEmptyStateProps {
   onClear: () => void;
+  /** Replaces the default "no automations match" message. */
+  message?: string;
 }
 
 /**
@@ -11,6 +13,7 @@ interface AutomationsFilteredEmptyStateProps {
  */
 export function AutomationsFilteredEmptyState({
   onClear,
+  message,
 }: AutomationsFilteredEmptyStateProps) {
   const { t } = useTranslation("openhands");
   return (
@@ -19,7 +22,7 @@ export function AutomationsFilteredEmptyState({
       className="rounded-xl border border-dashed border-border p-8 text-center"
     >
       <p className="text-sm text-muted">
-        {t(I18nKey.AUTOMATIONS$NO_FILTER_MATCHES)}
+        {message ?? t(I18nKey.AUTOMATIONS$NO_FILTER_MATCHES)}
       </p>
       <button
         type="button"

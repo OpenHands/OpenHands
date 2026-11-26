@@ -1,5 +1,15 @@
+import { useSessionActivities } from "#/hooks/use-session-activities";
+import { useSessionActivityStore } from "#/stores/session-activity-store";
+import { ChatProgressContext } from "#/context/chat-progress-context";
+import {
+  CHAT_BODY_CLASS_NAME,
+  CHAT_SCROLL_CLASS_NAME,
+  CHAT_SCROLL_BOTTOM_PADDING_CLASS_NAME,
+  CHAT_COMPOSER_CLASS_NAME,
+} from "./chat-layout";
+import { TaskStartupProgress } from "./task-startup-progress";
 import React from "react";
-import { createPortal } from "react-dom";
+import { AppearancePortal } from "#/components/shared/appearance-portal";
 import { useNavigate } from "react-router";
 import { useTracking } from "#/hooks/use-tracking";
 import { useTranslation } from "react-i18next";
@@ -18,14 +28,19 @@ import { useFilteredEvents } from "#/hooks/use-filtered-events";
 import { useScrollToBottom } from "#/hooks/use-scroll-to-bottom";
 import { useIsRevealingStreamedText } from "#/hooks/use-streamed-text";
 import { useLoadOlderEvents } from "#/hooks/use-load-older-events";
+import { useClampDragSelection } from "#/hooks/chat/use-clamp-drag-selection";
+import {
+  type ScrollAnchor,
+  captureScrollAnchor,
+  scrollAnchorOffset,
+  virtualAnchorOffset,
+} from "./scroll-anchor";
 import { useAutoRefreshFilesOnEdit } from "#/hooks/use-auto-refresh-files-on-edit";
 import { WorkspaceFilesForChatProvider } from "./chat-markdown-path-code";
-import { TypingIndicator } from "./typing-indicator";
 import { ChatSuggestions } from "./chat-suggestions";
 import { ScrollProvider } from "#/context/scroll-context";
-import { useInitialQueryStore } from "#/stores/initial-query-store";
 import { useSendMessage } from "#/hooks/use-send-message";
-import { useAgentState, usePlanningAgentState } from "#/hooks/use-agent-state";
+import { useAgentState } from "#/hooks/use-agent-state";
 import { useIsArchivedConversation } from "#/hooks/use-is-archived-conversation";
 import { useHandleBuildPlanClick } from "#/hooks/use-handle-build-plan-click";
 
@@ -37,10 +52,16 @@ import { useErrorMessageStore } from "#/stores/error-message-store";
 import { useOptimisticUserMessageStore } from "#/stores/optimistic-user-message-store";
 import { SERVER_CONNECTION_ERROR_MESSAGE } from "#/constants/server-connection-error";
 import { ErrorMessageBanner } from "./error-message-banner";
+import { ConnectionRecoveryNotice } from "./connection-recovery-notice";
 import { SkillInstallRestartBanner } from "./skill-install-restart-banner";
+import { ResolvedConversationBanner } from "./resolved-conversation-banner";
 import { LlmNotConfiguredBanner } from "#/components/features/home/llm-not-configured-banner";
 import { useLlmConfigured } from "#/hooks/use-llm-configured";
-import { Messages } from "#/components/conversation-events/chat/messages";
+import { useBudgetLimitError } from "#/hooks/use-budget-limit-error";
+import {
+  Messages,
+  type MessagesHandle,
+} from "#/components/conversation-events/chat/messages";
 import { PendingUserMessages } from "./pending-user-messages";
 import { useUnifiedUploadFiles } from "#/hooks/mutation/use-unified-upload-files";
 import { validateFiles } from "#/utils/file-validation";
@@ -50,10 +71,13 @@ import { useTaskPolling } from "#/hooks/query/use-task-polling";
 import { matchesPendingConversationId } from "#/utils/pending-task-message-link";
 import { useConversationWebSocket } from "#/contexts/conversation-websocket-context";
 import ChatStatusIndicator from "./chat-status-indicator";
-import { getStatusColor, getStatusText } from "#/utils/utils";
+import { getStatusColor, getStatusText, cn } from "#/utils/utils";
 import { useNewConversationCommand } from "#/hooks/mutation/use-new-conversation-command";
 import { useOptionalConversationId } from "#/hooks/use-conversation-id";
-import { setConversationState } from "#/utils/conversation-local-storage";
+import {
+  getConversationDraftRevision,
+  setConversationState,
+} from "#/utils/conversation-local-storage";
 import { useActiveConversation } from "#/hooks/query/use-active-conversation";
 import { I18nKey } from "#/i18n/declaration";
 import { hasConversationStarted } from "./components/resolve-picker-kind";
@@ -74,15 +98,6 @@ function isTextFieldWithText(target: EventTarget | null): boolean {
     return editable !== null && !isContentEmpty(editable);
   }
   return false;
-}
-
-function getEntryPoint(
-  hasRepository: boolean | null,
-  hasReplayJson: boolean | null,
-): string {
-  if (hasRepository) return "github";
-  if (hasReplayJson) return "replay";
-  return "direct";
 }
 
 export function ChatInterface({
@@ -107,11 +122,13 @@ export function ChatInterface({
     useConversationStore();
   const {
     errorMessage,
+    errorType,
     errorCode,
     errorClassification,
     removeErrorMessage,
     setErrorMessage,
   } = useErrorMessageStore();
+  const budgetLimitError = useBudgetLimitError(errorMessage);
   const navigate = useNavigate();
   const { isTask, taskStatus, taskDetail } = useTaskPolling();
   // Hide empty-state chrome for the entire `/conversations/task-{uuid}` route,
@@ -137,6 +154,21 @@ export function ChatInterface({
   );
   const { t } = useTranslation("openhands");
   const scrollRef = React.useRef<HTMLDivElement>(null);
+  useClampDragSelection(scrollRef);
+  // The message list virtualizes against this element, so it needs the DOM
+  // node itself (a ref owned here would never re-render `Messages` once
+  // populated). The callback is stable so React attaches it once per mount
+  // instead of detaching and re-attaching it on every render.
+  const [scrollElement, setScrollElement] =
+    React.useState<HTMLDivElement | null>(null);
+  const setScrollNode = React.useCallback((node: HTMLDivElement | null) => {
+    scrollRef.current = node;
+    setScrollElement(node);
+  }, []);
+  // The list's imperative handle: the "load older" anchor restore uses it to
+  // drop a scroll correction still buffered from the prepended rows'
+  // measurement, which would otherwise apply the same shift a second time.
+  const messagesRef = React.useRef<MessagesHandle>(null);
   // A streamed reply grows inside one event as it is revealed, so follow it
   // frame by frame while it does.
   const isRevealingStreamedText = useIsRevealingStreamedText();
@@ -154,7 +186,9 @@ export function ChatInterface({
   } = useNewConversationCommand();
 
   const { curAgentState } = useAgentState();
-  const { isPlanningAgentRunning } = usePlanningAgentState();
+  const { curAgentState: recoveryAgentState } = useAgentState(
+    conversationWebSocket?.recoveryConversationId,
+  );
   const { handleBuildPlanClick } = useHandleBuildPlanClick();
 
   // Cloud conversations whose sandbox is MISSING or ERROR are read-only:
@@ -225,7 +259,6 @@ export function ChatInterface({
     scrollDomToBottom,
   ]);
 
-  const { selectedRepository, replayJson } = useInitialQueryStore();
   const { conversationId } = useOptionalConversationId();
 
   // The live goal banner renders in the scroll stream but advances via store
@@ -264,17 +297,81 @@ export function ChatInterface({
   //                 as more pages arrive until there's overflow or the
   //                 server runs out of older events.
   const SCROLL_TOP_THRESHOLD_PX = 80;
+  // Frames the "load older" restore may spend scrolling to an anchored row that
+  // is outside the virtual window before giving up (see `restoreScrollAnchor`).
+  const MAX_ANCHOR_RESTORE_ATTEMPTS = 3;
   const preserveScrollPosition = React.useRef<{
     scrollHeight: number;
     scrollTop: number;
   } | null>(null);
+  // Row anchor captured with the height delta. The height delta is exact only
+  // while the list is plain; once it virtualizes, the prepended rows are still
+  // at the estimate in the commit that applies it, so the reader lands off by
+  // the rows' (measured - estimate) sum. A second pass puts the anchored row
+  // back once the rows have settled (see the effect below).
+  const preserveScrollAnchor = React.useRef<ScrollAnchor | null>(null);
+  // The oldest event id when a load started. The older page is known to have
+  // landed once this changes; an event arriving mid-fetch leaves it untouched,
+  // so the restore is not run (and its anchor not cleared) against the position
+  // captured before the page, which would leave the page with no second pass.
+  const oldestEventIdRef = React.useRef<string | undefined>(undefined);
+  oldestEventIdRef.current = allConversationEvents[0]?.id;
+  const oldestEventIdAtLoadRef = React.useRef<string | undefined>(undefined);
+  // A follow-up frame of the restore below, scheduled when the anchored row was
+  // outside the virtual window. Cancelled when a new load starts, on a
+  // conversation switch and on unmount.
+  const anchorRetryFrameRef = React.useRef<number | null>(null);
+  const cancelAnchorRetry = React.useCallback(() => {
+    if (anchorRetryFrameRef.current === null) return;
+    cancelAnimationFrame(anchorRetryFrameRef.current);
+    anchorRetryFrameRef.current = null;
+  }, []);
+  const restoreScrollAnchor = React.useCallback(() => {
+    const anchor = preserveScrollAnchor.current;
+    const element = scrollRef.current;
+    preserveScrollAnchor.current = null;
+    if (!anchor || !element) return;
+    const run = (attempt: number) => {
+      anchorRetryFrameRef.current = null;
+      const next = scrollAnchorOffset(element, anchor);
+      if (next !== null) {
+        element.scrollTop = next;
+        // The anchor restore already accounts for the prepended rows' real
+        // heights. A correction still buffered from measuring those same rows
+        // describes the very shift just undone, so applying it on the next
+        // frame would move the reader a second time. The restore is
+        // authoritative.
+        messagesRef.current?.clearPendingScrollCorrection();
+        return;
+      }
+      // No candidate is mounted: the prepended rows came out taller than the
+      // estimate by more than the window, pushing the anchored row out of it.
+      // Scroll to where the virtualizer places the row, which mounts it, and
+      // restore it exactly from the DOM on the next frame.
+      if (attempt >= MAX_ANCHOR_RESTORE_ATTEMPTS) return;
+      const virtualNext = virtualAnchorOffset(
+        anchor,
+        (key) => messagesRef.current?.getRowScrollStart(key) ?? null,
+      );
+      if (virtualNext === null) return;
+      element.scrollTop = virtualNext;
+      messagesRef.current?.clearPendingScrollCorrection();
+      anchorRetryFrameRef.current = requestAnimationFrame(() =>
+        run(attempt + 1),
+      );
+    };
+    run(0);
+  }, []);
 
   React.useEffect(() => {
     // A pending history load may be discarded during a conversation switch.
     // Do not let the previous conversation's saved scroll geometry affect the
     // next conversation's scroll restoration.
     preserveScrollPosition.current = null;
-  }, [conversationId]);
+    preserveScrollAnchor.current = null;
+    cancelAnchorRetry();
+  }, [conversationId, cancelAnchorRetry]);
+  React.useEffect(() => cancelAnchorRetry, [cancelAnchorRetry]);
 
   const maybeLoadOlder = React.useCallback(
     (target: HTMLElement) => {
@@ -291,8 +388,14 @@ export function ChatInterface({
         scrollHeight: target.scrollHeight,
         scrollTop: target.scrollTop,
       };
+      // Captured for both list shapes: the plain path restores from the height
+      // delta, the virtualized path also uses it for the settling second pass.
+      cancelAnchorRetry();
+      preserveScrollAnchor.current = captureScrollAnchor(target);
+      oldestEventIdAtLoadRef.current = oldestEventIdRef.current;
       loadOlder().catch((error) => {
         preserveScrollPosition.current = null;
+        preserveScrollAnchor.current = null;
         const message =
           error instanceof Error && error.message
             ? error.message
@@ -301,6 +404,7 @@ export function ChatInterface({
       });
     },
     [
+      cancelAnchorRetry,
       hasMoreOlderEvents,
       isLoadingOlderEvents,
       isProvisioningTask,
@@ -333,6 +437,64 @@ export function ChatInterface({
         : false,
     [pendingMessages, conversationId],
   );
+
+  const { key: sessionKey, sessions } = useSessionActivities(conversationId);
+  const session = sessions.at(-1);
+  const isSessionStarting =
+    session?.phase === "pending" || session?.phase === "connecting";
+  // An open socket can still be replaying saved messages after a failed REST
+  // preload. Every tab must wait for replay completion before declaring the
+  // chat empty, including tabs without a local session activity group.
+  const sessionHistoryKnown =
+    conversationWebSocket === null ||
+    (!isSessionStarting &&
+      conversationWebSocket.connectionState === "OPEN" &&
+      conversationWebSocket.isHistoryReady &&
+      !conversationWebSocket.isLoadingHistory);
+  const hasSendingMessages = pendingMessages.some(
+    (message) =>
+      message.status === "sending" &&
+      conversationId &&
+      matchesPendingConversationId(conversationId, message.conversationId),
+  );
+  React.useLayoutEffect(() => {
+    if (
+      session?.phase === "connecting" &&
+      conversationWebSocket?.connectionState === "OPEN" &&
+      !hasSendingMessages
+    ) {
+      useSessionActivityStore.getState().complete(sessionKey, session.id);
+    }
+  }, [
+    sessionKey,
+    session?.id,
+    session?.phase,
+    conversationWebSocket?.connectionState,
+    hasSendingMessages,
+  ]);
+
+  let pendingMessageLabel: string | undefined;
+  if (activeConversation?.id === conversationId) {
+    if (sandboxStatus === "PAUSED" || sandboxStatus === "STARTING") {
+      pendingMessageLabel = t(I18nKey.CHAT_INTERFACE$RESUMING_SANDBOX);
+    } else if (
+      sandboxStatus === "RUNNING" &&
+      conversationWebSocket &&
+      conversationWebSocket.connectionState !== "OPEN"
+    ) {
+      pendingMessageLabel = t(I18nKey.CHAT_INTERFACE$CONNECTING);
+    }
+  }
+  const hideConnectionError =
+    pendingMessageLabel !== undefined &&
+    errorType === "connection" &&
+    !errorCode &&
+    errorMessage === SERVER_CONNECTION_ERROR_MESSAGE &&
+    pendingMessages.some(
+      (message) =>
+        message.conversationId === conversationId &&
+        message.status === "sending",
+    );
 
   const hasModelEntries = useModelStore((s) =>
     conversationId
@@ -389,17 +551,18 @@ export function ChatInterface({
       return;
     }
 
+    // Capture before attachment conversion/upload can yield to a new edit.
+    const draftRevision = conversationId
+      ? getConversationDraftRevision(conversationId)
+      : undefined;
+
     // Create mutable copies of the arrays
     const images = [...originalImages];
     const files = [...originalFiles];
     if (totalEvents === 0) {
       trackInitialQuerySubmitted({
-        entryPoint: getEntryPoint(
-          selectedRepository !== null,
-          replayJson !== null,
-        ),
+        entryPoint: "direct",
         queryCharacterLength: content.length,
-        replayJsonSize: replayJson?.length,
       });
     } else {
       trackUserMessageSent({
@@ -427,6 +590,13 @@ export function ChatInterface({
         ? await uploadFiles({ conversationId: conversationId!, files })
         : { skipped_files: [], uploaded_files: [] };
 
+    if (skippedFiles.length && errorCode === STARTUP_UPLOAD_ERROR_CODE) {
+      const composer = useConversationStore.getState();
+      composer.addImages(originalImages);
+      composer.addFiles(originalFiles);
+      composer.setMessageToSend(content, "conversation");
+      return;
+    }
     skippedFiles.forEach((f) => displayErrorToast(f.reason));
 
     const filePrompt = `${t(I18nKey.CHAT_INTERFACE$AUGMENTED_PROMPT_FILES_TITLE)}: ${uploadedFiles.join("\n\n")}`;
@@ -446,6 +616,7 @@ export function ChatInterface({
       // against. They're different when there are file attachments.
       text: content,
       content: prompt,
+      draftRevision,
       imageUrls,
       fileUrls: uploadedFiles,
       timestamp,
@@ -460,6 +631,9 @@ export function ChatInterface({
       await send(
         createChatMessage(prompt, imageUrls, uploadedFiles, timestamp),
       );
+      const errors = useErrorMessageStore.getState();
+      if (errors.errorCode === STARTUP_UPLOAD_ERROR_CODE)
+        errors.removeErrorMessage();
     } catch (sendError) {
       const sendErrorMessage =
         sendError instanceof Error
@@ -475,8 +649,15 @@ export function ChatInterface({
   // bottom in that case.
   React.useEffect(() => {
     // If a "load older" was just triggered, restore the scroll position so
-    // the conversation appears to extend upward instead of jumping.
-    if (preserveScrollPosition.current && scrollRef.current) {
+    // the conversation appears to extend upward instead of jumping. Gate on the
+    // older page having landed (the oldest id changed): an event arriving during
+    // the fetch must not consume the restore against the pre-page position, or
+    // the page then lands with nothing left to run the second pass.
+    if (
+      preserveScrollPosition.current &&
+      scrollRef.current &&
+      oldestEventIdRef.current !== oldestEventIdAtLoadRef.current
+    ) {
       const { scrollHeight: prevHeight, scrollTop: prevTop } =
         preserveScrollPosition.current;
       const dom = scrollRef.current;
@@ -500,6 +681,23 @@ export function ChatInterface({
     scrollDomToBottom,
   ]);
 
+  // Second pass for the "load older" restore above. The height delta it applies
+  // is exact only while the list is plain; once it virtualizes the prepended
+  // rows are still at the estimate in that commit, so the reader lands off by
+  // their (measured - estimate) sum. Once the prepended rows have reported
+  // their sizes (the virtualizer's total height settles), put the anchored row
+  // back at its recorded offset. Gated on the older page having landed, and
+  // `restoreScrollAnchor` clears the anchor on the first run, so this fires once
+  // per load. The anchor is captured for both list shapes, but the plain path
+  // already restored from the height delta and holds no drift, so re-applying it
+  // is a no-op.
+  React.useLayoutEffect(() => {
+    if (!preserveScrollAnchor.current) return;
+    if (oldestEventIdRef.current === oldestEventIdAtLoadRef.current) return;
+    const id = requestAnimationFrame(restoreScrollAnchor);
+    return () => cancelAnimationFrame(id);
+  }, [renderableEvents.length, hasPendingUserMessages, restoreScrollAnchor]);
+
   // Auto-load older events when the chat content doesn't overflow the
   // scroll area (no scrollbar to drag, no wheel events past 0). We
   // re-run only when the rendered list grows or `hasMore` flips, NOT
@@ -516,9 +714,16 @@ export function ChatInterface({
   });
   React.useEffect(() => {
     const target = scrollRef.current;
-    if (!target) return;
+    if (!target || allConversationEvents.length === 0) return;
+    // Initial scrolling is scheduled for the next frame, so scrollTop may still be zero.
+    if (target.scrollHeight > target.clientHeight + SCROLL_TOP_THRESHOLD_PX)
+      return;
     maybeLoadOlderRef.current(target);
-  }, [renderableEvents.length, hasMoreOlderEvents]);
+  }, [
+    allConversationEvents.length,
+    renderableEvents.length,
+    hasMoreOlderEvents,
+  ]);
 
   // Create a ScrollProvider with the scroll hook values
   const scrollProviderValue = {
@@ -556,41 +761,58 @@ export function ChatInterface({
     t,
   });
 
+  const pendingUserMessages = React.useMemo(
+    () => (
+      <PendingUserMessages
+        pendingLabel={pendingMessageLabel}
+        showPendingStatus={!isSessionStarting}
+      />
+    ),
+    [pendingMessageLabel, isSessionStarting],
+  );
   const isComposerDocked = Boolean(composerDockTarget);
   const isMinimalComposer = isComposerDocked || minimalComposer;
   const composer = (
-    <ComposerDockedProvider
-      enabled={isComposerDocked}
-      minimal={isMinimalComposer}
+    <ChatProgressContext.Provider
+      value={
+        isTask || hasPendingUserMessages || curAgentState === AgentState.RUNNING
+      }
     >
-      <InteractiveChatBox
-        onSubmit={(content, images, files) => {
-          if (isComposerDocked) onDockedComposerSubmit?.();
-          return handleSendMessage(content, images, files);
-        }}
-        disabled={isNewConversationPending || llmBlocked}
-        hasStartedConversation={hasStartedConversation}
-        showGitControlBar={showGitControlBar}
-        placeholder={
-          isMinimalComposer
-            ? t(I18nKey.AUTOMATION_SETUP$DOCKED_COMPOSER_PLACEHOLDER)
-            : composerPlaceholder
-        }
-      />
-    </ComposerDockedProvider>
+      <ComposerDockedProvider
+        enabled={isComposerDocked}
+        minimal={isMinimalComposer}
+      >
+        <InteractiveChatBox
+          onSubmit={(content, images, files) => {
+            if (isComposerDocked) onDockedComposerSubmit?.();
+            return handleSendMessage(content, images, files);
+          }}
+          disabled={isTask || isNewConversationPending || llmBlocked}
+          hasStartedConversation={hasStartedConversation}
+          showGitControlBar={showGitControlBar}
+          placeholder={
+            isMinimalComposer
+              ? t(I18nKey.AUTOMATION_SETUP$DOCKED_COMPOSER_PLACEHOLDER)
+              : composerPlaceholder
+          }
+        />
+      </ComposerDockedProvider>
+    </ChatProgressContext.Provider>
   );
-  const dockedOrInlineComposer = composerDockTarget
-    ? createPortal(composer, composerDockTarget)
-    : composer;
+  const dockedOrInlineComposer = composerDockTarget ? (
+    <AppearancePortal container={composerDockTarget}>
+      {composer}
+    </AppearancePortal>
+  ) : (
+    composer
+  );
 
   return (
     <WorkspaceFilesForChatProvider>
       <ScrollProvider value={scrollProviderValue}>
-        <div
-          className="relative flex h-full flex-col justify-between px-4"
-          data-testid="chat-interface"
-        >
-          {!hasSubstantiveAgentActions &&
+        <div className={CHAT_BODY_CLASS_NAME} data-testid="chat-interface">
+          {sessionHistoryKnown &&
+            !hasSubstantiveAgentActions &&
             !hasPendingUserMessages &&
             !userEventsExist &&
             !hasModelEntries &&
@@ -599,7 +821,7 @@ export function ChatInterface({
             totalEvents === 0 &&
             !isArchivedConversation &&
             // With no usable LLM the suggestions can't be acted on (the input is
-            // disabled). They're also a `pointer-events-auto` overlay that would
+            // disabled). Their chips would also
             // sit over the LlmNotConfiguredBanner below and swallow clicks on its
             // setup button — so hide them and let the banner be the lone CTA.
             !llmBlocked &&
@@ -611,14 +833,17 @@ export function ChatInterface({
           {/* Note: We only hide chat suggestions when there's a user message */}
 
           <div
-            ref={scrollRef}
+            ref={setScrollNode}
             data-testid="chat-scroll-container"
             onScroll={(e) => {
               onChatBodyScroll(e.currentTarget);
               maybeLoadOlder(e.currentTarget);
             }}
             onWheel={handleWheelForPagination}
-            className="custom-scrollbar-always flex min-h-0 grow flex-col gap-2 overflow-x-hidden overflow-y-auto px-0 pt-4 pb-8 md:px-4"
+            className={cn(
+              CHAT_SCROLL_CLASS_NAME,
+              CHAT_SCROLL_BOTTOM_PADDING_CLASS_NAME,
+            )}
           >
             {isChatLoading && isReturningToConversation && (
               <ChatMessagesSkeleton />
@@ -661,34 +886,46 @@ export function ChatInterface({
               anchorEventId={null}
             />
 
-            {showConversationMessages && renderableEvents.length > 0 && (
+            {!isTask && showConversationMessages && (
               <Messages
+                ref={messagesRef}
+                hasOlderEvents={hasMoreOlderEvents}
                 messages={renderableEvents}
                 allEvents={allConversationEvents}
+                pendingMessages={pendingUserMessages}
+                pendingSessionId={isSessionStarting ? session?.id : undefined}
+                scrollParent={scrollElement}
               />
             )}
-
-            {/*
-            Render the local pending-message queue independently so messages
-            the user just submitted show up immediately (with a faded "sending"
-            treatment) even before any real conversation event has come back
-            from the server. Entries drain (FIFO) when the matching
-            UserMessageEvent echoes back over the WebSocket, so this never
-            double-renders alongside the real event list.
-          */}
-            <PendingUserMessages />
+            {isTask && (
+              <>
+                {pendingUserMessages}
+                <TaskStartupProgress />
+              </>
+            )}
 
             {/* Goal-loop status sits at the end of the message flow — above the
               composer and its typing indicator — so progress stays in view. */}
             <GoalStatusBanner conversationId={conversationId} />
           </div>
 
-          <div className="flex shrink-0 flex-col gap-1.5 pb-4">
+          <div className={CHAT_COMPOSER_CLASS_NAME}>
             <SkillInstallRestartBanner conversationId={conversationId} />
             <BtwMessages conversationId={conversationId} />
-            {errorMessage && (
+            {recoveryAgentState === AgentState.RUNNING &&
+              !errorMessage &&
+              !isArchivedConversation &&
+              !(pendingMessageLabel && hasPendingUserMessages) &&
+              conversationWebSocket && (
+                <ConnectionRecoveryNotice
+                  state={conversationWebSocket.recoveryState}
+                  onRetry={conversationWebSocket.reconnect}
+                />
+              )}
+            {errorMessage && !hideConnectionError && (
               <ErrorMessageBanner
-                message={errorMessage}
+                message={budgetLimitError?.message ?? errorMessage}
+                link={budgetLimitError?.link}
                 code={errorCode}
                 classification={errorClassification}
                 onDismiss={removeErrorMessage}
@@ -710,6 +947,8 @@ export function ChatInterface({
             {llmBlocked && !isArchivedConversation && (
               <LlmNotConfiguredBanner />
             )}
+
+            {!isArchivedConversation && <ResolvedConversationBanner />}
 
             {isArchivedConversation ? (
               // Archived / sandbox-error: show a read-only notice in place of
@@ -735,26 +974,21 @@ export function ChatInterface({
                   <div className="flex justify-between relative">
                     <div className="flex items-end gap-1 pointer-events-auto">
                       <ConfirmationModeEnabled />
-                      {isStartingStatus && (
-                        <ChatStatusIndicator
-                          statusColor={serverStatusColor}
-                          status={serverStatusText}
-                        />
-                      )}
+                      {isStartingStatus &&
+                        !isTask &&
+                        !hasPendingUserMessages && (
+                          <ChatStatusIndicator
+                            statusColor={serverStatusColor}
+                            status={serverStatusText}
+                          />
+                        )}
                     </div>
 
                     {!hitBottom ? (
                       <div className="absolute left-1/2 transform -translate-x-1/2 bottom-0 pointer-events-auto">
                         <ScrollToBottomButton onClick={scrollDomToBottom} />
                       </div>
-                    ) : (
-                      (curAgentState === AgentState.RUNNING ||
-                        isPlanningAgentRunning) && (
-                        <div className="pointer-events-none absolute inset-x-9 bottom-0 flex justify-center">
-                          <TypingIndicator events={allConversationEvents} />
-                        </div>
-                      )
-                    )}
+                    ) : null}
                   </div>
                 </div>
 
@@ -767,3 +1001,4 @@ export function ChatInterface({
     </WorkspaceFilesForChatProvider>
   );
 }
+import { STARTUP_UPLOAD_ERROR_CODE } from "#/utils/restore-startup-attachment-draft";

@@ -6,7 +6,7 @@ import type { AppConversation } from "#/api/conversation-service/agent-server-co
 import { useConversationStore } from "#/stores/conversation-store";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import { findPlannerConversationId } from "#/utils/plan-file";
-import { isArchivedSandboxStatus } from "#/utils/conversation-archive-status";
+import { isRuntimeUnavailableSandboxStatus } from "#/utils/conversation-archive-status";
 
 interface WebSocketProviderWrapperProps {
   children: React.ReactNode;
@@ -88,17 +88,20 @@ export function WebSocketProviderWrapper({
     trustedLocalPlanningConversationId,
   ]);
 
-  const filteredSubConversations = subConversations?.filter(
-    (subConversation): subConversation is AppConversation =>
-      subConversation !== null &&
-      planningConversationIds.includes(subConversation.id),
-  );
+  const filteredSubConversations = React.useMemo(() => {
+    return subConversations?.filter(
+      (subConversation): subConversation is AppConversation =>
+        subConversation !== null &&
+        planningConversationIds.includes(subConversation.id),
+    );
+  }, [subConversations, planningConversationIds]);
 
-  // A paused or archived runtime cannot accept a WebSocket connection. Its
+  // A paused or unavailable runtime cannot accept a WebSocket connection. Its
   // persisted event history remains available through the backend API.
   const conversationUrl =
     conversation?.sandbox_status === "PAUSED" ||
-    isArchivedSandboxStatus(conversation?.sandbox_status)
+    conversation?.sandbox_status === "STARTING" ||
+    isRuntimeUnavailableSandboxStatus(conversation?.sandbox_status)
       ? null
       : conversation?.conversation_url;
 

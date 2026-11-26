@@ -14,8 +14,8 @@ const repository = (
   ...overrides,
 });
 
-async function loadFreshHomeStore() {
-  window.localStorage.clear();
+async function loadFreshHomeStore({ keepStorage = false } = {}) {
+  if (!keepStorage) window.localStorage.clear();
   vi.resetModules();
   return (await import("#/stores/home-store")).useHomeStore;
 }
@@ -40,7 +40,9 @@ describe("home store", () => {
     ).toEqual({
       state: {
         lastSelectedProvider: null,
+        lastSelectedGitProviderId: null,
         recentRepositories: [first],
+        repositorySelections: {},
       },
       version: 0,
     });
@@ -106,5 +108,93 @@ describe("home store", () => {
     useHomeStore.getState().setLastSelectedProvider(null);
 
     expect(useHomeStore.getState().getLastSelectedProvider()).toBeNull();
+  });
+
+  it("remembers which connection of a provider was picked last", async () => {
+    const useHomeStore = await loadFreshHomeStore();
+
+    useHomeStore.getState().setLastSelectedProvider("gitlab", 8);
+
+    expect(useHomeStore.getState().getLastSelectedGitProviderId()).toBe(8);
+    expect(
+      JSON.parse(window.localStorage.getItem(STORAGE_KEY) ?? "{}"),
+    ).toMatchObject({
+      state: { lastSelectedProvider: "gitlab", lastSelectedGitProviderId: 8 },
+    });
+
+    useHomeStore.getState().setLastSelectedProvider("github");
+
+    expect(useHomeStore.getState().getLastSelectedGitProviderId()).toBeNull();
+  });
+
+  it("treats a store saved before connections had ids as having none", async () => {
+    window.localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({
+        state: { lastSelectedProvider: "gitlab", recentRepositories: [] },
+        version: 0,
+      }),
+    );
+
+    const useHomeStore = await loadFreshHomeStore({ keepStorage: true });
+
+    expect(useHomeStore.getState().getLastSelectedGitProviderId()).toBeNull();
+  });
+
+  it("keeps the same repository from two connections as separate recents", async () => {
+    const useHomeStore = await loadFreshHomeStore();
+    const fromFirst = repository("shared", { git_provider_id: 1 });
+    const fromSecond = repository("shared", { git_provider_id: 2 });
+
+    useHomeStore.getState().addRecentRepository(fromFirst);
+    useHomeStore.getState().addRecentRepository(fromSecond);
+    useHomeStore.getState().addRecentRepository(fromFirst);
+
+    expect(useHomeStore.getState().getRecentRepositories()).toEqual([
+      fromFirst,
+      fromSecond,
+    ]);
+  });
+
+  it("keeps repository selections per backend across reloads", async () => {
+    const useHomeStore = await loadFreshHomeStore();
+    const cloudSelection = {
+      repository: repository("cloud"),
+      branch: { name: "main", commit_sha: "abc", protected: false },
+      provider: "github" as const,
+    };
+    const otherSelection = {
+      ...cloudSelection,
+      repository: repository("other"),
+    };
+    useHomeStore.getState().setRepositorySelection("cloud", cloudSelection);
+    useHomeStore.getState().setRepositorySelection("other", otherSelection);
+
+    const reloaded = await loadFreshHomeStore({ keepStorage: true });
+    reloaded.getState().clearRepositorySelection("cloud");
+
+    expect(reloaded.getState().repositorySelections).toEqual({
+      other: otherSelection,
+    });
+  });
+
+  it("loads a store saved before repository selections existed", async () => {
+    window.localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({
+        state: {
+          lastSelectedProvider: "gitlab",
+          recentRepositories: [repository("first")],
+        },
+        version: 0,
+      }),
+    );
+
+    const useHomeStore = await loadFreshHomeStore({ keepStorage: true });
+
+    expect(useHomeStore.getState().repositorySelections).toEqual({});
+    expect(useHomeStore.getState().getRecentRepositories()).toEqual([
+      repository("first"),
+    ]);
   });
 });

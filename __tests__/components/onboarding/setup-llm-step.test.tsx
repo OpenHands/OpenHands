@@ -115,9 +115,17 @@ vi.mock("#/api/agent-profiles-service/agent-profiles-service.api", () => ({
   default: {
     listProfiles: listAgentProfiles,
     saveProfile: applyAgentProfile,
-    getProfile: vi
-      .fn()
-      .mockResolvedValue({ profile: { id: "onboarding-agent" } }),
+    // The stored `default` already carries the migrated skill selection.
+    getProfile: vi.fn().mockResolvedValue({
+      profile: {
+        id: "onboarding-agent",
+        name: "default",
+        revision: 1,
+        agent_kind: "openhands",
+        llm_profile_ref: "default",
+        public_skills: ["github"],
+      },
+    }),
     activateProfile: vi.fn().mockResolvedValue(undefined),
   },
 }));
@@ -269,6 +277,7 @@ describe("SetupLlmStep", () => {
     expect(applyAgentProfile).toHaveBeenCalledWith("default", {
       agent_kind: "openhands",
       llm_profile_ref: "mock-onboarding-model",
+      public_skills: ["github"],
     });
   });
 
@@ -402,6 +411,7 @@ describe("SetupLlmStep", () => {
     expect(applyAgentProfile).toHaveBeenCalledWith("default", {
       agent_kind: "openhands",
       llm_profile_ref: "my-deepseek",
+      public_skills: ["github"],
     });
   });
 
@@ -641,6 +651,7 @@ describe("SetupLlmStep", () => {
     expect(applyAgentProfile).toHaveBeenLastCalledWith("default", {
       agent_kind: "openhands",
       llm_profile_ref: "gpt-4o-mini",
+      public_skills: ["github"],
     });
   });
 });

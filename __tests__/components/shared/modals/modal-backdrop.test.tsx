@@ -261,6 +261,67 @@ describe("ModalBackdrop focus management", () => {
     expect(popoverInput).toHaveFocus();
   });
 
+  // A combobox that opens on focus moves virtual focus to its selected option
+  // (portaled outside the dialog) while its own focus event is still on the
+  // way to window: browsers flush React's update between the event's
+  // listeners. A document listener gives jsdom the same order.
+  function ComboboxOpeningOnFocus() {
+    const optionRef = React.useRef<HTMLLIElement>(null);
+    React.useEffect(() => {
+      const moveVirtualFocus = (event: FocusEvent) => {
+        if ((event.target as Element).getAttribute("role") !== "combobox") {
+          return;
+        }
+        optionRef.current?.dispatchEvent(
+          new FocusEvent("focusin", { bubbles: true }),
+        );
+      };
+      document.addEventListener("focusin", moveVirtualFocus);
+      return () => document.removeEventListener("focusin", moveVirtualFocus);
+    }, []);
+    return (
+      <>
+        <input
+          role="combobox"
+          aria-label="provider"
+          aria-controls="providers"
+          aria-expanded="true"
+        />
+        {createPortal(
+          <ul id="providers" role="listbox" aria-label="providers">
+            <li ref={optionRef} role="option" aria-selected="true">
+              OpenAI
+            </li>
+          </ul>,
+          document.body,
+        )}
+      </>
+    );
+  }
+
+  it("keeps focus on a combobox that moves virtual focus to its option as it opens", async () => {
+    // Arrange
+    const user = userEvent.setup();
+    render(
+      <PageWithModal
+        renderModalContent={() => (
+          <>
+            <button type="button">first</button>
+            <ComboboxOpeningOnFocus />
+          </>
+        )}
+      />,
+    );
+    await user.click(screen.getByRole("button", { name: "open" }));
+    const combobox = screen.getByRole("combobox", { name: "provider" });
+
+    // Act
+    combobox.focus();
+
+    // Assert
+    expect(combobox).toHaveFocus();
+  });
+
   it("restores focus to the opener when the dialog closes", async () => {
     const user = userEvent.setup();
     render(<PageWithModal renderModalContent={threeButtons} />);
@@ -392,6 +453,61 @@ describe("ModalBackdrop Escape layering", () => {
       expect(onCloseDialog).toHaveBeenCalledTimes(dialogCloses);
     },
   );
+
+  it("lets an open combobox listbox take Escape and closes the dialog on the next press", async () => {
+    // React Aria's ComboBox closes its listbox on Escape and lets the event
+    // keep propagating; the dialog must wait for a second Escape (#19646).
+    const user = userEvent.setup();
+    const onCloseDialog = vi.fn();
+    function DialogWithCombobox({ listboxOpen }: { listboxOpen: boolean }) {
+      const [open, setOpen] = React.useState(true);
+      if (!open) return null;
+      return (
+        <ModalBackdrop
+          onClose={() => {
+            onCloseDialog();
+            setOpen(false);
+          }}
+          aria-label="test dialog"
+        >
+          {/* The React Aria combobox shape: focus stays on the input while
+              its portaled listbox is open, and aria-expanded tracks the
+              popup. */}
+          <input
+            role="combobox"
+            aria-label="provider"
+            aria-expanded={listboxOpen}
+            aria-controls="providers"
+          />
+          {listboxOpen
+            ? createPortal(
+                <ul role="listbox" aria-label="providers" id="providers">
+                  <li role="option">OpenAI</li>
+                </ul>,
+                document.body,
+              )
+            : null}
+        </ModalBackdrop>
+      );
+    }
+    const { rerender } = render(<DialogWithCombobox listboxOpen />);
+    screen.getByRole("combobox", { name: "provider" }).focus();
+
+    // Act: first Escape with the listbox open.
+    await user.keyboard("{Escape}");
+
+    // Assert: only the listbox closes; the dialog stays open.
+    expect(onCloseDialog).not.toHaveBeenCalled();
+    expect(screen.getByRole("dialog", { name: "test dialog" })).toBeInTheDocument();
+
+    // Act: second Escape, listbox closed.
+    rerender(<DialogWithCombobox listboxOpen={false} />);
+    await user.keyboard("{Escape}");
+
+    // Assert: the dialog closes.
+    expect(onCloseDialog).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
 
   it("lets a menu that is open inside the dialog take Escape", async () => {
     const user = userEvent.setup();

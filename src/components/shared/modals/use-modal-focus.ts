@@ -81,8 +81,12 @@ function focusFirstTabbable(root: HTMLElement) {
  * portals elsewhere stay usable because their focus and key events still
  * bubble through the dialog in the React tree.
  */
-export function useModalFocus({ elevated }: { elevated: boolean }) {
-  const rootRef = React.useRef<HTMLDivElement>(null);
+export function useModalFocus<T extends HTMLElement = HTMLDivElement>({
+  elevated,
+}: {
+  elevated: boolean;
+}) {
+  const rootRef = React.useRef<T>(null);
   const elevatedRef = React.useRef(elevated);
   elevatedRef.current = elevated;
   // Read during the first render: children's autoFocus and mount effects run
@@ -90,7 +94,10 @@ export function useModalFocus({ elevated }: { elevated: boolean }) {
   const [opener] = React.useState(() =>
     typeof document === "undefined" ? null : document.activeElement,
   );
-  const focusEventFromDialogTree = React.useRef<Event | null>(null);
+  // Focus events that went through the dialog's onFocus. A set, not just the
+  // last one: a focusin can trigger a nested one (a combobox opening moves
+  // virtual focus to its option), and marking that must not unmark the outer.
+  const focusEventsFromDialogTree = React.useRef(new WeakSet<Event>());
 
   React.useEffect(() => {
     const root = rootRef.current;
@@ -107,7 +114,7 @@ export function useModalFocus({ elevated }: { elevated: boolean }) {
     const handleFocusIn = (event: FocusEvent) => {
       // A closing dialog is already detached here; let the new focus stand.
       if (!root.isConnected || topmostModalRoot() !== root) return;
-      if (event === focusEventFromDialogTree.current) return;
+      if (focusEventsFromDialogTree.current.has(event)) return;
       focusFirstTabbable(root);
     };
     window.addEventListener("focusin", handleFocusIn);
@@ -140,7 +147,7 @@ export function useModalFocus({ elevated }: { elevated: boolean }) {
   }, []);
 
   const onFocus = React.useCallback((event: React.FocusEvent) => {
-    focusEventFromDialogTree.current = event.nativeEvent;
+    focusEventsFromDialogTree.current.add(event.nativeEvent);
   }, []);
 
   const onKeyDown = React.useCallback((event: React.KeyboardEvent) => {
@@ -161,6 +168,14 @@ export function useModalFocus({ elevated }: { elevated: boolean }) {
     const first = tabbable[0];
     const last = tabbable.at(-1);
     const active = document.activeElement;
+    const pullEscapedFocusBack = () => {
+      window.setTimeout(() => {
+        if (!root.isConnected || topmostModalRoot() !== root) return;
+        if (root.contains(document.activeElement)) return;
+        (event.shiftKey ? last : first)?.focus();
+      }, 0);
+    };
+
     if (!first || !last) {
       event.preventDefault();
       root.focus();
@@ -170,6 +185,8 @@ export function useModalFocus({ elevated }: { elevated: boolean }) {
     } else if (!event.shiftKey && (active === last || active === root)) {
       event.preventDefault();
       first.focus();
+    } else {
+      pullEscapedFocusBack();
     }
   }, []);
 

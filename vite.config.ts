@@ -64,6 +64,11 @@ const appBuildConfig = {
       codeSplitting: {
         groups: [
           {
+            // Motion's top-level recipes must not capture helpers before a cyclic chunk initializes.
+            name: "vendor-motion",
+            test: /node_modules[\\/](framer-motion|motion-dom|motion-utils)[\\/]/,
+          },
+          {
             // Keep the styling core (HeroUI + tailwind-variants + its
             // tailwind-merge/clsx deps) in one un-size-split chunk. When the
             // generic size-split vendor group slices these apart, a HeroUI
@@ -136,6 +141,23 @@ export default defineConfig(({ mode }) => {
       ),
     },
     plugins: [
+      {
+        name: "bundle-newsreader-license",
+        apply: "build",
+        async generateBundle() {
+          this.emitFile({
+            type: "asset",
+            fileName: "assets/newsreader-OFL.txt",
+            source: await readFile(
+              new URL(
+                "./src/themes/color-theme/definitions/paper/newsreader-OFL.txt",
+                import.meta.url,
+              ),
+              "utf8",
+            ),
+          });
+        },
+      },
       {
         name: "suppress-chrome-devtools-well-known",
         apply: "serve",
@@ -232,6 +254,8 @@ export default defineConfig(({ mode }) => {
           lib: {
             entry: LIB_ENTRY,
             formats: ["es"],
+            // Exported as @openhands/agent-canvas/styles.css.
+            cssFileName: "styles",
           },
           rollupOptions: {
             output: [
@@ -241,7 +265,6 @@ export default defineConfig(({ mode }) => {
                 preserveModulesRoot: "src",
                 entryFileNames: "[name].js",
                 chunkFileNames: "chunks/[name]-[hash].js",
-                assetFileNames: "assets/[name]-[hash][extname]",
               },
               {
                 format: "cjs",
@@ -249,7 +272,6 @@ export default defineConfig(({ mode }) => {
                 preserveModulesRoot: "src",
                 entryFileNames: "[name].cjs",
                 chunkFileNames: "chunks/[name]-[hash].cjs",
-                assetFileNames: "assets/[name]-[hash][extname]",
                 exports: "named",
               },
             ],
@@ -291,6 +313,8 @@ export default defineConfig(({ mode }) => {
         "prop-types",
         "react-is",
         "@heroui/react",
+        "react-aria",
+        "react-aria-components",
         "lucide-react",
         "@microlink/react-json-view",
         // These are discovered when launching conversations:
@@ -331,6 +355,9 @@ export default defineConfig(({ mode }) => {
         // the browser and dev crashes with ``ReferenceError: exports is not
         // defined`` on the first import of agent-settings.tsx.
         "shell-quote",
+        // Imported lazily by the markdown ```mermaid renderer. Its ESM build
+        // imports CJS packages (dayjs) that fail when served raw.
+        "mermaid",
         "unist-util-visit",
         "uuid",
         "zustand",
