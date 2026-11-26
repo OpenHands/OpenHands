@@ -262,8 +262,9 @@ test.describe("MCP Test Connection credential verification (Slack)", () => {
     });
 
     await openInstalledEditor(page);
-    await page.getByTestId("mcp-test-connection").click();
+    await page.getByTestId("submit-button").click();
 
+    // The failed pre-save test keeps the editor open with the reason.
     const message = page.getByTestId("mcp-test-message");
     await expect(message).toBeVisible({ timeout: 10_000 });
     await expect(message).toContainText(
@@ -277,7 +278,7 @@ test.describe("MCP Test Connection credential verification (Slack)", () => {
     expect(testRequests[0]?.server?.env?.SLACK_BOT_TOKEN).not.toBe(REDACTED);
   });
 
-  test("edit: Test Connection reports success for valid stored credentials", async ({
+  test("edit: Save reports success for valid stored credentials", async ({
     page,
     request,
   }) => {
@@ -293,16 +294,21 @@ test.describe("MCP Test Connection credential verification (Slack)", () => {
     });
 
     await openInstalledEditor(page);
-    await page.getByTestId("mcp-test-connection").click();
+    await page.getByTestId("submit-button").click();
 
-    const message = page.getByTestId("mcp-test-message");
-    await expect(message).toBeVisible({ timeout: 10_000 });
-    // 2 tools listed → "Connected — 2 tool(s) available".
-    await expect(message).toContainText("2 tool(s) available");
-    await expect(message).not.toContainText("Credential check failed");
+    // A passing pre-save test saves, closes the editor and marks the card.
+    await expect(page.getByTestId("mcp-custom-editor")).not.toBeVisible({
+      timeout: 10_000,
+    });
+    const status = page
+      .getByTestId("mcp-installed-list")
+      .getByTestId(/^mcp-health-label-/)
+      .first();
+    // 2 tools listed → "Connected — credentials verified (2 tool(s))".
+    await expect(status).toContainText("2 tool(s)");
   });
 
-  test("custom (non-catalog) server: Test Connection attaches no verification probe", async ({
+  test("custom (non-catalog) server: Save attaches no verification probe", async ({
     page,
     request,
   }) => {
@@ -319,11 +325,12 @@ test.describe("MCP Test Connection credential verification (Slack)", () => {
     });
 
     await openInstalledEditor(page);
-    await page.getByTestId("mcp-test-connection").click();
+    await page.getByTestId("submit-button").click();
 
-    const message = page.getByTestId("mcp-test-message");
-    await expect(message).toBeVisible({ timeout: 10_000 });
-    await expect(message).toContainText("1 tool(s) available");
+    await expect(page.getByTestId("mcp-custom-editor")).not.toBeVisible({
+      timeout: 10_000,
+    });
+    expect(testRequests).toHaveLength(1);
 
     // Behavior unchanged for custom servers: no tool_call attached.
     expect(testRequests[0]?.tool_call).toBeUndefined();
