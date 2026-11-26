@@ -952,6 +952,23 @@ describe("FilesTab", () => {
       ).not.toBeInTheDocument();
     });
 
+    it("lets the file actions wrap below the Rich/Plain toggle in a narrow preview", () => {
+      // Arrange: the default fixture is a local `index.html`.
+      openFile("index.html");
+
+      // Act
+      renderTab();
+
+      // Assert: on a phone with the tree shown the preview is ~166 px wide,
+      // too narrow for the toggle and both icons on one line.
+      const header = screen.getByTestId("files-tab-content-header");
+      expect(header).toHaveClass("flex-wrap");
+      expect(header).toContainElement(screen.getByTestId("files-tab-download"));
+      expect(header).toContainElement(
+        screen.getByTestId("files-tab-open-in-new-window"),
+      );
+    });
+
     it("shows an error and saves nothing when the local download fails", async () => {
       // Arrange: the default fixture is a local `index.html`.
       fetchMock.mockResolvedValue({ ok: false, status: 404 });
