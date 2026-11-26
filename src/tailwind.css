@@ -1181,6 +1181,10 @@ code .token {
   font-size: 11px;
 }
 
+@utility settings-list-height {
+  max-height: min(70vh, 39rem);
+}
+
 @utility workspace-manager-dialog {
   max-height: 70vh;
 }

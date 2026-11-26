@@ -29,6 +29,7 @@ describe("Canvas arbitrary-value guard adoption", () => {
     "src/components/features/command-menu/command-menu.tsx",
     "src/components/features/backends/backend-version.tsx",
     "src/components/features/settings/settings-nav-header.tsx",
+    "src/utils/settings-list-classes.ts",
     "src/components/features/settings/backend-synced-settings-badge.tsx",
     "src/components/features/settings/agent-canvas-update-card.tsx",
     "src/components/features/settings/agent-canvas-version-modal.tsx",
