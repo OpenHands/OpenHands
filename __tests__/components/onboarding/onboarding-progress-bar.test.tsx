@@ -10,6 +10,7 @@ describe("OnboardingProgressBar", () => {
     expect(bar).toHaveAttribute("aria-valuenow", "2");
     expect(bar).toHaveAttribute("aria-valuemin", "1");
     expect(bar).toHaveAttribute("aria-valuemax", "4");
+    expect(bar).toHaveAccessibleName();
 
     // Segment states match the current step.
     expect(

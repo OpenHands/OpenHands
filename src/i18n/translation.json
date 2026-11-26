@@ -25631,6 +25631,24 @@
     "uk": "Ласкаво просимо до OpenHands",
     "id": "Selamat datang di OpenHands"
   },
+  "ONBOARDING$PROGRESS_LABEL": {
+    "en": "Onboarding progress",
+    "ja": "オンボーディングの進捗",
+    "zh-CN": "引导进度",
+    "zh-TW": "引導進度",
+    "ko-KR": "온보딩 진행률",
+    "no": "Fremdrift for introduksjon",
+    "ar": "تقدم الإعداد",
+    "de": "Onboarding-Fortschritt",
+    "fr": "Progression de l'intégration",
+    "it": "Avanzamento dell'onboarding",
+    "pt": "Progresso da integração",
+    "es": "Progreso de la incorporación",
+    "ca": "Progrés de la incorporació",
+    "tr": "Başlangıç ilerlemesi",
+    "uk": "Прогрес ознайомлення",
+    "id": "Kemajuan orientasi"
+  },
   "ONBOARDING$NEXT": {
     "en": "Next",
     "ja": "次へ",
