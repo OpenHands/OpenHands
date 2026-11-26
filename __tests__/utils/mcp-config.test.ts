@@ -1097,19 +1097,24 @@ describe("buildMcpServerPatch", () => {
 });
 
 describe("buildRenameMcpConfigPatch", () => {
-  it("throws when a stdio credential is still redacted", () => {
+  it("throws when a stdio credential is left redacted", () => {
     const previous = {
       transport: "stdio",
       command: "c",
       env: { TOKEN: REDACTED_MCP_SECRET_VALUE },
     } as MCPServer;
-    const edited: MCPServerConfig = { id: "s", type: "stdio", command: "c" };
+    const edited: MCPServerConfig = {
+      id: "s",
+      type: "stdio",
+      command: "c",
+      env: { TOKEN: REDACTED_MCP_SECRET_VALUE },
+    };
     expect(() =>
       buildRenameMcpConfigPatch("old", "new", previous, edited),
     ).toThrow(MCP_RENAME_CREDENTIAL_ERROR);
   });
 
-  it("throws when a remote credential is still redacted", () => {
+  it("throws when a remote credential is left redacted", () => {
     const previous = {
       transport: "http",
       url: "https://u.example",
@@ -1119,6 +1124,7 @@ describe("buildRenameMcpConfigPatch", () => {
       id: "s",
       type: "shttp",
       url: "https://u.example",
+      auth: { strategy: "bearer", value: REDACTED_MCP_SECRET_VALUE },
     };
     expect(() =>
       buildRenameMcpConfigPatch("old", "new", previous, edited),
@@ -1128,6 +1134,43 @@ describe("buildRenameMcpConfigPatch", () => {
     expect(() =>
       buildRenameMcpConfigPatch("old", "new", previous, edited),
     ).toThrow(/before renaming this mcp server/i);
+  });
+
+  // @spec MCP-003 — Settings map keys are stable MCP identities
+  it("renames when the stored credential is replaced in the same edit", () => {
+    const previous = {
+      transport: "http",
+      url: "https://u.example",
+      auth: { strategy: "bearer", value: REDACTED_MCP_SECRET_VALUE },
+    } as MCPServer;
+    const edited: MCPServerConfig = {
+      id: "s",
+      type: "shttp",
+      url: "https://u.example",
+      auth: { strategy: "bearer", value: "new-token" },
+    };
+    expect(buildRenameMcpConfigPatch("old", "new", previous, edited)).toEqual({
+      old: null,
+      new: {
+        transport: "http",
+        url: "https://u.example",
+        auth: { strategy: "bearer", value: "new-token" },
+      },
+    });
+  });
+
+  it("renames when the stored credential is cleared in the same edit", () => {
+    const previous = {
+      transport: "stdio",
+      command: "c",
+      env: { TOKEN: REDACTED_MCP_SECRET_VALUE },
+    } as MCPServer;
+    // The form omits env after the user removes every environment entry.
+    const edited: MCPServerConfig = { id: "s", type: "stdio", command: "c" };
+    expect(buildRenameMcpConfigPatch("old", "new", previous, edited)).toEqual({
+      old: null,
+      new: { transport: "stdio", command: "c" },
+    });
   });
 
   // @spec MCP-003 — Settings map keys are stable MCP identities
