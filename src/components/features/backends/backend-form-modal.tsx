@@ -1054,7 +1054,7 @@ function CloudLoginColumn({
                 aria-expanded={advancedOpen}
                 aria-controls={advancedPanelId}
                 data-testid={`${testIdRoot}-advanced-toggle`}
-                className="flex w-full cursor-pointer items-center justify-center gap-1 text-center text-xs text-muted transition-colors hover:text-content-2"
+                className="flex min-h-6 w-full cursor-pointer items-center justify-center gap-1 text-center text-xs text-muted transition-colors hover:text-content-2"
               >
                 <span>{t(I18nKey.BACKEND$ADVANCED)}</span>
                 <ChevronDownSmallIcon

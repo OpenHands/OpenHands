@@ -55,7 +55,7 @@ export function SegmentedToggle<T extends string>({
             }
             onClick={() => onChange(option.value)}
             className={cn(
-              "inline-flex items-center gap-1.5 px-2 py-0.5 rounded cursor-pointer transition-colors",
+              "inline-flex min-h-6 items-center gap-1.5 px-2 py-0.5 rounded cursor-pointer transition-colors",
               equalWidth && "flex-1 justify-center text-center",
               isActive
                 ? "bg-interactive-hover text-contrast"
