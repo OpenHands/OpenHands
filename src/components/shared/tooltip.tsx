@@ -74,7 +74,11 @@ export function Tooltip({
       />
       <HeroTooltip.Content
         placement={
-          placement?.replace("-", " ") as React.ComponentProps<
+          // React Aria names a side placement's edges top/bottom, not start/end.
+          placement
+            ?.replace(/^(left|right)-start$/, "$1 top")
+            .replace(/^(left|right)-end$/, "$1 bottom")
+            .replace("-", " ") as React.ComponentProps<
             typeof HeroTooltip.Content
           >["placement"]
         }
