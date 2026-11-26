@@ -81,7 +81,14 @@ export function Tooltip({
         offset={offset}
         shouldFlip={shouldFlip}
         showArrow={showArrow}
-        className={cn(className, classNames?.content)}
+        // HeroUI's tooltip style sets `word-break: break-all`, which splits
+        // ordinary words at the line end ("anal / ytics"). Wrap at spaces and
+        // break only a token too long for the line, such as a path or an ID.
+        className={cn(
+          "break-normal wrap-break-word",
+          className,
+          classNames?.content,
+        )}
       >
         {showArrow && <HeroTooltip.Arrow />}
         {content}
