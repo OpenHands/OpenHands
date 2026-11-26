@@ -11,6 +11,7 @@ import { planComponents } from "#/components/features/markdown/plan-components";
 import { useHandlePlanClick } from "#/hooks/use-handle-plan-click";
 import { useActiveConversation } from "#/hooks/query/use-active-conversation";
 import { useReadConversationFile } from "#/hooks/mutation/use-read-conversation-file";
+import { CopyToClipboardButton } from "#/components/shared/buttons/copy-to-clipboard-button";
 
 function PlannerTab() {
   const { t } = useTranslation("openhands");
@@ -64,20 +65,53 @@ function PlannerTab() {
       scrollDomToBottom();
     }
   }, [planContent, autoScroll, scrollDomToBottom]);
+
+  const [isCopy, setIsCopy] = React.useState(false);
+
+  const handleCopyToClipboard = async () => {
+    if (planContent) {
+      await navigator.clipboard.writeText(planContent);
+      setIsCopy(true);
+    }
+  };
+
+  React.useEffect(() => {
+    let timeout: NodeJS.Timeout;
+
+    if (isCopy) {
+      timeout = setTimeout(() => {
+        setIsCopy(false);
+      }, 2000);
+    }
+
+    return () => {
+      clearTimeout(timeout);
+    };
+  }, [isCopy]);
   const isPlanMode = conversationMode === "plan";
   const { handlePlanClick, hasPlanner, isCreatingConversation } =
     useHandlePlanClick();
 
   if (planContent !== null && planContent !== undefined) {
     return (
-      <div
-        ref={scrollContainerRef}
-        onScroll={(e) => onChatBodyScroll(e.currentTarget)}
-        className="flex flex-col w-full h-full p-4 overflow-auto"
-      >
-        <MarkdownRenderer includeStandard components={planComponents}>
-          {planContent}
-        </MarkdownRenderer>
+      <div className="relative w-full h-full">
+        <div className="absolute top-2 right-4 z-10 rounded-md bg-tertiary">
+          <CopyToClipboardButton
+            isHidden={false}
+            isDisabled={isCopy}
+            onClick={handleCopyToClipboard}
+            mode={isCopy ? "copied" : "copy"}
+          />
+        </div>
+        <div
+          ref={scrollContainerRef}
+          onScroll={(e) => onChatBodyScroll(e.currentTarget)}
+          className="flex flex-col w-full h-full p-4 overflow-auto"
+        >
+          <MarkdownRenderer includeStandard components={planComponents}>
+            {planContent}
+          </MarkdownRenderer>
+        </div>
       </div>
     );
   }
