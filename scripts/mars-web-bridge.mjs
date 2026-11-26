@@ -59,6 +59,7 @@ import {
   buildTunnelHost,
   createMarsTunnelBridge,
 } from "./mars-tunnel-bridge.mjs";
+import { OAUTH_CALLBACK_PATH, renderReturnPage } from "./mars-oauth.mjs";
 import { openSecretStore } from "./mars-secret-store.mjs";
 import { createProxyHandlers, rewriteJsonResponse } from "./proxy-utils.mjs";
 
@@ -83,12 +84,16 @@ const URL_FIELDS = new Set(["conversation_url"]);
 
 /**
  * Bridge methods a browser may call — an explicit allow-list, so a method
- * added to the desktop IPC surface is not exposed here until listed. OAuth is
- * left out: its implicit-grant flow needs a loopback redirect in a trusted
- * process.
+ * added to the desktop IPC surface is not exposed here until listed. The
+ * desktop's `signInWithOAuth` is left out: it opens a browser on the host.
+ * Pages sign in with `beginSignIn` and the calls after it instead.
  */
 export const RPC_METHODS = new Set([
   "getAuthState",
+  "beginSignIn",
+  "awaitSignIn",
+  "completeSignIn",
+  "cancelSignIn",
   "savePat",
   "setActiveConnection",
   "signOut",
@@ -244,6 +249,38 @@ function requestHostname(req) {
   } catch {
     return "";
   }
+}
+
+/** Hosts DigitalOcean accepts as loopback return addresses, on any port. */
+const OAUTH_LOOPBACK_HOSTS = new Set(["127.0.0.1", "::1", "localhost"]);
+
+/**
+ * Where DigitalOcean sends a browser back after sign-in. A page on a
+ * loopback address comes back to its own origin. Any other address cannot
+ * be registered with DigitalOcean, so the return goes to the same port on
+ * 127.0.0.1: on the Canvas host that is this server; on another device it
+ * fails to load, and the user pastes its address into the page instead.
+ *
+ * @returns {{ redirectUri: string, returnsHere: boolean }}
+ */
+function returnAddress(req) {
+  const hostname = requestHostname(req);
+  if (OAUTH_LOOPBACK_HOSTS.has(hostname)) {
+    return {
+      redirectUri: `${requestOrigin(req)}${OAUTH_CALLBACK_PATH}`,
+      returnsHere: true,
+    };
+  }
+  let port = "";
+  try {
+    port = new URL(`http://${req.headers.host ?? ""}`).port;
+  } catch {
+    // No usable Host header: the default port it is.
+  }
+  return {
+    redirectUri: `http://127.0.0.1${port ? `:${port}` : ""}${OAUTH_CALLBACK_PATH}`,
+    returnsHere: false,
+  };
 }
 
 /** `http://host[:port]` of the request as the browser sees it. */
@@ -449,9 +486,9 @@ export function createMarsWebBridge({
    * first; every other RPC_METHODS entry is `bridge[method](...args)`.
    */
   const overrides = {
-    getAuthState() {
-      // The web build takes personal access tokens only.
-      return { ...bridge.getAuthState(), canUseOAuth: false };
+    beginSignIn(req) {
+      const { redirectUri, returnsHere } = returnAddress(req);
+      return { ...bridge.beginSignIn({ redirectUri }), returnsHere };
     },
     async openTunnel(req, params) {
       const status = await bridge.openTunnel(params);
@@ -492,6 +529,35 @@ export function createMarsWebBridge({
         error: { message: error?.message ?? String(error), status },
       });
     }
+  }
+
+  /**
+   * Where DigitalOcean sends the browser back. It needs no key: the browser
+   * arrives from another site, so it carries no cookie (SameSite=Strict).
+   * The `state` in the address must match a sign-in a keyed caller began,
+   * once, and the PKCE proof never leaves the bridge, so a guessed or
+   * replayed address does nothing.
+   */
+  async function handleOAuthReturn(req, res) {
+    if (req.method !== "GET") {
+      writeJson(res, 405, { error: { message: "use GET" } });
+      return;
+    }
+    let page;
+    let status = 200;
+    try {
+      const state = await bridge.completeSignIn(req.url ?? "");
+      page = renderReturnPage({ ok: true, teamName: state?.active?.teamName });
+    } catch (error) {
+      status = 400;
+      page = renderReturnPage({ ok: false, message: error?.message });
+    }
+    res.writeHead(status, {
+      "Content-Type": "text/html; charset=utf-8",
+      "Cache-Control": "no-store",
+      "Referrer-Policy": "no-referrer",
+    });
+    res.end(page);
   }
 
   /**
@@ -556,6 +622,10 @@ export function createMarsWebBridge({
       if (pathOnly === HEALTH_PATH) {
         // Unauthenticated on purpose: it only says the bridge is here.
         writeJson(res, 200, { ok: true, authRequired: key !== null });
+        return true;
+      }
+      if (pathOnly === OAUTH_CALLBACK_PATH) {
+        void handleOAuthReturn(req, res);
         return true;
       }
       const auth = authorize(req);
