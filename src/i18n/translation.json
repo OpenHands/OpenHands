@@ -39851,6 +39851,24 @@
     "zh-TW": "Automation created.",
     "id": "Otomatisasi dibuat."
   },
+  "AUTOMATION_SETUP$CREATED_IN_FACTORY": {
+    "en": "Automation created in {{factory}}.",
+    "zh-CN": "已在 {{factory}} 中创建自动化。",
+    "zh-TW": "已在 {{factory}} 中建立自動化。",
+    "de": "Automatisierung in {{factory}} erstellt.",
+    "ko-KR": "{{factory}}에 자동화를 만들었습니다.",
+    "no": "Automasjon opprettet i {{factory}}.",
+    "it": "Automazione creata in {{factory}}.",
+    "pt": "Automação criada em {{factory}}.",
+    "es": "Automatización creada en {{factory}}.",
+    "ar": "تم إنشاء الأتمتة في {{factory}}.",
+    "fr": "Automatisation créée dans {{factory}}.",
+    "tr": "Otomasyon {{factory}} içinde oluşturuldu.",
+    "ja": "{{factory}} に自動化を作成しました。",
+    "uk": "Автоматизацію створено в {{factory}}.",
+    "ca": "Automatització creada a {{factory}}.",
+    "id": "Otomasi dibuat di {{factory}}."
+  },
   "AUTOMATION_SETUP$ENTRYPOINT": {
     "ar": "نقطة الدخول",
     "ca": "Punt d’entrada",

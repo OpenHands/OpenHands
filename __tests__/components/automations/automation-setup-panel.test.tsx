@@ -2101,6 +2101,70 @@ describe("AutomationSetupPanel", () => {
       ).not.toHaveProperty("factory_id");
     });
 
+    it("opens the new automation under the factory the user picked, not the one the form was opened from", async () => {
+      // Arrange
+      const user = userEvent.setup();
+      renderPanel(
+        {
+          prompt: "Review every pull request",
+          kind: "prompt",
+          factoryId: "f-1",
+        },
+        "conv-1",
+        null,
+        undefined,
+        undefined,
+        "?factory=f-1",
+      );
+      const picker = await screen.findByTestId("automation-setup-factory");
+      await screen.findByRole("option", { name: "Docs" });
+
+      // Act
+      await user.selectOptions(picker, "Docs");
+      await user.click(screen.getByTestId("automation-setup-create"));
+
+      // Assert
+      await waitFor(() =>
+        expect(mockNavigate).toHaveBeenCalledWith(
+          "/automations/automation-1?factory=f-2",
+        ),
+      );
+      expect(mockToastSuccess).toHaveBeenCalledWith(
+        I18nKey.AUTOMATION_SETUP$CREATED_IN_FACTORY,
+      );
+    });
+
+    it("opens the new automation without a factory context when the user drops the factory", async () => {
+      // Arrange
+      const user = userEvent.setup();
+      renderPanel(
+        {
+          prompt: "Review every pull request",
+          kind: "prompt",
+          factoryId: "f-1",
+        },
+        "conv-1",
+        null,
+        undefined,
+        undefined,
+        "?factory=f-1",
+      );
+      const picker = await screen.findByTestId("automation-setup-factory");
+      await screen.findByRole("option", { name: "Core SDLC" });
+
+      // Act
+      await user.selectOptions(picker, I18nKey.AUTOMATIONS$CHANGE_FACTORY_NONE);
+      await user.click(screen.getByTestId("automation-setup-create"));
+
+      // Assert
+      await waitFor(() =>
+        expect(mockNavigate).toHaveBeenCalledWith("/automations/automation-1"),
+      );
+      expect(mockToastSuccess).toHaveBeenCalledWith(
+        I18nKey.AUTOMATION_SETUP$CREATED,
+      );
+    });
+
     it("does not offer the picker when editing an existing automation", () => {
       // Act
       renderPanel(setupDraftFromAutomation(savedReviewer()));

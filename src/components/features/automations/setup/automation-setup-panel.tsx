@@ -1998,7 +1998,16 @@ export function AutomationSetupPanel({
         );
       }
       setSaveState("saved");
-      toast.success(t(I18nKey.AUTOMATION_SETUP$CREATED));
+      const createdFactory = factories?.find(
+        (factory) => factory.id === newAutomationFactoryId,
+      );
+      toast.success(
+        createdFactory
+          ? t(I18nKey.AUTOMATION_SETUP$CREATED_IN_FACTORY, {
+              factory: createdFactory.name,
+            })
+          : t(I18nKey.AUTOMATION_SETUP$CREATED),
+      );
       invalidateAutomationLists(queryClient);
       // The draft has been finalized into a real automation; drop the
       // persisted draft row so it does not linger as an incomplete setup.
@@ -2016,7 +2025,10 @@ export function AutomationSetupPanel({
       }
       if (typeof created.id === "string")
         navigate(
-          withFactoryContext(automationDetailPath(created.id), factoryContext),
+          withFactoryContext(
+            automationDetailPath(created.id),
+            newAutomationFactoryId,
+          ),
         );
     } catch (error) {
       displayErrorToast(
