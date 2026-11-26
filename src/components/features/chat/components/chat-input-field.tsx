@@ -14,11 +14,13 @@ interface ChatInputFieldProps {
    * Plan mode still wins so the plan hint is never hidden.
    */
   placeholder?: string;
-  onInput: () => void;
+  onInput: (e?: React.FormEvent<HTMLDivElement>) => void;
   onPaste: (e: React.ClipboardEvent) => void;
   onKeyDown: (e: React.KeyboardEvent) => void;
   onFocus?: () => void;
   onBlur?: () => void;
+  onCompositionStart?: () => void;
+  onCompositionEnd?: () => void;
 }
 
 export function ChatInputField({
@@ -30,6 +32,8 @@ export function ChatInputField({
   onKeyDown,
   onFocus,
   onBlur,
+  onCompositionStart,
+  onCompositionEnd,
 }: ChatInputFieldProps) {
   const { t } = useTranslation("openhands");
 
@@ -78,6 +82,8 @@ export function ChatInputField({
           onKeyDown={onKeyDown}
           onFocus={onFocus}
           onBlur={onBlur}
+          onCompositionStart={onCompositionStart}
+          onCompositionEnd={onCompositionEnd}
         />
       </div>
     </div>
