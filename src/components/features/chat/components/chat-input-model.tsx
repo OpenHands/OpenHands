@@ -206,6 +206,7 @@ export function ChatInputModelMenuContent({
 }
 
 export function ChatInputModel() {
+  const { t } = useTranslation("openhands");
   const model = useChatInputModelState();
   const [isPopoverOpen, setIsPopoverOpen] = React.useState(false);
   const triggerRef = React.useRef<HTMLButtonElement>(null);
@@ -214,12 +215,20 @@ export function ChatInputModel() {
     triggerRef,
   );
 
-  if (!model.displayModel) {
+  // Mount whenever there is a label or an ACP picker with selectable models.
+  // A null conversation.llm_model used to hide the whole trigger even when
+  // showAcpPicker was true (session had reported models).
+  if (!model.displayModel && !model.showAcpPicker) {
     return null;
   }
 
+  const pillLabel =
+    model.displayModel ??
+    model.agentDefaultLabel ??
+    t(I18nKey.SETTINGS$AGENT_MODEL_AGENT_DEFAULT);
+
   const truncatedModelLabel = truncateModelLabel(
-    model.displayModel,
+    pillLabel,
     model.isAcpContext ? ACP_MODEL_LABEL_MAX_CHARS : MODEL_LABEL_MAX_CHARS,
   );
 
@@ -229,7 +238,7 @@ export function ChatInputModel() {
         ref={triggerRef}
         type="button"
         className={chatInputPillButtonClassName}
-        title={model.displayModel}
+        title={pillLabel}
         data-testid="chat-input-llm-model"
         aria-expanded={isPopoverOpen}
         aria-haspopup="dialog"
