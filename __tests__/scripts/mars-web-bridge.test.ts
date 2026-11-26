@@ -366,6 +366,9 @@ describe("createMarsWebBridge", () => {
     expect(seen.headers.host).toBe(new URL(upstream.origin).host);
     expect(seen.headers["accept-encoding"]).toBe("identity");
     expect(seen.headers["x-forwarded-for"]).toBeUndefined();
+    expect(seen.headers["x-forwarded-host"]).toBeUndefined();
+    expect(seen.headers["x-forwarded-port"]).toBeUndefined();
+    expect(seen.headers["x-forwarded-proto"]).toBeUndefined();
     const proxyBase = `${web.origin}/mars/sessions/${SESSION_ID}`;
     expect(body).toEqual({
       id: "c1",
@@ -453,6 +456,9 @@ describe("createMarsWebBridge", () => {
     const seen = upstream.seen.ws[0];
     expect(seen.url).toBe("/sockets/session/c1?after_seq=0");
     expect(seen.headers.authorization).toBeUndefined();
+    expect(seen.headers["x-forwarded-host"]).toBeUndefined();
+    expect(seen.headers["x-forwarded-port"]).toBeUndefined();
+    expect(seen.headers["x-forwarded-proto"]).toBeUndefined();
     client.close();
   });
 

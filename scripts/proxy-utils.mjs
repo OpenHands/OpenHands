@@ -366,7 +366,7 @@ export function createProxyHandlers({
    *   rewriteJsonResponse).
    */
   function proxyHttp(req, res, target, { headers, onResponse } = {}) {
-    forwardClientOrigin(req);
+    if (xfwd) forwardClientOrigin(req);
     metrics.activeHttpRequests += 1;
     metrics.totalHttpRequests += 1;
     const finish = once(() => {
@@ -405,7 +405,7 @@ export function createProxyHandlers({
   }
 
   function proxyWebSocket(req, socket, head, target) {
-    forwardClientOrigin(req);
+    if (xfwd) forwardClientOrigin(req);
     metrics.activeWebSockets += 1;
     metrics.totalWebSockets += 1;
     const finish = once(() => {
