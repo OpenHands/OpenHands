@@ -17,6 +17,7 @@ import { LlmSettingsLocalView } from "#/components/features/settings/llm-profile
 import { I18nKey } from "#/i18n/declaration";
 import { Settings, SettingsSchema, SettingsScope } from "#/types/settings";
 import { extractModelAndProvider } from "#/utils/extract-model-and-provider";
+import { isValidOptionalHttpUrl } from "#/utils/optional-http-url";
 import {
   inferInitialView,
   type SettingsFormValues,
@@ -234,6 +235,7 @@ export function LlmSettingsScreen({
         typeof values["llm.base_url"] === "string"
           ? values["llm.base_url"]
           : "";
+      const baseUrlInvalid = !isValidOptionalHttpUrl(baseUrlValue);
       const showOpenHandsApiKeyHelp = isOpenHandsProviderModel(modelValue);
       const authType = resolveLlmAuthType(values[LLM_AUTH_TYPE_KEY]);
       const isSubscriptionAuth = authType === LLM_AUTH_TYPE_SUBSCRIPTION;
@@ -522,6 +524,11 @@ export function LlmSettingsScreen({
                       placeholder="https://api.openai.com"
                       onChange={(value) => onChange("llm.base_url", value)}
                       isDisabled={isDisabled}
+                      error={
+                        baseUrlInvalid
+                          ? t(I18nKey.SETTINGS$MCP_ERROR_URL_INVALID_PROTOCOL)
+                          : undefined
+                      }
                     />
                   )}
 

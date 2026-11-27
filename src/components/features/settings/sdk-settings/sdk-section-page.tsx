@@ -22,6 +22,7 @@ import {
   displaySuccessToast,
 } from "#/utils/custom-toast-handlers";
 import { retrieveAxiosErrorMessage } from "#/utils/retrieve-axios-error-message";
+import { isValidOptionalHttpUrl } from "#/utils/optional-http-url";
 import {
   buildInitialSettingsFormValues,
   buildSdkSettingsPayload,
@@ -31,6 +32,7 @@ import {
   hasCriticalSettings,
   hasMinorSettings,
   inferInitialView,
+  isUrlSettingsField,
   isValidSettingsSchema,
   normalizeComparableValue,
   SettingsDirtyState,
@@ -704,6 +706,18 @@ export function SdkSectionPage({
 
   const isDirty = Object.keys(flatDirty).length > 0;
   const saveControlIsDirty = isDirty || extraDirty;
+  const hasInvalidOptionalHttpUrl = resolvedSources.some((src) => {
+    if (!src.filteredSchema) return false;
+    const sourceValues = valuesBySource[src.settingsSource] ?? {};
+    return src.filteredSchema.sections.some((section) =>
+      section.fields.some(
+        (field) =>
+          isUrlSettingsField(field) &&
+          typeof sourceValues[field.key] === "string" &&
+          !isValidOptionalHttpUrl(String(sourceValues[field.key])),
+      ),
+    );
+  });
   React.useEffect(() => {
     if (!onSaveControlChange) return;
     onSaveControlChange({
@@ -818,7 +832,11 @@ export function SdkSectionPage({
               testId="save-button"
               type="button"
               variant="primary"
-              isDisabled={isPending || (!isDirty && !extraDirty)}
+              isDisabled={
+                isPending ||
+                hasInvalidOptionalHttpUrl ||
+                (!isDirty && !extraDirty)
+              }
               onClick={handleSave}
             >
               {isPending

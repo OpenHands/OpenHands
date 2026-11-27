@@ -21,6 +21,7 @@ import { mapProvider } from "#/utils/map-provider";
 import { formControlSettingsFieldClassName } from "#/utils/form-control-classes";
 import { cn } from "#/utils/utils";
 import { heroUiAutocompleteSelectorButtonClassName } from "#/ui/combobox-caret";
+import { isValidOptionalHttpUrl } from "#/utils/optional-http-url";
 
 const DEFAULT_PROVIDER = "custom";
 
@@ -85,11 +86,13 @@ export function ProviderConnectionModal({
   const isPending = createConnection.isPending || updateConnection.isPending;
   const trimmedName = displayName.trim();
   const trimmedKey = apiKey.trim();
+  const baseUrlInvalid = !isValidOptionalHttpUrl(baseUrl);
   // On create the key is required; on edit an empty key means "leave unchanged".
   const isValid =
     Boolean(trimmedName) &&
     Boolean(provider?.trim()) &&
-    (!isCreate || Boolean(trimmedKey));
+    (!isCreate || Boolean(trimmedKey)) &&
+    !baseUrlInvalid;
 
   const selectedProviderMissing = Boolean(
     provider && !providers.some((candidate) => candidate.name === provider),
@@ -292,6 +295,11 @@ export function ProviderConnectionModal({
           placeholder="https://api.openai.com"
           onChange={setBaseUrl}
           showOptionalTag
+          error={
+            baseUrlInvalid
+              ? t(I18nKey.SETTINGS$MCP_ERROR_URL_INVALID_PROTOCOL)
+              : undefined
+          }
         />
       </div>
     </ApiKeyModalBase>

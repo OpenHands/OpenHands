@@ -4,12 +4,15 @@ import { OptionalTag } from "#/components/features/settings/optional-tag";
 import { SettingsDropdownInput } from "#/components/features/settings/settings-dropdown-input";
 import { SettingsInput } from "#/components/features/settings/settings-input";
 import { SettingsSwitch } from "#/components/features/settings/settings-switch";
+import { I18nKey } from "#/i18n/declaration";
 import { SettingsFieldSchema } from "#/types/settings";
+import { isValidOptionalHttpUrl } from "#/utils/optional-http-url";
 import {
   getSettingsFieldConstraints,
   resolveSchemaChoiceLabel,
   resolveSchemaFieldLabel,
 } from "#/utils/sdk-settings-field-metadata";
+import { isUrlSettingsField } from "#/utils/sdk-settings-schema";
 import { cn } from "#/utils/utils";
 import {
   formControlMultilineFieldClassName,
@@ -39,10 +42,6 @@ function isJsonField(field: SettingsFieldSchema): boolean {
   return field.value_type === "array" || field.value_type === "object";
 }
 
-function isUrlField(field: SettingsFieldSchema): boolean {
-  return field.key.endsWith("url") || field.key.endsWith("_url");
-}
-
 function getInputType(
   field: SettingsFieldSchema,
 ): React.HTMLInputTypeAttribute {
@@ -52,7 +51,7 @@ function getInputType(
   if (field.value_type === "integer" || field.value_type === "number") {
     return "number";
   }
-  if (field.value_type === "string" && isUrlField(field)) {
+  if (field.value_type === "string" && isUrlSettingsField(field)) {
     return "url";
   }
   return "text";
@@ -72,6 +71,12 @@ export function SchemaField({
   const { t } = useTranslation("openhands");
   const label = resolveSchemaFieldLabel(t, field.key, field.label);
   const constraints = getSettingsFieldConstraints(field.key);
+  const urlError =
+    field.value_type === "string" &&
+    isUrlSettingsField(field) &&
+    !isValidOptionalHttpUrl(String(value ?? ""))
+      ? t(I18nKey.SETTINGS$MCP_ERROR_URL_INVALID_PROTOCOL)
+      : undefined;
 
   if (isBooleanField(field)) {
     return (
@@ -162,6 +167,7 @@ export function SchemaField({
         min={constraints?.min}
         max={constraints?.max}
         step={constraints?.step}
+        error={urlError}
       />
       <FieldHelp field={field} />
     </div>

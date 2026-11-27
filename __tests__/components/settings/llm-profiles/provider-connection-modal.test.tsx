@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -63,6 +63,11 @@ const existingConnection: ProviderConnection = {
 };
 
 describe("ProviderConnectionModal provider combobox", () => {
+  beforeEach(() => {
+    createMutate.mockReset();
+    updateMutate.mockReset();
+  });
+
   it("shows the provider combobox in edit mode with a provider missing from the list", async () => {
     // Arrange
     renderWithQuery(
@@ -123,6 +128,79 @@ describe("ProviderConnectionModal provider combobox", () => {
 
     // Assert: the committed provider is kept.
     await waitFor(() => expect(providerInput).toHaveValue("Anthropic"));
+  });
+
+  it("blocks save and shows an inline error for a malformed base URL", async () => {
+    const user = userEvent.setup();
+    renderWithQuery(<ProviderConnectionModal isCreate onClose={vi.fn()} />);
+
+    await user.type(
+      screen.getByTestId("provider-connection-name-input"),
+      "My connection",
+    );
+    const providerInput = screen.getByTestId(
+      "provider-connection-provider-input",
+    );
+    await user.click(providerInput);
+    await user.keyboard("open{ArrowDown}{Enter}");
+    await waitFor(() => expect(providerInput).toHaveValue("OpenAI"));
+    await user.type(
+      screen.getByTestId("provider-connection-api-key-input"),
+      "sk-test",
+    );
+    await user.type(
+      screen.getByTestId("provider-connection-base-url-input"),
+      "not-a-url",
+    );
+
+    expect(
+      screen.getByTestId("provider-connection-base-url-input-error"),
+    ).toHaveTextContent("SETTINGS$MCP_ERROR_URL_INVALID_PROTOCOL");
+    expect(screen.getByTestId("provider-connection-submit")).toBeDisabled();
+
+    await user.click(screen.getByTestId("provider-connection-submit"));
+    expect(createMutate).not.toHaveBeenCalled();
+  });
+
+  it("enables save for an empty or valid http(s) base URL", async () => {
+    const user = userEvent.setup();
+    createMutate.mockResolvedValue({
+      id: "conn-new",
+      display_name: "My connection",
+      provider: "openai",
+      base_url: null,
+      created_at: 0,
+      updated_at: 0,
+      api_key_set: true,
+    });
+    renderWithQuery(<ProviderConnectionModal isCreate onClose={vi.fn()} />);
+
+    await user.type(
+      screen.getByTestId("provider-connection-name-input"),
+      "My connection",
+    );
+    const providerInput = screen.getByTestId(
+      "provider-connection-provider-input",
+    );
+    await user.click(providerInput);
+    await user.keyboard("open{ArrowDown}{Enter}");
+    await waitFor(() => expect(providerInput).toHaveValue("OpenAI"));
+    await user.type(
+      screen.getByTestId("provider-connection-api-key-input"),
+      "sk-test",
+    );
+
+    const submit = screen.getByTestId("provider-connection-submit");
+    expect(submit).toBeEnabled();
+
+    const baseUrlInput = screen.getByTestId(
+      "provider-connection-base-url-input",
+    );
+    await user.type(baseUrlInput, "https://api.openai.com ");
+    expect(
+      screen.queryByTestId("provider-connection-base-url-input-error"),
+    ).not.toBeInTheDocument();
+    expect(submit).toBeEnabled();
   });
 
   it("renders a single field border on the provider combobox", () => {

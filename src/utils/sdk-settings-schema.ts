@@ -7,6 +7,7 @@ import {
   SettingsValue,
 } from "#/types/settings";
 import { getSettingsFieldConstraints } from "#/utils/sdk-settings-field-metadata";
+import { isValidOptionalHttpUrl } from "#/utils/optional-http-url";
 import {
   LLM_AUTH_TYPE_KEY,
   LLM_SUBSCRIPTION_VENDOR_KEY,
@@ -331,6 +332,11 @@ export function isSettingsFieldVisible(
   });
 }
 
+/** True when a schema field is rendered and validated as an http(s) URL. */
+export function isUrlSettingsField(field: SettingsFieldSchema): boolean {
+  return field.key.endsWith("url") || field.key.endsWith("_url");
+}
+
 function parseBooleanFieldValue(rawValue: string | boolean): boolean | null {
   if (typeof rawValue === "boolean") {
     return rawValue;
@@ -415,6 +421,17 @@ export function coerceFieldValue(
   }
 
   const stringValue = String(rawValue);
+  if (isUrlSettingsField(field)) {
+    const trimmed = stringValue.trim();
+    if (!trimmed) {
+      return field.secret ? stringValue : null;
+    }
+    if (!isValidOptionalHttpUrl(trimmed)) {
+      throw new Error(`${field.label} must use http:// or https://`);
+    }
+    return trimmed;
+  }
+
   if (stringValue === "" && !field.secret) {
     return null;
   }

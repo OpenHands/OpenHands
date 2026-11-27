@@ -39,6 +39,26 @@ function buildField(
 }
 
 describe("SchemaField", () => {
+  it("shows an inline error for a malformed URL field", () => {
+    render(
+      <SchemaField
+        field={buildField({
+          key: "llm.base_url",
+          label: "Base URL",
+          value_type: "string",
+          default: null,
+        })}
+        value="not-a-url"
+        isDisabled={false}
+        onChange={() => {}}
+      />,
+    );
+
+    expect(
+      screen.getByTestId("sdk-settings-llm.base_url-error"),
+    ).toHaveTextContent("SETTINGS$MCP_ERROR_URL_INVALID_PROTOCOL");
+  });
+
   it("constrains the Top P input to the valid numeric range", () => {
     render(
       <SchemaField
