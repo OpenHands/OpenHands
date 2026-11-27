@@ -223,6 +223,30 @@ describe("LlmSettingsScreen", () => {
     expect(screen.queryByTestId("set-indicator")).not.toBeInTheDocument();
   });
 
+  it("shows the <hidden> placeholder and key-set indicator for an embedded profile with a stored key, without putting the key in the field", async () => {
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+      buildSettings({ llm_model: "openai/gpt-4o", llm_api_key_set: false }),
+    );
+
+    renderLlmSettingsScreen({
+      embedded: true,
+      hideSaveButton: true,
+      apiKeyIsSet: true,
+      initialValueOverrides: {
+        "llm.model": "openai/gpt-4o",
+        "llm.api_key": "",
+        "llm.base_url": "",
+      },
+    });
+
+    await screen.findByTestId("llm-settings-screen");
+
+    const input = screen.getByTestId("llm-api-key-input");
+    expect(input).toHaveValue("");
+    expect(input).toHaveAttribute("placeholder", "<hidden>");
+    expect(screen.getByTestId("set-indicator")).toBeInTheDocument();
+  });
+
   it("renders ChatGPT subscription settings without API key fields", async () => {
     vi.spyOn(LLMSubscriptionService, "getOpenAIStatus").mockResolvedValue({
       vendor: "openai",
