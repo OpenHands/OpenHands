@@ -6,6 +6,8 @@ export interface ProfileChoice {
   label?: string;
   description?: string | null;
   selectable?: boolean;
+  editable?: boolean;
+  deletable?: boolean;
 }
 
 interface ProfileChoiceListProps {
@@ -70,7 +72,9 @@ export function ProfileChoiceList({
                 ) : null}
               </span>
             </label>
-            {choice.selectable !== false && onEdit ? (
+            {choice.selectable !== false &&
+            choice.editable !== false &&
+            onEdit ? (
               <button
                 type="button"
                 onClick={() => onEdit(choice.name)}
@@ -82,7 +86,9 @@ export function ProfileChoiceList({
                 {t(I18nKey.BUTTON$EDIT)}
               </button>
             ) : null}
-            {choice.selectable !== false && onDelete ? (
+            {choice.selectable !== false &&
+            choice.deletable !== false &&
+            onDelete ? (
               <button
                 type="button"
                 onClick={() => onDelete(choice.name)}

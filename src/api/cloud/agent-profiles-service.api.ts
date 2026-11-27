@@ -25,6 +25,7 @@ import { callCloudProxy } from "./proxy";
  */
 
 const BASE = "/api/agent-profiles";
+const PERSONAL_SCOPE = "scope=personal";
 
 function activeCloudBackend(): Backend {
   const active = getActiveBackend().backend;
@@ -59,7 +60,7 @@ export async function saveCloudAgentProfile(
   return callCloudProxy<AgentProfileMutationResponse>({
     backend: activeCloudBackend(),
     method: "POST",
-    path: `${BASE}/${encodeURIComponent(name)}`,
+    path: `${BASE}/${encodeURIComponent(name)}?${PERSONAL_SCOPE}`,
     body: profile,
   });
 }
@@ -70,7 +71,7 @@ export async function deleteCloudAgentProfile(
   return callCloudProxy<AgentProfileMutationResponse>({
     backend: activeCloudBackend(),
     method: "DELETE",
-    path: `${BASE}/${encodeURIComponent(name)}`,
+    path: `${BASE}/${encodeURIComponent(name)}?${PERSONAL_SCOPE}`,
   });
 }
 
@@ -81,7 +82,7 @@ export async function renameCloudAgentProfile(
   return callCloudProxy<AgentProfileMutationResponse>({
     backend: activeCloudBackend(),
     method: "POST",
-    path: `${BASE}/${encodeURIComponent(name)}/rename`,
+    path: `${BASE}/${encodeURIComponent(name)}/rename?${PERSONAL_SCOPE}`,
     body: { new_name: newName },
   });
 }

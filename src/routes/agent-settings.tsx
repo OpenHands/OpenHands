@@ -1489,7 +1489,9 @@ export function AgentSettingsScreen({
                   items={secretCatalog}
                   selected={secretCatalog.map(({ name }) => name)}
                   onDelete={setSecretToDelete}
-                  deletableNames={savedSecrets?.map(({ name }) => name)}
+                  deletableNames={savedSecrets
+                    ?.filter(({ scope }) => scope !== "organization")
+                    .map(({ name }) => name)}
                   isDeleteDisabled={isSaving || deleteSecret.isPending}
                 />
               )}
@@ -1542,7 +1544,9 @@ export function AgentSettingsScreen({
                     )
                   }
                   onDelete={setSecretToDelete}
-                  deletableNames={savedSecrets?.map(({ name }) => name)}
+                  deletableNames={savedSecrets
+                    ?.filter(({ scope }) => scope !== "organization")
+                    .map(({ name }) => name)}
                   isDeleteDisabled={isSaving || deleteSecret.isPending}
                 />
               ) : (

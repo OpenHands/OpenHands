@@ -3,9 +3,8 @@
  * active backend so callers (hooks, the settings manager) stay backend-agnostic:
  * - local agent-server: the SDK's ProfilesClient (`/api/profiles`), created
  *   per-call to pick up current backend configuration;
- * - cloud app-server: `src/api/cloud/profiles-service.api.ts` (the org-gated
- *   `/api/organizations/{orgId}/profiles` routes, or the per-user settings
- *   route as a fallback) via the org-scoped cloud proxy.
+ * - cloud app-server: `src/api/cloud/profiles-service.api.ts` lists inherited
+ *   and personal profiles via options and writes personal profiles via settings.
  * This mirrors how SettingsService branches to fetchCloudSettings().
  *
  * Uses ProfilesClient from @openhands/typescript-client v0.2.0+.
@@ -41,16 +40,14 @@ import {
   saveCloudProfile,
 } from "../cloud/profiles-service.api";
 
-/**
- * Profile summaries carry an optional `provider_connection_id` (the shared
- * provider connection a profile links to), but `@openhands/typescript-client`
- * predates that field. Widen the client types here so consumers can read it; it
- * stays optional, so a client response without the field is still assignable.
- */
+/** The SDK profile summary predates provider links and Enterprise scope metadata. */
 export interface ProfileInfo extends ClientProfileInfo {
   provider_connection_id?: string | null;
   /** True when provider_connection_id is set but the referenced connection no longer exists. */
   provider_connection_broken?: boolean;
+  scope?: "personal" | "organization";
+  writable?: boolean;
+  deletable?: boolean;
 }
 
 export interface ProfileListResponse extends Omit<

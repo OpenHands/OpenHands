@@ -2,6 +2,8 @@ import { ToolClient } from "@openhands/typescript-client/clients";
 import type { ToolCatalogEntry } from "@openhands/typescript-client";
 
 import { getAgentServerClientOptions } from "../agent-server-client-options";
+import { getActiveBackend } from "../backend-registry/active-store";
+import { callCloudProxy } from "../cloud/proxy";
 
 export type { ToolCatalogEntry };
 
@@ -37,9 +39,15 @@ function assertValidCatalog(
 class ToolCatalogService {
   /** Tools this server offers, in its order. */
   static async getCatalog(): Promise<ToolCatalogEntry[]> {
-    const response = await new ToolClient(
-      getAgentServerClientOptions(),
-    ).getToolCatalog();
+    const backend = getActiveBackend().backend;
+    const response =
+      backend.kind === "cloud"
+        ? await callCloudProxy<{ tools?: unknown }>({
+            backend,
+            method: "GET",
+            path: "/api/tools/catalog",
+          })
+        : await new ToolClient(getAgentServerClientOptions()).getToolCatalog();
     const tools: unknown = response?.tools;
     if (!Array.isArray(tools)) {
       throw new Error(

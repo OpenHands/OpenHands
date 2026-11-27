@@ -44,6 +44,11 @@ export function AgentProfileRow({
   const isProtected =
     backend.kind === "local" &&
     profile.name === WELL_KNOWN_DEFAULT_AGENT_PROFILE_NAME;
+  const isInheritedOrgProfile =
+    backend.kind === "cloud" && profile.scope === "org";
+  const inheritedReadOnlyReason = isInheritedOrgProfile
+    ? t(I18nKey.SETTINGS$SHARED_RESOURCE_DELETE_WARNING)
+    : undefined;
   const [menuOpen, setMenuOpen] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
 
@@ -98,10 +103,12 @@ export function AgentProfileRow({
               onDuplicate={() => onDuplicate(profile)}
               onSetActive={() => onActivate(profile)}
               onDelete={() => onDelete(profile)}
+              editDisabledReason={inheritedReadOnlyReason}
               deleteDisabledReason={
-                isProtected
+                inheritedReadOnlyReason ||
+                (isProtected
                   ? t(I18nKey.SETTINGS$AGENT_PROFILE_DEFAULT_LOCKED)
-                  : undefined
+                  : undefined)
               }
               isActive={isActive}
               isActivating={isActivating}

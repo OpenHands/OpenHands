@@ -28,6 +28,8 @@ interface AgentProfileActionsMenuProps {
   onDuplicate: () => void;
   onSetActive: () => void;
   onDelete: () => void;
+  /** Disables Edit and explains why. */
+  editDisabledReason?: string;
   /** Disables Delete and explains why. */
   deleteDisabledReason?: string;
   isActive: boolean;
@@ -46,6 +48,7 @@ export function AgentProfileActionsMenu({
   onDuplicate,
   onSetActive,
   onDelete,
+  editDisabledReason,
   deleteDisabledReason,
   isActive,
   isActivating,
@@ -165,6 +168,8 @@ export function AgentProfileActionsMenu({
         onClick={() => handleAction(onEdit)}
         onKeyDown={handleKeyDown}
         menuItemsRef={menuItemsRef}
+        disabled={Boolean(editDisabledReason)}
+        title={editDisabledReason}
         testId="agent-profile-edit"
       />
       <MenuItem

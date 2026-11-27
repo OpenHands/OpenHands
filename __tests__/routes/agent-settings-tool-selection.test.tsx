@@ -240,7 +240,7 @@ it("describes a stored tool the picker would otherwise filter out", async () => 
   ).toHaveTextContent("Browse the web");
 });
 
-it("hides tools on a cloud backend and leaves the stored selection alone", async () => {
+it("shows tools on Cloud and preserves the stored profile selection", async () => {
   setRegisteredBackends([
     {
       id: "cloud",
@@ -272,10 +272,11 @@ it("hides tools on a cloud backend and leaves the stored selection alone", async
     </MemoryRouter>,
   );
 
-  await waitFor(() => expect(control).not.toBeNull());
-  expect(
-    screen.queryByTestId("agent-settings-tools-mode"),
-  ).not.toBeInTheDocument();
-  expect(ToolCatalogService.getCatalog).not.toHaveBeenCalled();
-  expect(control!.buildAgentProfileFields()).not.toHaveProperty("tools");
+  expect(await screen.findByTestId("agent-settings-tools-mode")).toBeEnabled();
+  expect(ToolCatalogService.getCatalog).toHaveBeenCalledOnce();
+  await waitFor(() =>
+    expect(control!.buildAgentProfileFields()).toMatchObject({
+      tools: [{ name: "terminal", params: {} }],
+    }),
+  );
 });
