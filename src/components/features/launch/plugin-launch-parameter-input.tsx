@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { SettingsInput } from "#/components/features/settings/settings-input";
 import { cn } from "#/utils/utils";
 
@@ -34,6 +35,15 @@ export interface PluginLaunchParameterInputProps {
   ) => void;
 }
 
+type InferredType = "number" | "boolean" | "string";
+
+function inferType(value: unknown): InferredType | undefined {
+  if (typeof value === "number") return "number";
+  if (typeof value === "boolean") return "boolean";
+  if (value === undefined || value === null) return undefined;
+  return "string";
+}
+
 export function PluginLaunchParameterInput({
   pluginIndex,
   paramKey,
@@ -51,15 +61,15 @@ export function PluginLaunchParameterInput({
   const displayLabel = required
     ? `${label ?? paramKey} *`
     : (label ?? paramKey);
+  // Without a schema, the widget follows the badge's own value. Remember the
+  // type it arrived with: clearing a number field leaves `undefined`, and the
+  // field must stay a number field rather than become free text whose next
+  // value is submitted as a string.
+  const [initialType] = useState(() => inferType(paramValue));
   // Schema type wins over runtime typeof: an integer rendered as "5" is still
   // an integer, and a boolean with no value is still a checkbox.
   const effectiveType =
-    fieldType ??
-    (typeof paramValue === "number"
-      ? "number"
-      : typeof paramValue === "boolean"
-        ? "boolean"
-        : "string");
+    fieldType ?? inferType(paramValue) ?? initialType ?? "string";
 
   if (options && options.length > 0) {
     // Recover the raw enum value (number/boolean/string) by matching the
