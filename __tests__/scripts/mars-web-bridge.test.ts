@@ -29,6 +29,7 @@ import {
   createMarsWebBridge,
   mountMarsWebBridge,
   rewriteAgentServerUrls,
+  scopeSessionCookies,
 } from "../../scripts/mars-web-bridge.mjs";
 
 // Lets a test take the home folder away; every other call is the real one.
@@ -66,6 +67,7 @@ function closeServer(server: Server): void {
  */
 const UPSTREAM_CONVERSATION_PATH = "/mars-upstream/conversation";
 const UPSTREAM_ECHO_PATH = "/mars-upstream/echo";
+const UPSTREAM_COOKIE_PATH = "/mars-upstream/cookie";
 
 async function startFakeAgentServer() {
   const seen: { http: IncomingMessage[]; ws: IncomingMessage[] } = {
@@ -92,6 +94,17 @@ async function startFakeAgentServer() {
     if (req.url === "/mars-upstream/large") {
       res.writeHead(200, { "Content-Type": "application/json" });
       res.end(largeBody);
+      return;
+    }
+    if (req.url === UPSTREAM_COOKIE_PATH) {
+      // What the agent-server's POST /api/auth/workspace-session answers.
+      res.writeHead(204, {
+        "Set-Cookie": [
+          'oh_workspace_session_key=""; HttpOnly; Max-Age=315360000; Path=/api/conversations; SameSite=none; Secure; Partitioned',
+          "theme=dark; Domain=localhost; Path=/",
+        ],
+      });
+      res.end();
       return;
     }
     if (req.url === "/mars-upstream/reset") {
@@ -244,6 +257,35 @@ describe("rewriteAgentServerUrls", () => {
   });
 });
 
+describe("scopeSessionCookies", () => {
+  const prefix = "/mars/sessions/sess_a";
+
+  it("moves an explicit path under the session prefix and drops Domain", () => {
+    expect(
+      scopeSessionCookies(
+        [
+          "a=1; Path=/api/conversations; HttpOnly",
+          "b=2; path=/; Domain=.example.com; Secure",
+        ],
+        prefix,
+      ),
+    ).toEqual([
+      `a=1; Path=${prefix}/api/conversations; HttpOnly`,
+      `b=2; Path=${prefix}/; Secure`,
+    ]);
+  });
+
+  it("leaves the cookie's own name and value, and a path the browser would ignore, as they are", () => {
+    expect(
+      scopeSessionCookies(
+        ["path=/x; Path=relative", "domain=y; Max-Age=5"],
+        prefix,
+      ),
+    ).toEqual(["path=/x; Path=relative", "domain=y; Max-Age=5"]);
+    expect(scopeSessionCookies(undefined, prefix)).toBeUndefined();
+  });
+});
+
 describe("RPC_METHODS", () => {
   it("is a subset of the desktop IPC surface and leaves OAuth out", () => {
     for (const method of RPC_METHODS) {
@@ -389,6 +431,21 @@ describe("createMarsWebBridge", () => {
     );
 
     expect(await response.text()).toBe("payload");
+  });
+
+  it("scopes the session's cookies to its prefix so they cannot replace the local agent-server's", async () => {
+    await rpc(web.origin, "openTunnel", [{ sessionId: SESSION_ID }]);
+
+    const response = await fetch(
+      `${web.origin}/mars/sessions/${SESSION_ID}${UPSTREAM_COOKIE_PATH}`,
+      { method: "POST" },
+    );
+
+    expect(response.status).toBe(204);
+    expect(response.headers.getSetCookie()).toEqual([
+      `oh_workspace_session_key=""; HttpOnly; Max-Age=315360000; Path=/mars/sessions/${SESSION_ID}/api/conversations; SameSite=none; Secure; Partitioned`,
+      `theme=dark; Path=/mars/sessions/${SESSION_ID}/`,
+    ]);
   });
 
   it("answers an upstream failure with a JSON 502", async () => {
