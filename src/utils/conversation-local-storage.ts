@@ -43,7 +43,6 @@ export interface ConversationState {
   conversationMode: ConversationMode;
   subConversationTaskId: string | null;
   draftMessage: string | null;
-  rightPanelShown?: boolean;
   /**
    * Legacy Files-tab Diff/Files toggle preference. Kept for blob
    * compatibility; the Files surface no longer hosts Diff/Commits
@@ -68,7 +67,6 @@ const DEFAULT_CONVERSATION_STATE: ConversationState = {
   conversationMode: "code",
   subConversationTaskId: null,
   draftMessage: null,
-  rightPanelShown: false,
   filesTabDiffView: null,
   filesTabContentViewMode: "rich",
   filesTabTreeVisible: true,
@@ -165,12 +163,17 @@ function sanitizeStoredState(
     delete result.filesTabContentViewMode;
   }
 
+  // Legacy blobs may carry a stale `rightPanelShown` (no longer part of the
+  // schema, #19280): strip corrupt (non-boolean) leftovers so they never
+  // leak into the merged state.
+  const legacyRightPanelShown = (result as Record<string, unknown>)
+    .rightPanelShown;
   if (
-    result.rightPanelShown != null &&
-    typeof result.rightPanelShown !== "boolean"
+    legacyRightPanelShown != null &&
+    typeof legacyRightPanelShown !== "boolean"
   ) {
     result = { ...result };
-    delete result.rightPanelShown;
+    delete (result as Record<string, unknown>).rightPanelShown;
   }
 
   if (
@@ -405,7 +408,6 @@ export function useConversationLocalStorageState(conversationId: string): {
   setUnpinnedOverviewGitParts?: (parts: string[]) => void;
   setConversationMode: (mode: ConversationMode) => void;
   setDraftMessage: (message: string | null, draftRevision?: string) => void;
-  setRightPanelShown?: (shown: boolean) => void;
   setFilesTabDiffView: (diffView: boolean | null) => void;
   setFilesTabContentViewMode: (mode: ViewMode) => void;
   setFilesTabTreeVisible?: (visible: boolean) => void;
@@ -486,7 +488,6 @@ export function useConversationLocalStorageState(conversationId: string): {
     setConversationMode: (mode) => updateState({ conversationMode: mode }),
     setDraftMessage: (message, draftRevision) =>
       updateState({ draftMessage: message }, draftRevision),
-    setRightPanelShown: (shown) => updateState({ rightPanelShown: shown }),
     setFilesTabDiffView: (diffView) =>
       updateState({ filesTabDiffView: diffView }),
     setFilesTabContentViewMode: (mode) =>

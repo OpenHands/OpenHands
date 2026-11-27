@@ -12,8 +12,6 @@ import { cn } from "#/utils/utils";
 import { mobileTopBarIconButtonClassName } from "#/utils/mobile-top-bar-icon-button-classes";
 import { ChatActionTooltip } from "../chat/chat-action-tooltip";
 import { useIsArchivedConversation } from "#/hooks/use-is-archived-conversation";
-import { useOptionalConversationId } from "#/hooks/use-conversation-id";
-import { setConversationState } from "#/utils/conversation-local-storage";
 import { ConversationOverviewPanel } from "./conversation-overview-panel";
 import { CONVERSATION_OVERVIEW_PANEL_WIDTH_PX } from "./conversation-overview-panel.constants";
 import { AppearancePortal } from "#/components/shared/appearance-portal";
@@ -33,7 +31,6 @@ export function ConversationOverviewToggle({
 }: ConversationOverviewToggleProps) {
   const { t } = useTranslation("openhands");
   const isArchivedConversation = useIsArchivedConversation();
-  const { conversationId } = useOptionalConversationId();
   const triggerRef = useRef<HTMLDivElement>(null);
   const [peekPosition, setPeekPosition] = useState<{
     top: number;
@@ -97,9 +94,6 @@ export function ConversationOverviewToggle({
     if (isRightPanelShown) {
       setHasRightPanelToggled(false);
       setIsRightPanelShown(false);
-      if (conversationId) {
-        setConversationState(conversationId, { rightPanelShown: false });
-      }
       setIsOverviewPanelShown(true);
       return;
     }

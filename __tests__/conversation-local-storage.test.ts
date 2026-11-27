@@ -91,26 +91,29 @@ describe("conversation localStorage utilities", () => {
       expect(state.selectedTab).toBe("terminal");
     });
 
-    it("round-trips rightPanelShown through localStorage", () => {
+    it("keeps legacy rightPanelShown blobs loadable without exposing the field", () => {
       const conversationId = "conv-right-panel";
-      setConversationState(conversationId, {
-        selectedTab: "terminal",
-        rightPanelShown: true,
-        unpinnedTabs: ["browser"],
-      });
+      const key = `${LOCAL_STORAGE_KEYS.CONVERSATION_STATE}-${conversationId}`;
+      localStorage.setItem(
+        key,
+        JSON.stringify({
+          selectedTab: "terminal",
+          unpinnedTabs: ["browser"],
+          rightPanelShown: true,
+        }),
+      );
 
       const state = getConversationState(conversationId);
 
       expect(state.selectedTab).toBe("terminal");
       expect(state.unpinnedTabs).toEqual(["browser"]);
-      expect(state.rightPanelShown).toBe(true);
+      // The stale boolean rides along untyped so old blobs still load.
+      expect((state as unknown as Record<string, unknown>).rightPanelShown).toBe(
+        true,
+      );
     });
 
-    it("defaults rightPanelShown to false and drops corrupt values", () => {
-      expect(
-        getConversationState("conv-right-panel-default").rightPanelShown,
-      ).toBe(false);
-
+    it("drops corrupt rightPanelShown values", () => {
       const conversationId = "conv-right-panel-corrupt";
       const key = `${LOCAL_STORAGE_KEYS.CONVERSATION_STATE}-${conversationId}`;
       localStorage.setItem(
@@ -121,7 +124,9 @@ describe("conversation localStorage utilities", () => {
         }),
       );
 
-      expect(getConversationState(conversationId).rightPanelShown).toBe(false);
+      expect("rightPanelShown" in getConversationState(conversationId)).toBe(
+        false,
+      );
     });
 
     it("returns default state when key is missing or invalid", () => {
