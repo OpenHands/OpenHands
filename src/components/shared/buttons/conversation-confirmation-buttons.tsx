@@ -13,6 +13,31 @@ import { useAgentState } from "#/hooks/use-agent-state";
 import { useRespondToConfirmation } from "#/hooks/mutation/use-respond-to-confirmation";
 import { SecurityRisk } from "#/types/agent-server/core/base/common";
 
+const RISK_ALERT_BY_LEVEL: Partial<
+  Record<
+    SecurityRisk,
+    {
+      severity: "high" | "medium";
+      titleKey: I18nKey;
+      contentKey: I18nKey;
+      iconClassName: string;
+    }
+  >
+> = {
+  [SecurityRisk.HIGH]: {
+    severity: "high",
+    titleKey: I18nKey.COMMON$HIGH_RISK,
+    contentKey: I18nKey.CHAT_INTERFACE$HIGH_RISK_WARNING,
+    iconClassName: "text-danger dark:text-white",
+  },
+  [SecurityRisk.MEDIUM]: {
+    severity: "medium",
+    titleKey: I18nKey.COMMON$MEDIUM_RISK,
+    contentKey: I18nKey.CHAT_INTERFACE$MEDIUM_RISK_WARNING,
+    iconClassName: "text-warning dark:text-white",
+  },
+};
+
 export function ConversationConfirmationButtons() {
   const submittedEventIds = useEventMessageStore(
     (state) => state.submittedEventIds,
@@ -114,22 +139,22 @@ export function ConversationConfirmationButtons() {
     ? awaitingAction.security_risk
     : SecurityRisk.UNKNOWN;
 
-  const isHighRisk = risk === SecurityRisk.HIGH;
+  const riskAlert = RISK_ALERT_BY_LEVEL[risk];
 
   return (
     <div className="flex flex-col gap-2 pt-4">
-      {isHighRisk && (
+      {riskAlert && (
         <RiskAlert
-          content={t(I18nKey.CHAT_INTERFACE$HIGH_RISK_WARNING)}
+          content={t(riskAlert.contentKey)}
           icon={
             <WarningIcon
               width={16}
               height={16}
-              className="text-danger dark:text-white"
+              className={riskAlert.iconClassName}
             />
           }
-          severity="high"
-          title={t(I18nKey.COMMON$HIGH_RISK)}
+          severity={riskAlert.severity}
+          title={t(riskAlert.titleKey)}
         />
       )}
       <div className="flex justify-between items-center gap-3">
