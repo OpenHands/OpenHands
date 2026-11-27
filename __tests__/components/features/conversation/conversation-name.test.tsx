@@ -269,6 +269,24 @@ describe("ConversationName", () => {
     expect(inputElement).toHaveValue("Test Conversation");
   });
 
+  it("should reset input value when title is only whitespace and blur", async () => {
+    const user = userEvent.setup();
+    renderConversationNameWithRouter();
+
+    const titleElement = screen.getByTestId("conversation-name-title");
+    await user.dblClick(titleElement);
+
+    const inputElement = screen.getByTestId("conversation-name-input");
+    await user.clear(inputElement);
+    await user.type(inputElement, "   ");
+    await user.tab();
+
+    // A whitespace-only title trims to "" and takes the same reset path as an
+    // empty field: no save, restore the previous title (#17061).
+    expect(mockMutate).not.toHaveBeenCalled();
+    expect(inputElement).toHaveValue("Test Conversation");
+  });
+
   it("should trim whitespace from input value", async () => {
     const user = userEvent.setup();
     renderConversationNameWithRouter();
