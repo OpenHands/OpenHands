@@ -61,6 +61,24 @@ function AppSettingsForm() {
     soundNotificationsSwitchHasChanged,
     setSoundNotificationsSwitchHasChanged,
   ] = React.useState(false);
+  const [desktopNotificationsChecked, setDesktopNotificationsChecked] =
+    React.useState<boolean | null>(null);
+  const [
+    desktopNotificationsSwitchHasChanged,
+    setDesktopNotificationsSwitchHasChanged,
+  ] = React.useState(false);
+  /**
+   * Read once at mount (never requested here — permission is requested only
+   * from the toggle's own change handler) and updated when the browser
+   * answers a request. "unsupported" covers environments without the
+   * Notification API.
+   */
+  const [desktopNotificationPermission, setDesktopNotificationPermission] =
+    React.useState<NotificationPermission | "unsupported">(() =>
+      typeof Notification === "undefined"
+        ? "unsupported"
+        : Notification.permission,
+    );
   const [gitUserNameHasChanged, setGitUserNameHasChanged] =
     React.useState(false);
   const [gitUserEmailHasChanged, setGitUserEmailHasChanged] =
@@ -114,6 +132,12 @@ function AppSettingsForm() {
       : formData.get("enable-analytics-switch")?.toString() === "on";
     const enableSoundNotifications =
       formData.get("enable-sound-notifications-switch")?.toString() === "on";
+    // A disabled (blocked/unsupported) checkbox is never a successful form
+    // control, but also guard the request-pending window so a denied
+    // permission can never persist an unusable enabled setting.
+    const enableDesktopNotifications =
+      formData.get("enable-desktop-notifications-switch")?.toString() ===
+        "on" && !areDesktopNotificationsBlocked;
 
     const gitUserName =
       formData.get("git-user-name-input")?.toString() ||
@@ -127,6 +151,7 @@ function AppSettingsForm() {
         language,
         ...(!isCloudBackend && { user_consents_to_analytics: enableAnalytics }),
         enable_sound_notifications: enableSoundNotifications,
+        enable_desktop_notifications: enableDesktopNotifications,
         git_user_name: gitUserName,
         git_user_email: gitUserEmail,
         title_llm_profile: selectedTitleLlmProfile,
@@ -138,6 +163,8 @@ function AppSettingsForm() {
           setLanguageInputHasChanged(false);
           setAnalyticsSwitchHasChanged(false);
           setSoundNotificationsSwitchHasChanged(false);
+          setDesktopNotificationsSwitchHasChanged(false);
+          setDesktopNotificationsChecked(null);
           setGitUserNameHasChanged(false);
           setGitUserEmailHasChanged(false);
           setTitleLlmProfileInput(undefined);
@@ -174,6 +201,27 @@ function AppSettingsForm() {
     );
   };
 
+  const checkIfDesktopNotificationsSwitchHasChanged = (checked: boolean) => {
+    // Enabling from the "default" (unasked) permission state is the only
+    // moment a permission prompt is legitimate: it is a direct user gesture.
+    if (checked && desktopNotificationPermission === "default") {
+      setDesktopNotificationsChecked(true);
+      void Notification.requestPermission().then((result) => {
+        setDesktopNotificationPermission(result);
+        setDesktopNotificationsChecked(result === "granted");
+        setDesktopNotificationsSwitchHasChanged(
+          result === "granted" &&
+            checked !== !!settings?.enable_desktop_notifications,
+        );
+      });
+      return;
+    }
+    setDesktopNotificationsChecked(checked);
+    setDesktopNotificationsSwitchHasChanged(
+      checked !== !!settings?.enable_desktop_notifications,
+    );
+  };
+
   const checkIfGitUserNameHasChanged = (value: string) => {
     const currentValue = settings?.git_user_name;
     setGitUserNameHasChanged(value !== currentValue);
@@ -184,10 +232,20 @@ function AppSettingsForm() {
     setGitUserEmailHasChanged(value !== currentValue);
   };
 
+  const areDesktopNotificationsBlocked =
+    desktopNotificationPermission === "denied" ||
+    desktopNotificationPermission === "unsupported";
+  const isDesktopNotificationsChecked =
+    desktopNotificationsChecked ??
+    (areDesktopNotificationsBlocked
+      ? false
+      : !!settings?.enable_desktop_notifications);
+
   const formIsClean =
     !languageInputHasChanged &&
     !analyticsSwitchHasChanged &&
     !soundNotificationsSwitchHasChanged &&
+    !desktopNotificationsSwitchHasChanged &&
     selectedTitleLlmProfile === storedTitleLlmProfile &&
     !gitUserNameHasChanged &&
     !gitUserEmailHasChanged;
@@ -239,6 +297,23 @@ function AppSettingsForm() {
           >
             {t(I18nKey.SETTINGS$SOUND_NOTIFICATIONS)}
           </SettingsSwitch>
+
+          <div className="flex flex-col gap-1">
+            <SettingsSwitch
+              testId="enable-desktop-notifications-switch"
+              name="enable-desktop-notifications-switch"
+              isToggled={isDesktopNotificationsChecked}
+              isDisabled={areDesktopNotificationsBlocked}
+              onToggle={checkIfDesktopNotificationsSwitchHasChanged}
+            >
+              {t(I18nKey.SETTINGS$DESKTOP_NOTIFICATIONS)}
+            </SettingsSwitch>
+            {areDesktopNotificationsBlocked && (
+              <p className="text-sm leading-5 text-tertiary-light">
+                {t(I18nKey.SETTINGS$DESKTOP_NOTIFICATIONS_UNAVAILABLE)}
+              </p>
+            )}
+          </div>
 
           {/* Locked-to-Cloud never shows the checklist (OHE-3683). */}
           {getLockedCloudHost() === null && <GettingStartedChecklistSwitch />}
