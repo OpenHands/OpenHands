@@ -19,6 +19,17 @@
 @import "@heroui/styles/components/spinner.css" layer(components);
 @import "@heroui/styles/utilities";
 
+/* HeroUI v3's tooltip.css @applies break-all onto .tooltip, which splits
+   tooltip prose mid-word ("exter|nal"). Same components layer, declared
+   after the import, so this wins; overflow-wrap keeps long unspaced tokens
+   (paths) breaking only when they cannot fit (#19647). */
+@layer components {
+  .tooltip {
+    word-break: normal;
+    overflow-wrap: break-word;
+  }
+}
+
 @config "../tailwind.config.js";
 @source '../node_modules/@heroui/styles/dist/**/*.{js,ts,jsx,tsx}';
 
