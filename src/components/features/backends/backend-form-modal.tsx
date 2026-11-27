@@ -26,7 +26,12 @@ import { SettingsInput } from "#/components/features/settings/settings-input";
 import { SegmentedToggle } from "#/components/features/files-tab/segmented-toggle";
 import { useActiveBackendContext } from "#/contexts/active-backend-context";
 import { useBackendsHealth } from "#/hooks/query/use-backends-health";
-import { useTracking } from "#/hooks/use-tracking";
+import {
+  createTrackingAttemptId,
+  type BackendConnectionFailureReason,
+  type BackendConnectionStage,
+  useTracking,
+} from "#/hooks/use-tracking";
 import type { CloudConnectionSource } from "#/services/cloud-funnel-analytics";
 import { getAgentServerClientOptions } from "#/api/agent-server-client-options";
 import { getLockedCloudHost } from "#/api/agent-server-config";
@@ -56,6 +61,10 @@ export type BackendFormMode = "add" | "edit";
 
 interface BackendConnectionTestMetadata {
   agentServerVersion: string | null;
+}
+
+function getBackendConnectionFailureReason(): BackendConnectionFailureReason {
+  return "connection_test_failed";
 }
 
 interface BackendFormModalProps {
@@ -320,7 +329,10 @@ interface UseBackendFormOptions {
     payload: BackendFormSubmitPayload,
   ) => Promise<BackendConnectionTestMetadata>;
   /** Called after a successful connection test and persistence. */
-  onSuccess: (metadata: BackendConnectionTestMetadata) => void;
+  onSuccess: (
+    metadata: BackendConnectionTestMetadata,
+    attemptId: string | undefined,
+  ) => void;
   /** Require a non-empty API key even when the host looks local. */
   requireApiKey?: boolean;
   /**
@@ -330,6 +342,16 @@ interface UseBackendFormOptions {
    * success side effects. Should throw on failure.
    */
   onSubmitOverride?: (payload: BackendFormSubmitPayload) => Promise<void>;
+  onAttempt?: (
+    payload: BackendFormSubmitPayload,
+    stage: BackendConnectionStage,
+  ) => string | undefined;
+  onFailure?: (
+    payload: BackendFormSubmitPayload,
+    stage: BackendConnectionStage,
+    reason: BackendConnectionFailureReason,
+    attemptId: string | undefined,
+  ) => void;
   /** Fix the persisted backend kind instead of inferring it from the host. */
   fixedKind?: BackendKind;
 }
@@ -348,6 +370,8 @@ function useBackendForm({
   onSuccess,
   requireApiKey = false,
   onSubmitOverride,
+  onAttempt,
+  onFailure,
   fixedKind,
 }: UseBackendFormOptions) {
   const { t } = useTranslation("openhands");
@@ -389,6 +413,9 @@ function useBackendForm({
       setConnectionError(null);
       setIsSubmitting(true);
 
+      const stage: BackendConnectionStage = "connection_test";
+      const attemptId = onAttempt?.(payload, stage);
+
       try {
         // When onSubmitOverride is provided, it completely replaces the
         // default flow (onTestConnection + onSuccess).
@@ -396,9 +423,15 @@ function useBackendForm({
           await onSubmitOverride(payload);
         } else {
           const metadata = await onTestConnection(payload);
-          onSuccess(metadata);
+          onSuccess(metadata, attemptId);
         }
       } catch (error) {
+        onFailure?.(
+          payload,
+          stage,
+          getBackendConnectionFailureReason(),
+          attemptId,
+        );
         setConnectionError(
           getConnectionTestFailedMessage(
             getConnectionTestFailedTitle(t, payload.host),
@@ -420,6 +453,8 @@ function useBackendForm({
       onSuccess,
       requireApiKey,
       onSubmitOverride,
+      onAttempt,
+      onFailure,
       fixedKind,
       t,
     ],
@@ -715,6 +750,7 @@ interface BackendConnectionOptionsProps {
     payload: BackendFormSubmitPayload,
     connectionMethod: BackendConnectionMethod,
     metadata?: BackendConnectionTestMetadata,
+    attemptId?: string,
   ) => void;
   testIdRoot?: string;
   initialManualBackend?: Partial<
@@ -780,6 +816,7 @@ export function BackendConnectionOptions({
             t(I18nKey.ONBOARDING$BACKEND_STATUS_CHECKING)
           }
           submitTestId={manualSubmitTestId}
+          analyticsSource={analyticsSource}
         />
       </div>
 
@@ -799,6 +836,7 @@ interface ManualConnectionColumnProps {
     payload: BackendFormSubmitPayload,
     connectionMethod: BackendConnectionMethod,
     metadata?: BackendConnectionTestMetadata,
+    attemptId?: string,
   ) => void;
   testIdRoot: string;
   initialBackend?: Partial<
@@ -809,6 +847,7 @@ interface ManualConnectionColumnProps {
   submittingLabel: React.ReactNode;
   submitTestId?: string;
   fixedKind?: BackendKind;
+  analyticsSource?: CloudConnectionSource;
   showKindSelector?: boolean;
 }
 
@@ -825,9 +864,12 @@ function ManualConnectionColumn({
   submittingLabel,
   submitTestId,
   fixedKind,
+  analyticsSource,
   showKindSelector = true,
 }: ManualConnectionColumnProps) {
   const { t } = useTranslation("openhands");
+  const { trackBackendConnectionAttempted, trackBackendConnectionFailed } =
+    useTracking();
 
   const {
     name,
@@ -848,7 +890,7 @@ function ManualConnectionColumn({
     initialHost: initialBackend?.host ?? "",
     initialApiKey: initialBackend?.apiKey ?? "",
     onTestConnection: testBackendConnection,
-    onSuccess: (metadata) => {
+    onSuccess: (metadata, attemptId) => {
       onConnected(
         {
           name: name.trim(),
@@ -858,7 +900,32 @@ function ManualConnectionColumn({
         },
         "manual",
         metadata,
+        attemptId,
       );
+    },
+    onAttempt: (payload, stage) => {
+      const attemptId = createTrackingAttemptId();
+      trackBackendConnectionAttempted({
+        attemptId,
+        backendKind: payload.kind,
+        connectionMethod: "manual",
+        hasApiKey: Boolean(payload.apiKey),
+        source: analyticsSource,
+        stage,
+      });
+      return attemptId;
+    },
+    onFailure: (payload, stage, reason, attemptId) => {
+      if (!attemptId) return;
+      trackBackendConnectionFailed({
+        attemptId,
+        backendKind: payload.kind,
+        connectionMethod: "manual",
+        hasApiKey: Boolean(payload.apiKey),
+        source: analyticsSource,
+        stage,
+        reason,
+      });
     },
     requireApiKey,
     fixedKind,
@@ -965,6 +1032,7 @@ interface CloudLoginColumnProps {
     payload: BackendFormSubmitPayload,
     connectionMethod: BackendConnectionMethod,
     metadata?: BackendConnectionTestMetadata,
+    attemptId?: string,
   ) => void;
   testIdRoot: string;
   lockedHost?: string;
@@ -994,7 +1062,7 @@ function CloudLoginColumn({
   const effectiveHost =
     lockedHost ?? (customHost.trim() || DEFAULT_OPENHANDS_CLOUD_HOST);
 
-  const handleLoginSuccess = (apiKey: string) => {
+  const handleLoginSuccess = (apiKey: string, attemptId?: string) => {
     onConnected(
       {
         name: "OpenHands Cloud",
@@ -1003,6 +1071,8 @@ function CloudLoginColumn({
         kind: "cloud",
       },
       "cloud_login",
+      undefined,
+      attemptId,
     );
   };
 
@@ -1368,6 +1438,7 @@ function AddBackendChooser({
     payload: BackendFormSubmitPayload,
     connectionMethod: BackendConnectionMethod,
     metadata?: BackendConnectionTestMetadata,
+    attemptId?: string,
   ) => void;
   onSelectProvider: () => void;
   source: BackendAddedSource;
@@ -1483,6 +1554,7 @@ function AddBackendChooser({
             submittingLabel={t(I18nKey.ONBOARDING$BACKEND_STATUS_CHECKING)}
             fixedKind="local"
             showKindSelector={false}
+            analyticsSource={source}
           />
         </div>
       </div>
@@ -1577,9 +1649,11 @@ function AddBackendConnectionOptions({
       payload: BackendFormSubmitPayload,
       connectionMethod: BackendConnectionMethod,
       metadata?: BackendConnectionTestMetadata,
+      attemptId?: string,
     ) => {
       addBackend(payload);
       trackBackendAdded({
+        attemptId,
         backendKind: payload.kind,
         connectionMethod,
         hasApiKey: Boolean(payload.apiKey),

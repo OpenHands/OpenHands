@@ -12,6 +12,20 @@ vi.mock("#/hooks/use-device-flow", () => ({
   useDeviceFlow: useDeviceFlowMock,
 }));
 
+vi.mock("#/hooks/use-tracking", async () => {
+  const actual = await vi.importActual<typeof import("#/hooks/use-tracking")>(
+    "#/hooks/use-tracking",
+  );
+  return {
+    ...actual,
+    createTrackingAttemptId: () => "attempt-test",
+    useTracking: () => ({
+      trackBackendConnectionAttempted: vi.fn(),
+      trackBackendConnectionFailed: vi.fn(),
+    }),
+  };
+});
+
 vi.mock("react-i18next", () => ({
   useTranslation: (namespace?: unknown) => {
     useTranslationMock(namespace);
@@ -42,6 +56,8 @@ function createFlow(
     apiKey: null,
     error: null,
     errorCode: null,
+    attemptId: null,
+    errorStage: null,
     start: vi.fn(),
     cancel: vi.fn(),
     reset: vi.fn(),
@@ -194,6 +210,7 @@ describe("device-flow login", () => {
     expect(flow.start).toHaveBeenCalledWith(
       "https://cloud.example.com",
       "add_backend_modal",
+      "attempt-test",
     );
     expect(warn).not.toHaveBeenCalled();
 
@@ -253,6 +270,7 @@ describe("device-flow login", () => {
     expect(flow.start).toHaveBeenCalledWith(
       "https://prefixhttps://cloud.example.com",
       undefined,
+      "attempt-test",
     );
   });
 
@@ -554,7 +572,7 @@ describe("device-flow login", () => {
     await user.click(screen.getByTestId("cloud-login-login-button"));
     rerender(<DeviceFlowAuth {...props} />);
 
-    expect(props.onSuccess).toHaveBeenCalledWith("api-key-123");
+    expect(props.onSuccess).toHaveBeenCalledWith("api-key-123", undefined);
     expect(props.onSuccess).toHaveBeenCalledTimes(1);
     expect(successFlow.reset).toHaveBeenCalledTimes(1);
     expect(close).toHaveBeenCalledTimes(1);
@@ -584,7 +602,7 @@ describe("device-flow login", () => {
 
     expect(() => render(<DeviceFlowAuth {...props} />)).not.toThrow();
 
-    expect(props.onSuccess).toHaveBeenCalledWith("api-key-123");
+    expect(props.onSuccess).toHaveBeenCalledWith("api-key-123", undefined);
     expect(flow.reset).toHaveBeenCalledTimes(1);
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
@@ -667,6 +685,7 @@ describe("device-flow login", () => {
     expect(flow.start).toHaveBeenCalledWith(
       "HTTP://cloud.example.com",
       undefined,
+      "attempt-test",
     );
   });
 

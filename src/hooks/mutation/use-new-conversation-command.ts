@@ -11,7 +11,7 @@ import { useNavigation } from "#/context/navigation-context";
 import { useActiveConversation } from "#/hooks/query/use-active-conversation";
 import { useSettings } from "#/hooks/query/use-settings";
 import { useMetaProfiles } from "#/hooks/query/use-meta-profiles";
-import { useTracking } from "#/hooks/use-tracking";
+import { createTrackingAttemptId, useTracking } from "#/hooks/use-tracking";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import { launchConversation } from "#/hooks/mutation/resolve-conversation-launch";
 
@@ -22,41 +22,78 @@ export const useNewConversationCommand = () => {
   const { data: conversation } = useActiveConversation();
   const { data: settings } = useSettings();
   const { data: metaProfiles } = useMetaProfiles();
-  const { trackConversationCreated } = useTracking();
+  const {
+    trackConversationStartAttempted,
+    trackConversationStartFailed,
+    trackConversationCreated,
+  } = useTracking();
   const { backend, orgId } = useActiveBackend();
 
   const mutation = useMutation({
     mutationFn: async () => {
+      const attemptId = createTrackingAttemptId();
+      const trackingContext = {
+        hasRepository: false,
+        hasWorkspace: false,
+        hasInitialQuery: false,
+        hasParentConversation: false,
+        entryPoint: "new_command",
+      };
+      trackConversationStartAttempted({ attemptId, ...trackingContext });
+
       if (!conversation?.id) {
+        trackConversationStartFailed({
+          attemptId,
+          stage: "preflight",
+          reason: "missing_active_conversation",
+          ...trackingContext,
+        });
         throw new Error("No active conversation");
       }
 
-      // /new reuses the parent conversation's sandbox (matches OpenHands
-      // cloud behavior); it is NOT a sub-conversation, so parent_conversation_id
-      // and agent_type stay undefined.
-      const startTask = await launchConversation(
-        {
-          queryClient,
-          backendId: backend.id,
-          orgId,
-          isCloud: backend.kind === "cloud",
-        },
-        {
-          sandboxId: conversation.sandbox_id ?? undefined,
-          // Cloud only; a local launch reads the toggle itself and gates it
-          // on the launched profile's router. The active meta-profile gates
-          // the suffix: no router attached means no route-at-start
-          // instruction.
-          ...(settings?.run_router_at_conversation_start
-            ? {
-                runRouterAtConversationStart: true,
-                hasActiveMetaProfile: !!metaProfiles?.active_meta_profile,
-              }
-            : {}),
-        },
-      );
+      let startTask;
+      try {
+        // /new reuses the parent conversation's sandbox (matches OpenHands
+        // cloud behavior); it is NOT a sub-conversation, so parent_conversation_id
+        // and agent_type stay undefined.
+        startTask = await launchConversation(
+          {
+            queryClient,
+            backendId: backend.id,
+            orgId,
+            isCloud: backend.kind === "cloud",
+          },
+          {
+            sandboxId: conversation.sandbox_id ?? undefined,
+            // Cloud only; a local launch reads the toggle itself and gates it
+            // on the launched profile's router. The active meta-profile gates
+            // the suffix: no router attached means no route-at-start
+            // instruction.
+            ...(settings?.run_router_at_conversation_start
+              ? {
+                  runRouterAtConversationStart: true,
+                  hasActiveMetaProfile: !!metaProfiles?.active_meta_profile,
+                }
+              : {}),
+          },
+        );
+      } catch (error) {
+        trackConversationStartFailed({
+          attemptId,
+          stage: "request",
+          reason: "request_failed",
+          ...trackingContext,
+        });
+        throw error;
+      }
 
       if (startTask.status === "ERROR") {
+        trackConversationStartFailed({
+          attemptId,
+          stage: "request",
+          reason: "request_failed",
+          ...trackingContext,
+        });
         throw new Error(
           startTask.detail || "Failed to create new conversation",
         );
@@ -74,6 +111,7 @@ export const useNewConversationCommand = () => {
         newConversationId,
         oldConversationId: conversation.id,
         taskId: startTask.id,
+        attemptId,
       };
     },
     onMutate: () => {
@@ -84,6 +122,7 @@ export const useNewConversationCommand = () => {
     },
     onSuccess: (data) => {
       trackConversationCreated({
+        attemptId: data.attemptId,
         conversationId: data.newConversationId,
         taskId: data.taskId,
         hasRepository: false,
