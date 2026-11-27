@@ -1,0 +1,401 @@
+import { describe, expect, it } from "vitest";
+import {
+  canAnchorAfterEvent,
+  isMessageEditResult,
+  isReactionResult,
+  shouldRenderEvent,
+} from "#/components/conversation-events/chat/event-content-helpers/should-render-event";
+import { CHILD_CONVERSATION_RESULT_PREFIX } from "#/constants/child-conversation";
+import { SECRET_REQUEST_RESULT_PREFIX } from "#/constants/secret-request";
+import {
+  createPlanningFileEditorActionEvent,
+  createOtherActionEvent,
+  createPlanningObservationEvent,
+  createUserMessageEvent,
+} from "test-utils";
+import { ACPToolCallEvent } from "#/types/agent-server/core/events/acp-tool-call-event";
+import { StreamingDeltaEvent } from "#/types/agent-server/core/events/streaming-delta-event";
+import {
+  ActionEvent,
+  ObservationEvent,
+  OpenHandsEvent,
+  SecurityRisk,
+} from "#/types/agent-server/core";
+import { SwitchLLMAction } from "#/types/agent-server/core/base/action";
+import { SwitchLLMObservation } from "#/types/agent-server/core/base/observation";
+
+const makeACPEvent = (
+  overrides: Partial<ACPToolCallEvent> = {},
+): ACPToolCallEvent => ({
+  id: "acp-1",
+  kind: "ACPToolCallEvent",
+  timestamp: "2024-01-01T00:00:00Z",
+  source: "agent",
+  tool_call_id: "tc-1",
+  title: "Run command",
+  status: "completed",
+  tool_kind: "execute",
+  raw_input: { command: "ls" },
+  raw_output: "file.txt",
+  content: null,
+  is_error: false,
+  ...overrides,
+});
+
+describe("shouldRenderEvent - PlanningFileEditorAction", () => {
+  it("should return false for PlanningFileEditorAction", () => {
+    const event = createPlanningFileEditorActionEvent("action-1");
+
+    expect(shouldRenderEvent(event)).toBe(false);
+  });
+
+  it("should return true for other action types", () => {
+    const event = createOtherActionEvent("action-1");
+
+    expect(shouldRenderEvent(event)).toBe(true);
+  });
+
+  it("should return true for PlanningFileEditorObservation", () => {
+    const event = createPlanningObservationEvent("obs-1");
+
+    // Observations should still render (they're handled separately in event-message)
+    expect(shouldRenderEvent(event)).toBe(true);
+  });
+
+  it("should return true for user message events", () => {
+    const event = createUserMessageEvent("msg-1");
+
+    expect(shouldRenderEvent(event)).toBe(true);
+  });
+});
+
+describe("shouldRenderEvent - ACPToolCallEvent", () => {
+  it("renders the early in_progress 'started' card", () => {
+    // The SDK now persists exactly one ``started`` (in_progress) event and
+    // one terminal event per ``tool_call_id`` — the action->observation pair.
+    // The started event renders the card as "running"; ``handleEventForUI``
+    // then replaces it in place when the terminal event arrives. The old
+    // half-formed flashing came from the now-removed per-progress fan-out.
+    const event = makeACPEvent({ status: "in_progress", raw_input: {} });
+
+    expect(shouldRenderEvent(event)).toBe(true);
+  });
+
+  it("renders pending 'started' cards", () => {
+    const event = makeACPEvent({ status: "pending" });
+
+    expect(shouldRenderEvent(event)).toBe(true);
+  });
+
+  it("renders completed events", () => {
+    const event = makeACPEvent({ status: "completed" });
+
+    expect(shouldRenderEvent(event)).toBe(true);
+  });
+
+  it("renders failed events", () => {
+    const event = makeACPEvent({ status: "failed", is_error: true });
+
+    expect(shouldRenderEvent(event)).toBe(true);
+  });
+
+  it("renders events with null status as a running card", () => {
+    // A ``null`` status (legacy builds before the field was required) renders
+    // as "running" via the absent check mark rather than being hidden — better
+    // a card than a silently dropped tool call.
+    const event = makeACPEvent({ status: null });
+
+    expect(shouldRenderEvent(event)).toBe(true);
+  });
+});
+
+describe("shouldRenderEvent - StreamingDeltaEvent", () => {
+  const makeStreamingDelta = (
+    overrides: Partial<StreamingDeltaEvent> = {},
+  ): StreamingDeltaEvent => ({
+    id: "delta-1",
+    kind: "StreamingDeltaEvent",
+    timestamp: "2024-01-01T00:00:00Z",
+    source: "agent",
+    content: "I'll start working on that.",
+    reasoning_content: null,
+    ...overrides,
+  });
+
+  it("renders text deltas", () => {
+    expect(shouldRenderEvent(makeStreamingDelta())).toBe(true);
+  });
+
+  it("renders reasoning-only deltas", () => {
+    expect(
+      shouldRenderEvent(
+        makeStreamingDelta({
+          content: null,
+          reasoning_content: "thinking",
+        }),
+      ),
+    ).toBe(true);
+  });
+
+  it("hides empty deltas", () => {
+    expect(
+      shouldRenderEvent(
+        makeStreamingDelta({
+          content: null,
+          reasoning_content: null,
+        }),
+      ),
+    ).toBe(false);
+  });
+});
+
+describe("shouldRenderEvent - SwitchLLM", () => {
+  const switchAction: ActionEvent<SwitchLLMAction> = {
+    id: "switch-action",
+    timestamp: "2024-01-01T00:00:00Z",
+    source: "agent",
+    thought: [],
+    thinking_blocks: [],
+    action: {
+      kind: "SwitchLLMAction",
+      profile_name: "haiku",
+      reason: "Use a cheaper model.",
+    },
+    tool_name: "switch_llm",
+    tool_call_id: "tool-switch",
+    tool_call: {
+      id: "tool-switch",
+      type: "function",
+      function: {
+        name: "switch_llm",
+        arguments: JSON.stringify({ profile_name: "haiku" }),
+      },
+    },
+    llm_response_id: "response-switch",
+    security_risk: SecurityRisk.LOW,
+  };
+
+  const makeSwitchObservation = (
+    overrides: Partial<SwitchLLMObservation> = {},
+  ): ObservationEvent<SwitchLLMObservation> => ({
+    id: "switch-observation",
+    timestamp: "2024-01-01T00:00:01Z",
+    source: "environment",
+    tool_name: "switch_llm",
+    tool_call_id: "tool-switch",
+    action_id: "switch-action",
+    observation: {
+      kind: "SwitchLLMObservation",
+      content: [{ type: "text", text: "Switched." }],
+      is_error: false,
+      profile_name: "haiku",
+      reason: "Use a cheaper model.",
+      active_model: "anthropic/claude-haiku-4-5",
+      ...overrides,
+    },
+  });
+
+  it("hides switch actions and successful observations for the shared model UI", () => {
+    expect(shouldRenderEvent(switchAction)).toBe(false);
+    expect(shouldRenderEvent(makeSwitchObservation())).toBe(false);
+  });
+
+  it("keeps failed switch observations visible", () => {
+    expect(
+      shouldRenderEvent(
+        makeSwitchObservation({
+          is_error: true,
+          content: [{ type: "text", text: "Profile was not found." }],
+        }),
+      ),
+    ).toBe(true);
+  });
+});
+
+describe("shouldRenderEvent - /goal status updates", () => {
+  const makeGoalEvent = (active: boolean): OpenHandsEvent =>
+    ({
+      id: "goal-1",
+      kind: "ConversationStateUpdateEvent",
+      timestamp: "2024-01-01T00:00:00Z",
+      source: "environment",
+      key: "goal",
+      value: {
+        active,
+        status: active ? "running" : "complete",
+        iteration: 1,
+        max_iterations: 10,
+        objective: "make pytest pass",
+        verdict: null,
+      },
+    }) as unknown as OpenHandsEvent;
+
+  const makeStatsEvent = (): OpenHandsEvent =>
+    ({
+      id: "stats-1",
+      kind: "ConversationStateUpdateEvent",
+      timestamp: "2024-01-01T00:00:00Z",
+      source: "environment",
+      key: "stats",
+      value: {},
+    }) as unknown as OpenHandsEvent;
+
+  it("renders the terminal goal status inline", () => {
+    expect(shouldRenderEvent(makeGoalEvent(false))).toBe(true);
+  });
+
+  it("hides the in-progress goal status (shown by the live banner)", () => {
+    expect(shouldRenderEvent(makeGoalEvent(true))).toBe(false);
+  });
+
+  it("hides non-goal state updates", () => {
+    expect(shouldRenderEvent(makeStatsEvent())).toBe(false);
+  });
+});
+
+describe("shouldRenderEvent - /goal loop re-prompts", () => {
+  const makeUserMessage = (text: string): OpenHandsEvent =>
+    ({
+      id: "m1",
+      kind: "MessageEvent",
+      source: "user",
+      timestamp: "2024-01-01T00:00:00Z",
+      llm_message: { role: "user", content: [{ type: "text", text }] },
+    }) as unknown as OpenHandsEvent;
+
+  it("hides the per-round follow-up re-prompt", () => {
+    const followup = makeUserMessage(
+      "The goal is NOT yet complete (audit iteration 1).\nOutstanding: needs tests",
+    );
+    expect(shouldRenderEvent(followup)).toBe(false);
+  });
+
+  it("hides the resume re-prompt", () => {
+    expect(
+      shouldRenderEvent(
+        makeUserMessage("Resuming a goal that was paused or interrupted. ..."),
+      ),
+    ).toBe(false);
+  });
+
+  it("still renders the objective and ordinary user messages", () => {
+    expect(
+      shouldRenderEvent(makeUserMessage("create roman.py with to_roman(n)")),
+    ).toBe(true);
+    expect(shouldRenderEvent(makeUserMessage("hello"))).toBe(true);
+  });
+
+  it.each([
+    `${CHILD_CONVERSATION_RESULT_PREFIX}{"status":"launched","target":"local"}`,
+    `${SECRET_REQUEST_RESULT_PREFIX}{"status":"saved","name":"GITHUB_TOKEN"}`,
+  ])("hides the client tool result the frontend posts back: %s", (text) => {
+    expect(shouldRenderEvent(makeUserMessage(text))).toBe(false);
+  });
+});
+
+describe("shouldRenderEvent - Stop hook feedback", () => {
+  // Emitted by the SDK when a Stop hook blocks the agent from finishing
+  // (`ACP_STOP_HOOK_FEEDBACK_PREFIX` in local_conversation.py).
+  const STOP_HOOK_FEEDBACK_TEXT =
+    "[Stop hook feedback] Run the tests before finishing.";
+
+  const makeMessage = (source: "environment" | "user"): OpenHandsEvent =>
+    ({
+      id: "m1",
+      kind: "MessageEvent",
+      source,
+      timestamp: "2024-01-01T00:00:00Z",
+      llm_message: {
+        role: "user",
+        content: [{ type: "text", text: STOP_HOOK_FEEDBACK_TEXT }],
+      },
+    }) as unknown as OpenHandsEvent;
+
+  it("hides the feedback message the SDK sends to the agent", () => {
+    expect(shouldRenderEvent(makeMessage("environment"))).toBe(false);
+  });
+
+  it("still renders a user message that starts with the same text", () => {
+    expect(shouldRenderEvent(makeMessage("user"))).toBe(true);
+  });
+});
+
+describe("shouldRenderEvent - reactions", () => {
+  it("shows a pending react / unreact call; its result keeps only the narration", () => {
+    const react = createOtherActionEvent("react-1");
+    const reactAction = {
+      ...react,
+      action: { kind: "ReactAction", emoji: "eyes", message_id: null },
+    } as unknown as OpenHandsEvent;
+    const unreactAction = {
+      ...react,
+      action: { kind: "UnreactAction", emoji: "eyes", message_id: null },
+    } as unknown as OpenHandsEvent;
+    const observation = {
+      ...createPlanningObservationEvent("react-obs-1"),
+      observation: {
+        kind: "ReactionObservation",
+        content: [{ type: "text", text: "Reacted :eyes:" }],
+        is_error: false,
+        target_event_id: "msg-1",
+        emoji: "eyes",
+        removed: false,
+      },
+    } as unknown as OpenHandsEvent;
+
+    // Pending (for example awaiting confirmation): the user sees the call.
+    expect(shouldRenderEvent(reactAction)).toBe(true);
+    expect(shouldRenderEvent(unreactAction)).toBe(true);
+    // Done: the observation replaces the call. It passes, so groupEvents can
+    // keep the agent's narration, but it renders no card of its own.
+    expect(shouldRenderEvent(observation)).toBe(true);
+    expect(isReactionResult(observation)).toBe(true);
+    expect(canAnchorAfterEvent(observation)).toBe(false);
+    const failed = {
+      ...observation,
+      observation: {
+        ...(observation as unknown as { observation: object }).observation,
+        is_error: true,
+      },
+    } as unknown as OpenHandsEvent;
+    expect(shouldRenderEvent(failed)).toBe(true);
+    expect(isReactionResult(failed)).toBe(false);
+  });
+});
+
+describe("shouldRenderEvent - message edits", () => {
+  const editResult = (isError: boolean) =>
+    ({
+      ...createPlanningObservationEvent("edit-obs-1"),
+      observation: {
+        kind: "EditMessageObservation",
+        content: [{ type: "text", text: "Edited. The message now reads:" }],
+        is_error: isError,
+        target_event_id: "msg-1",
+        edited_text: "~~Port?~~ [Edit: 8080.]",
+      },
+    }) as unknown as OpenHandsEvent;
+
+  it("keeps only the narration of a successful edit; a failed edit shows", () => {
+    const done = editResult(false);
+    expect(shouldRenderEvent(done)).toBe(true);
+    expect(isMessageEditResult(done)).toBe(true);
+    expect(canAnchorAfterEvent(done)).toBe(false);
+
+    const failed = editResult(true);
+    expect(isMessageEditResult(failed)).toBe(false);
+    expect(canAnchorAfterEvent(failed)).toBe(true);
+  });
+
+  it("never renders the MessageEditEvent itself", () => {
+    const edit = {
+      id: "edit-1",
+      kind: "MessageEditEvent",
+      timestamp: "2026-11-16T00:00:00Z",
+      source: "agent",
+      target_event_id: "msg-1",
+      text: "~~Port?~~ [Edit: 8080.]",
+    } as unknown as OpenHandsEvent;
+    expect(shouldRenderEvent(edit)).toBe(false);
+  });
+});

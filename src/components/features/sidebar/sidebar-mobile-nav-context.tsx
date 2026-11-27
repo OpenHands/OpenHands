@@ -1,0 +1,57 @@
+import React from "react";
+
+interface SidebarMobileNavContextValue {
+  isOpen: boolean;
+  open: () => void;
+  close: () => void;
+  toggle: () => void;
+  toggleButtonRef: React.RefObject<HTMLButtonElement | null>;
+}
+
+const SidebarMobileNavContext =
+  React.createContext<SidebarMobileNavContextValue | null>(null);
+
+export function SidebarMobileNavProvider({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  const [isOpen, setIsOpen] = React.useState(false);
+  const toggleButtonRef = React.useRef<HTMLButtonElement>(null);
+
+  const open = React.useCallback(() => setIsOpen(true), []);
+  const close = React.useCallback(() => setIsOpen(false), []);
+  const toggle = React.useCallback(() => setIsOpen((prev) => !prev), []);
+
+  const value = React.useMemo(
+    () => ({
+      isOpen,
+      open,
+      close,
+      toggle,
+      toggleButtonRef,
+    }),
+    [isOpen, open, close, toggle],
+  );
+
+  return (
+    <SidebarMobileNavContext.Provider value={value}>
+      {children}
+    </SidebarMobileNavContext.Provider>
+  );
+}
+
+/** For components that may render outside the app shell (e.g. embedders). */
+export function useSidebarMobileNavOptional(): SidebarMobileNavContextValue | null {
+  return React.useContext(SidebarMobileNavContext);
+}
+
+export function useSidebarMobileNav(): SidebarMobileNavContextValue {
+  const context = React.useContext(SidebarMobileNavContext);
+  if (!context) {
+    throw new Error(
+      "useSidebarMobileNav must be used within SidebarMobileNavProvider",
+    );
+  }
+  return context;
+}

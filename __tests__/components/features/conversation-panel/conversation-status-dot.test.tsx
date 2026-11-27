@@ -1,0 +1,146 @@
+import type { ReactNode } from "react";
+import { screen } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
+
+import { renderWithProviders } from "test-utils";
+import { ConversationStatusDot } from "#/components/features/conversation-panel/conversation-status-dot";
+import { ExecutionStatus } from "#/types/agent-server/core/base/common";
+
+vi.mock("#/components/shared/buttons/styled-tooltip", () => ({
+  StyledTooltip: ({
+    children,
+    content,
+  }: {
+    children: ReactNode;
+    content: string;
+  }) => (
+    <div data-testid="styled-tooltip" data-content={content}>
+      {children}
+    </div>
+  ),
+}));
+
+describe("ConversationStatusDot", () => {
+  it("exposes startup activity without adding a tooltip", () => {
+    renderWithProviders(
+      <ConversationStatusDot
+        executionStatus={null}
+        isStarting
+        showTooltip={false}
+      />,
+    );
+    expect(screen.getByRole("img")).toHaveAccessibleName(
+      "CONVERSATION$STARTING_CONVERSATION",
+    );
+    expect(screen.queryByTestId("styled-tooltip")).not.toBeInTheDocument();
+  });
+
+  it.each([
+    [ExecutionStatus.FINISHED, "conversation-status-check", "COMMON$FINISHED"],
+    [ExecutionStatus.RUNNING, "conversation-status-working", "COMMON$WORKING"],
+    [ExecutionStatus.PAUSED, "conversation-status-paused", "COMMON$PAUSED"],
+    [ExecutionStatus.IDLE, "conversation-status-active", "COMMON$WORKING"],
+    [
+      ExecutionStatus.WAITING_FOR_CONFIRMATION,
+      "conversation-status-active",
+      "COMMON$WORKING",
+    ],
+    [ExecutionStatus.ERROR, "conversation-status-error", "COMMON$ERROR"],
+    [ExecutionStatus.STUCK, "conversation-status-error", "COMMON$ERROR"],
+  ])("renders %s as %s", (status, testId, tooltipLabel) => {
+    renderWithProviders(<ConversationStatusDot executionStatus={status} />);
+
+    expect(screen.getByTestId(testId)).toBeInTheDocument();
+    expect(screen.getByTestId("styled-tooltip")).toHaveAttribute(
+      "data-content",
+      tooltipLabel,
+    );
+  });
+
+  it("renders the unknown state for missing execution status", () => {
+    renderWithProviders(<ConversationStatusDot executionStatus={undefined} />);
+
+    expect(
+      screen.getByTestId("conversation-status-unknown"),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId("styled-tooltip")).toHaveAttribute(
+      "data-content",
+      "COMMON$STOPPED",
+    );
+  });
+
+  it("renders archive icon when sandbox is MISSING (archived)", () => {
+    renderWithProviders(
+      <ConversationStatusDot
+        executionStatus={ExecutionStatus.PAUSED}
+        sandboxStatus="MISSING"
+      />,
+    );
+
+    expect(
+      screen.getByTestId("conversation-status-archived"),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId("styled-tooltip")).toHaveAttribute(
+      "data-content",
+      "COMMON$ARCHIVED",
+    );
+  });
+
+  it("renders the error dot, not the archive icon, when sandbox is ERROR", () => {
+    renderWithProviders(
+      <ConversationStatusDot
+        executionStatus={ExecutionStatus.FINISHED}
+        sandboxStatus="ERROR"
+        isStarting
+      />,
+    );
+
+    expect(screen.getByTestId("conversation-status-error")).toBeInTheDocument();
+    expect(screen.queryByRole("img")).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("conversation-status-archived"),
+    ).not.toBeInTheDocument();
+    expect(screen.getByTestId("styled-tooltip")).toHaveAttribute(
+      "data-content",
+      "COMMON$ERROR",
+    );
+  });
+
+  it("renders the archive icon for an explicitly archived row regardless of sandbox status", () => {
+    renderWithProviders(
+      <ConversationStatusDot
+        executionStatus={ExecutionStatus.RUNNING}
+        sandboxStatus="RUNNING"
+        isArchived
+      />,
+    );
+
+    expect(
+      screen.getByTestId("conversation-status-archived"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("conversation-status-working"),
+    ).not.toBeInTheDocument();
+    expect(screen.getByTestId("styled-tooltip")).toHaveAttribute(
+      "data-content",
+      "COMMON$ARCHIVED",
+    );
+  });
+
+  it("prefers the archive presentation over the error dot when the row is archived", () => {
+    renderWithProviders(
+      <ConversationStatusDot
+        executionStatus={ExecutionStatus.ERROR}
+        sandboxStatus="ERROR"
+        isArchived
+      />,
+    );
+
+    expect(
+      screen.getByTestId("conversation-status-archived"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("conversation-status-error"),
+    ).not.toBeInTheDocument();
+  });
+});

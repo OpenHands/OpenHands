@@ -1,0 +1,1034 @@
+import { readFile } from "node:fs/promises";
+import { resolve } from "node:path";
+import { compile } from "@tailwindcss/node";
+import { parse } from "postcss";
+import type { MarsSandboxSize } from "#/api/mars/mars-tunnel-backend";
+import React from "react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { MockInstance } from "vitest";
+import { __resetActiveStoreForTests } from "#/api/backend-registry/active-store";
+import { ActiveBackendProvider } from "#/contexts/active-backend-context";
+import {
+  NavigationProvider,
+  type NavigationContextValue,
+} from "#/context/navigation-context";
+import { AddBackendModal } from "#/components/features/backends/add-backend-modal";
+import * as telemetry from "#/services/telemetry";
+
+const getServerInfoMock = vi.hoisted(() => vi.fn());
+const getSettingsMock = vi.hoisted(() => vi.fn().mockResolvedValue({}));
+
+const deviceFlowMocks = vi.hoisted(() => ({
+  startDeviceFlow: vi.fn(),
+  pollForToken: vi.fn(),
+}));
+
+// Partial mock: only the network calls are stubbed so the rest of the module
+// (host classification) keeps its production behavior.
+vi.mock("#/api/device-flow-client", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("#/api/device-flow-client")>();
+  return {
+    ...actual,
+    startDeviceFlow: deviceFlowMocks.startDeviceFlow,
+    pollForToken: deviceFlowMocks.pollForToken,
+  };
+});
+
+vi.mock("@openhands/typescript-client/clients", () => ({
+  ServerClient: vi.fn(function ServerClientMock() {
+    return {
+      getServerInfo: getServerInfoMock,
+    };
+  }),
+  SettingsClient: vi.fn(function SettingsClientMock() {
+    return {
+      getSettings: getSettingsMock,
+    };
+  }),
+}));
+
+let captureMock: MockInstance<typeof telemetry.trackEvent>;
+
+vi.mock("#/hooks/query/use-settings", () => ({
+  useSettings: () => ({
+    data: { user_consents_to_analytics: true, email: "user@example.com" },
+  }),
+}));
+
+function renderWithProviders(
+  ui: React.ReactElement,
+  navigation?: NavigationContextValue,
+) {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  return render(
+    <QueryClientProvider client={queryClient}>
+      <ActiveBackendProvider>
+        {navigation ? (
+          <NavigationProvider value={navigation}>{ui}</NavigationProvider>
+        ) : (
+          ui
+        )}
+      </ActiveBackendProvider>
+    </QueryClientProvider>,
+  );
+}
+
+async function selectAgentServer(user = userEvent.setup()) {
+  await user.click(screen.getByTestId("add-backend-option-agent-server"));
+  return user;
+}
+
+beforeEach(() => {
+  captureMock = vi.spyOn(telemetry, "trackEvent").mockResolvedValue(undefined);
+  window.localStorage.clear();
+  getServerInfoMock.mockReset();
+  getServerInfoMock.mockResolvedValue({ version: "1.63.1" });
+  deviceFlowMocks.startDeviceFlow.mockReset();
+  deviceFlowMocks.startDeviceFlow.mockResolvedValue({
+    device_code: "device-code",
+    user_code: "ABCD-EFGH",
+    verification_uri: "https://app.all-hands.dev/device",
+    verification_uri_complete:
+      "https://app.all-hands.dev/device?user_code=ABCD-EFGH",
+    expires_in: 600,
+    interval: 5,
+  });
+  deviceFlowMocks.pollForToken.mockReset();
+  deviceFlowMocks.pollForToken.mockImplementation(() => new Promise(() => {}));
+  __resetActiveStoreForTests();
+});
+
+afterEach(() => {
+  captureMock.mockRestore();
+  window.localStorage.clear();
+  __resetActiveStoreForTests();
+});
+
+describe("AddBackendModal – connection chooser", () => {
+  it("renders OpenHands Cloud first with its brand mark", () => {
+    renderWithProviders(<AddBackendModal onClose={vi.fn()} />);
+
+    const tabs = screen.getAllByRole("tab");
+    expect(tabs).toHaveLength(2);
+    expect(tabs[0]).toHaveAttribute("data-testid", "add-backend-option-cloud");
+    expect(tabs[0]).toHaveAttribute("aria-selected", "true");
+    expect(tabs[1]).toHaveAttribute(
+      "data-testid",
+      "add-backend-option-agent-server",
+    );
+    expect(tabs[1]).toHaveAttribute("aria-selected", "false");
+    expect(
+      within(tabs[0]).getByTestId("add-backend-option-cloud-logo"),
+    ).toBeInTheDocument();
+    expect(tabs[0]).toHaveAccessibleDescription(
+      "BACKEND$CLOUD_OPTION_DESCRIPTION",
+    );
+    expect(tabs[1]).toHaveAccessibleDescription(
+      "BACKEND$AGENT_SERVER_OPTION_DESCRIPTION",
+    );
+
+    expect(screen.getByTestId("add-backend-cloud-panel")).toBeInTheDocument();
+    expect(screen.getByTestId("add-backend-login-button")).toBeInTheDocument();
+    expect(screen.getByTestId("add-backend-description")).toHaveTextContent(
+      "BACKEND$CHOOSER_DESCRIPTION",
+    );
+    expect(
+      screen.getByTestId("add-backend-deployment-options-link"),
+    ).toHaveAttribute(
+      "href",
+      "https://docs.openhands.dev/overview/introduction",
+    );
+    // Short inline link so the description reads as one flowing sentence.
+    expect(
+      screen.getByTestId("add-backend-deployment-options-link"),
+    ).toHaveTextContent("CTA$LEARN_MORE");
+  });
+
+  it("keeps each nested panel's measured height and automatic fallback in compiled CSS", async () => {
+    const compiler = await compile(
+      await readFile(resolve("src/tailwind.css"), "utf8"),
+      { base: resolve("src"), onDependency: () => {} },
+    );
+    const heights = new Map<Element, number>();
+    const observers = new Map<
+      Element,
+      { notify: () => void; disconnect: ReturnType<typeof vi.fn> }
+    >();
+    const originalRect = HTMLElement.prototype.getBoundingClientRect;
+    const rectSpy = vi
+      .spyOn(HTMLElement.prototype, "getBoundingClientRect")
+      .mockImplementation(function (this: HTMLElement) {
+        if (this.parentElement?.dataset.testid !== "add-backend-panel-height") {
+          return originalRect.call(this);
+        }
+        const height =
+          heights.get(this) ??
+          (this.firstElementChild?.getAttribute("data-testid") ===
+          "add-backend-slide-rail"
+            ? 440
+            : 0);
+        return new DOMRect(0, 0, 640, height);
+      });
+    const originalObserver = globalThis.ResizeObserver;
+    globalThis.ResizeObserver = class {
+      disconnect = vi.fn();
+      constructor(private callback: ResizeObserverCallback) {}
+      observe = (target: Element) => {
+        observers.set(target, {
+          notify: () => this.callback([], this as unknown as ResizeObserver),
+          disconnect: this.disconnect,
+        });
+      };
+      unobserve = vi.fn();
+    } as unknown as typeof ResizeObserver;
+    const style = document.createElement("style");
+
+    try {
+      const { unmount } = renderWithProviders(
+        <AddBackendModal onClose={vi.fn()} />,
+      );
+      const [outer, inner] = screen.getAllByTestId("add-backend-panel-height");
+      expect(outer).toContainElement(inner);
+      const css = compiler.build([...inner.classList]);
+      const rules = [
+        ...css.matchAll(/\.((?:\\.|[\w-])+)\s*\{([^}]+)\}/g),
+      ].filter(([, selector]) =>
+        inner.classList.contains(selector.replace(/\\(.)/g, "$1")),
+      );
+      const heightRule = rules.find(([, , body]) =>
+        /(?:^|\n)\s*height:\s*var\((--[\w-]+)\);/.test(body),
+      );
+      expect(heightRule).toBeDefined();
+      const property = /height:\s*var\((--[\w-]+)\);/.exec(heightRule![2])![1];
+      // Apply the actual compiled rule: its local default must beat the
+      // measured ancestor's inherited variable before this panel is measured.
+      style.textContent = heightRule![0];
+      document.head.appendChild(style);
+      const renderedHeight = (panel: HTMLElement) => {
+        expect(panel.style.height).toBe("");
+        return getComputedStyle(panel).getPropertyValue(property);
+      };
+      expect(renderedHeight(outer)).toBe("440px");
+      expect(renderedHeight(inner)).toBe("auto");
+
+      const declarations = rules.map(([, , body]) => body).join("\n");
+      expect(heightRule![2]).toMatch(/transition-property:\s*height;/);
+      expect(declarations).toMatch(/transition-duration:\s*300ms;/);
+      const easing = /transition-timing-function:\s*var\((--[\w-]+)\);/.exec(
+        declarations,
+      );
+      expect(easing).not.toBeNull();
+      expect(css).toMatch(
+        new RegExp(
+          `${easing![1]}:\\s*cubic-bezier\\(0\\.4,\\s*0,\\s*0\\.2,\\s*1\\)`,
+        ),
+      );
+      const reducedMotion =
+        /@media\s*\(prefers-reduced-motion:\s*reduce\)\s*\{\s*\.((?:\\.|[\w-])+)\s*\{\s*transition-property:\s*none;/.exec(
+          css,
+        );
+      expect(reducedMotion).not.toBeNull();
+      expect(
+        inner.classList.contains(reducedMotion![1].replace(/\\(.)/g, "$1")),
+      ).toBe(true);
+
+      const resize = (panel: HTMLElement, height: number) => {
+        const content = panel.firstElementChild!;
+        heights.set(content, height);
+        act(() => observers.get(content)!.notify());
+      };
+      await selectAgentServer();
+      resize(inner, 380);
+      resize(outer, 520);
+      expect(renderedHeight(inner)).toBe("380px");
+      expect(renderedHeight(outer)).toBe("520px");
+      resize(inner, 0);
+      expect(renderedHeight(inner)).toBe("auto");
+      resize(inner, 240);
+      expect(renderedHeight(inner)).toBe("240px");
+      unmount();
+      for (const observer of observers.values()) {
+        expect(observer.disconnect).toHaveBeenCalledOnce();
+      }
+    } finally {
+      style.remove();
+      rectSpy.mockRestore();
+      globalThis.ResizeObserver = originalObserver;
+    }
+  });
+
+  it("applies the compiled grid states to each mounted disclosure", async () => {
+    const compiler = await compile(
+      await readFile(resolve("src/tailwind.css"), "utf8"),
+      { base: resolve("src"), onDependency: () => {} },
+    );
+    const user = userEvent.setup();
+    renderWithProviders(<AddBackendModal onClose={vi.fn()} />);
+    const style = document.createElement("style");
+    document.head.appendChild(style);
+    const candidates = new Set<string>();
+    const applyGridStyles = (grid: HTMLElement) => {
+      grid.classList.forEach((candidate) => candidates.add(candidate));
+      const stylesheet = parse(compiler.build([...candidates]));
+      const rules: string[] = [];
+      stylesheet.walkRules((rule) => {
+        // jsdom does not implement CSS layers or nested media. Install the
+        // compiler's base declarations; the library test covers their layers,
+        // scope and the reduced-motion override in the shipped stylesheet.
+        if (rule.parent?.type !== "atrule" || rule.parent.name !== "layer")
+          return;
+        const declarations = rule.nodes.filter((node) => node.type === "decl");
+        rules.push(`${rule.selector}{${declarations.join(";")}}`);
+      });
+      style.textContent = rules.join("\n");
+    };
+    const exerciseDisclosure = async (bodyId: string, toggleId: string) => {
+      const body = screen.getByTestId(bodyId);
+      const grid = body.parentElement!.parentElement!;
+      applyGridStyles(grid);
+      expect(getComputedStyle(grid).gridTemplateRows).toBe("0fr");
+      expect(getComputedStyle(grid).transitionProperty).toBe(
+        "grid-template-rows",
+      );
+      // jsdom 31 serializes 200ms as 0.2s; compare the resolved duration.
+      expect(parseFloat(getComputedStyle(grid).transitionDuration)).toBeCloseTo(
+        0.2,
+      );
+      expect(body).toHaveAttribute("inert");
+
+      await user.click(screen.getByTestId(toggleId));
+      applyGridStyles(grid);
+      expect(screen.getByTestId(bodyId)).toBe(body);
+      expect(getComputedStyle(grid).gridTemplateRows).toBe("1fr");
+      expect(body).not.toHaveAttribute("inert");
+
+      await user.click(screen.getByTestId(toggleId));
+      expect(screen.getByTestId(bodyId)).toBe(body);
+      expect(getComputedStyle(grid).gridTemplateRows).toBe("0fr");
+      expect(body).toHaveAttribute("inert");
+    };
+
+    try {
+      await exerciseDisclosure(
+        "add-backend-advanced-panel",
+        "add-backend-advanced-toggle",
+      );
+      await selectAgentServer(user);
+      await exerciseDisclosure(
+        "add-backend-local-guidance-body",
+        "add-backend-local-guidance-toggle",
+      );
+      await user.click(
+        screen.getByTestId("add-backend-location-option-remote"),
+      );
+      await exerciseDisclosure(
+        "add-backend-remote-guidance-body",
+        "add-backend-remote-guidance-toggle",
+      );
+    } finally {
+      style.remove();
+    }
+  });
+
+  it("hides the Advanced host disclosure while authorization is pending", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(window, "open").mockReturnValue({
+      closed: false,
+      close: vi.fn(),
+      location: { href: "" },
+    } as unknown as Window);
+    renderWithProviders(<AddBackendModal onClose={vi.fn()} />);
+
+    expect(screen.getByTestId("add-backend-advanced-toggle")).toBeVisible();
+
+    await user.click(screen.getByTestId("add-backend-login-button"));
+
+    expect(
+      await screen.findByTestId("add-backend-auth-awaiting"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("add-backend-advanced-toggle"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("shows Local and Remote inside the Agent-server tab", async () => {
+    renderWithProviders(<AddBackendModal onClose={vi.fn()} />);
+
+    await selectAgentServer();
+
+    expect(
+      screen.getByTestId("add-backend-agent-server-panel"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByTestId("add-backend-location-option-local"),
+    ).toHaveAttribute("aria-checked", "true");
+    expect(
+      screen.getByTestId("add-backend-location-option-remote"),
+    ).toHaveAttribute("aria-checked", "false");
+    expect(
+      screen
+        .getByTestId("add-backend-location-option-local")
+        .querySelector("svg"),
+    ).not.toBeNull();
+    expect(
+      screen
+        .getByTestId("add-backend-location-option-remote")
+        .querySelector("svg"),
+    ).not.toBeNull();
+    expect(
+      screen.getByTestId("add-backend-local-guidance"),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId("add-backend-local-docs-link")).toHaveAttribute(
+      "href",
+      expect.stringContaining("docs/DEVELOPMENT.md"),
+    );
+    expect(screen.getByTestId("add-backend-name")).toBeInTheDocument();
+    expect(screen.getByTestId("add-backend-host")).toBeInTheDocument();
+    expect(screen.getByTestId("add-backend-api-key")).toBeInTheDocument();
+    expect(screen.getByTestId("add-backend-submit")).toBeInTheDocument();
+  });
+
+  it("keeps the full setup guidance in a collapsible note", async () => {
+    renderWithProviders(<AddBackendModal onClose={vi.fn()} />);
+    const user = await selectAgentServer();
+
+    expect(
+      screen.getByTestId("add-backend-local-guidance-toggle"),
+    ).toHaveAttribute("aria-expanded", "false");
+    expect(
+      screen.getByTestId("add-backend-local-guidance-body"),
+    ).toHaveAttribute("aria-hidden", "true");
+
+    await user.click(screen.getByTestId("add-backend-local-guidance-toggle"));
+    expect(
+      screen.getByTestId("add-backend-local-guidance-toggle"),
+    ).toHaveAttribute("aria-expanded", "true");
+    const localGuidance = screen.getByTestId("add-backend-local-guidance");
+    expect(localGuidance).toHaveTextContent("BACKEND$LOCAL_SETUP_DESCRIPTION");
+    expect(localGuidance).toHaveTextContent(
+      "agent-canvas --backend-only --port 8001",
+    );
+
+    await user.click(screen.getByTestId("add-backend-location-option-remote"));
+    expect(
+      screen.getByTestId("add-backend-remote-guidance-toggle"),
+    ).toHaveAttribute("aria-expanded", "false");
+    expect(
+      screen.getByTestId("add-backend-remote-guidance-body"),
+    ).toHaveAttribute("aria-hidden", "true");
+
+    await user.click(screen.getByTestId("add-backend-remote-guidance-toggle"));
+    const remoteGuidance = screen.getByTestId("add-backend-remote-guidance");
+    expect(remoteGuidance).toHaveTextContent(
+      "BACKEND$REMOTE_SETUP_DESCRIPTION",
+    );
+    expect(remoteGuidance).toHaveTextContent(
+      "BACKEND$REMOTE_CONNECTION_DESCRIPTION",
+    );
+  });
+
+  it("starts the Agent-server form with an empty host field", async () => {
+    renderWithProviders(<AddBackendModal onClose={vi.fn()} />);
+
+    await selectAgentServer();
+
+    expect(screen.getByTestId("add-backend-host")).toHaveValue("");
+  });
+
+  it("disables Connect until name and host are filled (local backend)", async () => {
+    renderWithProviders(<AddBackendModal onClose={vi.fn()} />);
+    const user = await selectAgentServer();
+
+    const submit = screen.getByTestId(
+      "add-backend-submit",
+    ) as HTMLButtonElement;
+    expect(submit).toBeDisabled();
+
+    await user.type(screen.getByTestId("add-backend-name"), "My Server");
+    expect(submit).toBeDisabled();
+
+    // Local agent-server connections do not require an API key.
+    await user.type(
+      screen.getByTestId("add-backend-host"),
+      "http://localhost:8000",
+    );
+    expect(submit).not.toBeDisabled();
+  });
+
+  it("allows submitting a local backend with a blank API key", async () => {
+    const onClose = vi.fn();
+    renderWithProviders(<AddBackendModal onClose={onClose} />);
+
+    const user = await selectAgentServer();
+    await user.type(screen.getByTestId("add-backend-name"), "Local Extra");
+    await user.type(
+      screen.getByTestId("add-backend-host"),
+      "http://127.0.0.1:18002",
+    );
+
+    await user.click(screen.getByTestId("add-backend-submit"));
+
+    await waitFor(() => expect(onClose).toHaveBeenCalled());
+
+    const stored = JSON.parse(
+      window.localStorage.getItem("openhands-backends") ?? "[]",
+    );
+    const added = stored.find(
+      (b: { name: string }) => b.name === "Local Extra",
+    );
+    expect(added).toMatchObject({
+      name: "Local Extra",
+      host: "http://127.0.0.1:18002",
+      apiKey: "",
+      kind: "local",
+    });
+  });
+
+  it("requires an API key for a Remote agent-server", async () => {
+    const onClose = vi.fn();
+    renderWithProviders(<AddBackendModal onClose={onClose} />);
+    const user = await selectAgentServer();
+    await user.click(screen.getByTestId("add-backend-location-option-remote"));
+
+    const submit = screen.getByTestId(
+      "add-backend-submit",
+    ) as HTMLButtonElement;
+
+    expect(
+      screen.getByTestId("add-backend-remote-guidance"),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId("add-backend-remote-docs-link")).toHaveAttribute(
+      "href",
+      expect.stringContaining("docs/SELF_HOSTING.md"),
+    );
+
+    await user.type(screen.getByTestId("add-backend-name"), "Remote GPU");
+    await user.type(
+      screen.getByTestId("add-backend-host"),
+      "https://agent.example.com",
+    );
+    expect(submit).toBeDisabled();
+
+    await user.type(screen.getByTestId("add-backend-api-key"), "token");
+    expect(submit).not.toBeDisabled();
+
+    await user.click(submit);
+    await waitFor(() => expect(onClose).toHaveBeenCalled());
+
+    const stored = JSON.parse(
+      window.localStorage.getItem("openhands-backends") ?? "[]",
+    );
+    expect(
+      stored.find((backend: { name: string }) => backend.name === "Remote GPU"),
+    ).toMatchObject({
+      host: "https://agent.example.com",
+      apiKey: "token",
+      kind: "local",
+    });
+  });
+
+  it("saves the backend, switches to it, and closes", async () => {
+    const onClose = vi.fn();
+    renderWithProviders(<AddBackendModal onClose={onClose} />);
+
+    const user = await selectAgentServer();
+    await user.type(screen.getByTestId("add-backend-name"), "Local 1");
+    await user.type(
+      screen.getByTestId("add-backend-host"),
+      "http://localhost:9000",
+    );
+    await user.type(screen.getByTestId("add-backend-api-key"), "k");
+
+    await user.click(screen.getByTestId("add-backend-submit"));
+
+    await waitFor(() => expect(onClose).toHaveBeenCalled());
+
+    const stored = JSON.parse(
+      window.localStorage.getItem("openhands-backends") ?? "[]",
+    );
+    expect(stored).toHaveLength(2);
+    const added = stored.find((b: { name: string }) => b.name === "Local 1");
+    expect(added).toMatchObject({
+      name: "Local 1",
+      host: "http://localhost:9000",
+      apiKey: "k",
+      kind: "local",
+    });
+
+    // Active selection must point at the newly added backend.
+    const active = JSON.parse(
+      window.localStorage.getItem("openhands-active-backend") ?? "null",
+    );
+    expect(active).toEqual({ backendId: added.id, orgId: null });
+  });
+
+  it("keeps the modal open and shows a connection error when the local backend probe fails", async () => {
+    getServerInfoMock.mockRejectedValueOnce(new Error("Failed to fetch"));
+    const onClose = vi.fn();
+    renderWithProviders(<AddBackendModal onClose={onClose} />);
+
+    const user = await selectAgentServer();
+    await user.type(screen.getByTestId("add-backend-name"), "GPU Tunnel");
+    await user.type(
+      screen.getByTestId("add-backend-host"),
+      "https://127.0.0.1:8000",
+    );
+    await user.type(screen.getByTestId("add-backend-api-key"), "session-key");
+    await user.click(screen.getByTestId("add-backend-submit"));
+
+    expect(await screen.findByTestId("add-backend-error")).toHaveTextContent(
+      "BACKEND$CONNECTION_TEST_FAILED",
+    );
+    expect(screen.getByTestId("add-backend-error")).toHaveTextContent(
+      "Disconnected",
+    );
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it("keeps the modal open when the local backend is below the compatible version floor", async () => {
+    getServerInfoMock.mockResolvedValueOnce({ version: "1.27.1" });
+    const onClose = vi.fn();
+    renderWithProviders(<AddBackendModal onClose={onClose} />);
+
+    const user = await selectAgentServer();
+    await user.type(screen.getByTestId("add-backend-name"), "Old Tunnel");
+    await user.type(
+      screen.getByTestId("add-backend-host"),
+      "https://127.0.0.1:8000",
+    );
+    await user.type(screen.getByTestId("add-backend-api-key"), "session-key");
+    await user.click(screen.getByTestId("add-backend-submit"));
+
+    expect(await screen.findByTestId("add-backend-error")).toHaveTextContent(
+      "Agent Canvas requires agent-server 1.63.1 or newer",
+    );
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it("closes when the header close button is clicked", async () => {
+    const user = userEvent.setup();
+    const onClose = vi.fn();
+    renderWithProviders(<AddBackendModal onClose={onClose} />);
+
+    await user.click(screen.getByTestId("add-backend-close"));
+
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("hides advanced host settings until expanded while preserving what was typed", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<AddBackendModal onClose={vi.fn()} />);
+
+    // Collapsed: mounted so state survives, but collapsed to zero height and
+    // kept out of the tab order.
+    expect(screen.getByTestId("add-backend-advanced-panel")).toHaveAttribute(
+      "aria-hidden",
+      "true",
+    );
+
+    await user.click(screen.getByTestId("add-backend-advanced-toggle"));
+    expect(screen.getByTestId("add-backend-advanced-toggle")).toHaveAttribute(
+      "aria-expanded",
+      "true",
+    );
+    expect(
+      screen.getByTestId("add-backend-advanced-panel"),
+    ).not.toHaveAttribute("aria-hidden", "true");
+
+    await user.type(
+      screen.getByTestId("add-backend-cloud-host"),
+      "https://cloud.example.com",
+    );
+    await user.click(screen.getByTestId("add-backend-advanced-toggle"));
+    await user.click(screen.getByTestId("add-backend-advanced-toggle"));
+
+    expect(screen.getByTestId("add-backend-cloud-host")).toHaveValue(
+      "https://cloud.example.com",
+    );
+  });
+
+  it("renders the cloud login button without a key icon prefix", () => {
+    renderWithProviders(<AddBackendModal onClose={vi.fn()} />);
+
+    const loginButton = screen.getByTestId("add-backend-login-button");
+    expect(loginButton).not.toHaveClass("w-full");
+    expect(loginButton.textContent?.trim()).not.toMatch(/^🔑/);
+    expect(loginButton.textContent).not.toContain("🔑");
+  });
+});
+
+// @spec BM-002 — adding a backend auto-switches the active selection, so a
+// backend-scoped detail page is now stale; the user must land on the section
+// list rather than the previous backend's detail page.
+describe("AddBackendModal – redirect after adding a backend", () => {
+  function renderOnPath(currentPath: string) {
+    const navigate = vi.fn();
+    const navigation: NavigationContextValue = {
+      currentPath,
+      conversationId: null,
+      isNavigating: false,
+      navigate,
+    };
+    renderWithProviders(<AddBackendModal onClose={vi.fn()} />, navigation);
+    return { navigate };
+  }
+
+  async function addLocalBackend() {
+    const user = await selectAgentServer();
+    await user.type(screen.getByTestId("add-backend-name"), "Local Extra");
+    await user.type(
+      screen.getByTestId("add-backend-host"),
+      "http://127.0.0.1:18002",
+    );
+    await user.click(screen.getByTestId("add-backend-submit"));
+    await waitFor(() => {
+      const stored = JSON.parse(
+        window.localStorage.getItem("openhands-backends") ?? "[]",
+      );
+      expect(
+        stored.some((b: { name: string }) => b.name === "Local Extra"),
+      ).toBe(true);
+    });
+  }
+
+  it.each([
+    { path: "/automations/auto-1", expected: "/automations" },
+    { path: "/conversations/abc", expected: "/conversations" },
+  ])(
+    "redirects to the section list when adding from $path",
+    async ({ path, expected }) => {
+      // Arrange
+      const { navigate } = renderOnPath(path);
+
+      // Act
+      await addLocalBackend();
+
+      // Assert
+      expect(navigate).toHaveBeenCalledWith(expected);
+    },
+  );
+
+  it("does not redirect when adding from a section list page", async () => {
+    // Arrange
+    const { navigate } = renderOnPath("/automations");
+
+    // Act
+    await addLocalBackend();
+
+    // Assert
+    expect(navigate).not.toHaveBeenCalled();
+  });
+});
+
+describe("AddBackendModal – analytics", () => {
+  it("captures backend_added once with manual connection metadata", async () => {
+    // Arrange
+    renderWithProviders(<AddBackendModal onClose={vi.fn()} />);
+    const user = await selectAgentServer();
+
+    // Act — connect a local backend through the manual form
+    await user.type(screen.getByTestId("add-backend-name"), "Local Extra");
+    await user.type(
+      screen.getByTestId("add-backend-host"),
+      "http://localhost:8000",
+    );
+    await user.type(screen.getByTestId("add-backend-api-key"), "sk-local");
+    await user.click(screen.getByTestId("add-backend-submit"));
+
+    // Assert — emitted exactly once with coarse, non-sensitive properties
+    await waitFor(() =>
+      expect(captureMock).toHaveBeenCalledWith(
+        "backend_added",
+        expect.objectContaining({
+          backend_kind: "local",
+          connection_method: "manual",
+          has_api_key: true,
+          source: "add_backend_modal",
+        }),
+      ),
+    );
+    const backendAddedCalls = captureMock.mock.calls.filter(
+      ([event]) => event === "backend_added",
+    );
+    expect(backendAddedCalls).toHaveLength(1);
+  });
+});
+
+describe("AddBackendModal – DigitalOcean", () => {
+  const CONNECTION = {
+    id: "conn_1",
+    kind: "pat" as const,
+    label: "My team",
+    teamName: "Acme",
+    expiresAt: null,
+    isExpired: false,
+  };
+
+  function fakeMarsBridge({ signedIn }: { signedIn: boolean }) {
+    let active = signedIn ? CONNECTION : null;
+    const authState = () => ({
+      connections: active ? [active] : [],
+      active,
+      isPersistent: true,
+      canUseOAuth: false,
+    });
+    const configs: { id: string; name: string; agent: string | null }[] = [
+      { id: "cfg_oh", name: "Web agent", agent: "openhands" },
+      { id: "cfg_cc", name: "Claude agent", agent: "claude-code" },
+      { id: "cfg_legacy", name: "cursor-github-test", agent: null },
+    ];
+    const configSessions = [
+      {
+        session_id: "sess_1",
+        name: "fix-login",
+        status: "SESSION_STATUS_READY",
+        config_id: "cfg_oh",
+      },
+    ];
+    const bridge = {
+      getAuthState: vi.fn(async () => authState()),
+      savePat: vi.fn(async () => {
+        active = CONNECTION;
+        return authState();
+      }),
+      listAgentConfigs: vi.fn(async () => ({
+        configs: [...configs],
+        nextPageToken: null,
+      })),
+      listConfigSessions: vi.fn(async (configId: string) => ({
+        sessions: configSessions.filter((s) => s.config_id === configId),
+        nextPageToken: null,
+      })),
+      listSandboxSizes: vi.fn(async (): Promise<MarsSandboxSize[]> => []),
+      createOpenHandsAgent: vi.fn(async ({ name }: { name: string }) => {
+        const config = { id: "cfg_new", name, agent: "openhands" };
+        configs.push(config);
+        return config;
+      }),
+      createSession: vi.fn(async (configId: string, name: string) => ({
+        session_id: "sess_new",
+        name,
+        status: "SESSION_STATUS_READY",
+        config_id: configId,
+      })),
+      listSessions: vi.fn(async () => ({
+        sessions: [
+          {
+            session_id: "sess_codex",
+            status: "SESSION_STATUS_READY",
+            agent_kind: "AGENT_KIND_CODEX_CLI",
+          },
+          {
+            session_id: "sess_legacy",
+            status: "SESSION_STATUS_READY",
+            config_id: "cfg_legacy",
+          },
+        ],
+        nextPageToken: null,
+      })),
+      openTunnel: vi.fn(async ({ sessionId }: { sessionId: string }) => ({
+        sessionId,
+        status: "connected" as const,
+        remotePort: 8000,
+        localPort: 51001,
+        error: undefined,
+      })),
+      getTunnel: vi.fn(async () => undefined),
+      closeTunnel: vi.fn(async () => {}),
+    };
+    window.marsBridge = bridge as unknown as NonNullable<
+      typeof window.marsBridge
+    >;
+    return bridge;
+  }
+
+  afterEach(() => {
+    delete window.marsBridge;
+  });
+
+  it("opens the provider flow and returns to the catalog without connecting", async () => {
+    // Arrange
+    const bridge = fakeMarsBridge({ signedIn: false });
+    const user = userEvent.setup();
+    renderWithProviders(<AddBackendModal onClose={vi.fn()} />);
+
+    // Act
+    await user.click(screen.getByTestId("add-backend-option-providers"));
+    await user.click(screen.getByTestId("add-backend-provider-digitalocean"));
+    await screen.findByTestId("managed-agents-token");
+
+    // The real provider panel keeps the same minimum in its compiled CSS.
+    const panel = screen.getByTestId("digitalocean-connect-panel");
+    const compiler = await compile(
+      await readFile(resolve("src/tailwind.css"), "utf8"),
+      { base: resolve("src"), onDependency: () => {} },
+    );
+    const minHeightRules: string[] = [];
+    parse(compiler.build([...panel.classList])).walkDecls(
+      "min-height",
+      (declaration) => {
+        const rule = declaration.parent;
+        if (rule?.type === "rule" && panel.matches(rule.selector)) {
+          minHeightRules.push(`${rule.selector}{${declaration.toString()}}`);
+        }
+      },
+    );
+    const style = document.createElement("style");
+    style.textContent = minHeightRules.join("\n");
+    document.head.appendChild(style);
+    try {
+      expect(getComputedStyle(panel).minHeight).toBe("216px");
+    } finally {
+      style.remove();
+    }
+
+    await user.click(screen.getByTestId("add-backend-providers-back"));
+
+    // Assert
+    expect(
+      screen.getByTestId("add-backend-provider-digitalocean"),
+    ).toBeVisible();
+    expect(screen.getByTestId("add-backend-option-providers")).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    expect(screen.queryByTestId("managed-agents-token")).toBeNull();
+    expect(bridge.openTunnel).not.toHaveBeenCalled();
+  });
+
+  it("signs in with a token and lists only the team's OpenHands agents", async () => {
+    // Arrange
+    fakeMarsBridge({ signedIn: false });
+    const user = userEvent.setup();
+    renderWithProviders(<AddBackendModal onClose={vi.fn()} />);
+
+    // Act
+    await user.click(screen.getByTestId("add-backend-option-providers"));
+    await user.click(screen.getByTestId("add-backend-provider-digitalocean"));
+    await user.type(
+      await screen.findByTestId("managed-agents-token"),
+      `dop_v1_${"a".repeat(64)}`,
+    );
+    await user.click(screen.getByTestId("managed-agents-token-submit"));
+
+    // Assert
+    expect(
+      await screen.findByTestId("digitalocean-agent-cfg_oh"),
+    ).toBeInTheDocument();
+    expect(screen.queryByTestId("digitalocean-agent-cfg_cc")).toBeNull();
+    expect(screen.queryByTestId("digitalocean-agent-cfg_legacy")).toBeNull();
+    expect(screen.queryByText("sess_codex")).toBeNull();
+    expect(screen.queryByText("sess_legacy")).toBeNull();
+  });
+
+  it("opening an agent resumes its latest session and closes the modal", async () => {
+    // Arrange
+    const bridge = fakeMarsBridge({ signedIn: true });
+    const onClose = vi.fn();
+    const navigate = vi.fn();
+    renderWithProviders(<AddBackendModal onClose={onClose} />, {
+      currentPath: "/",
+      conversationId: null,
+      isNavigating: false,
+      navigate,
+    });
+
+    // Act
+    await userEvent.click(screen.getByTestId("add-backend-option-providers"));
+    await userEvent.click(
+      screen.getByTestId("add-backend-provider-digitalocean"),
+    );
+    await userEvent.click(
+      await screen.findByTestId("digitalocean-agent-open-cfg_oh"),
+    );
+
+    // Assert
+    await waitFor(() => expect(onClose).toHaveBeenCalled());
+    expect(bridge.openTunnel).toHaveBeenCalledWith(
+      expect.objectContaining({ sessionId: "sess_1" }),
+    );
+    expect(navigate).toHaveBeenCalledWith(
+      expect.stringContaining("/conversations"),
+    );
+  });
+
+  it("New Agent creates an OpenHands agent and launches its first session", async () => {
+    // Arrange
+    const bridge = fakeMarsBridge({ signedIn: true });
+    bridge.listSandboxSizes.mockResolvedValue([
+      { slug: "mars-2vcpu-4gb", vcpus: 2, memory_mb: 4096 },
+      { slug: "mars-1vcpu-1gb", vcpus: 1, memory_mb: 1024 },
+    ]);
+    const onClose = vi.fn();
+    const user = userEvent.setup();
+    renderWithProviders(<AddBackendModal onClose={onClose} />);
+    await user.click(screen.getByTestId("add-backend-option-providers"));
+    await user.click(screen.getByTestId("add-backend-provider-digitalocean"));
+
+    // Act
+    await user.click(await screen.findByTestId("digitalocean-new-agent"));
+    const nameInput = screen.getByTestId("digitalocean-new-agent-name");
+    await user.clear(nameInput);
+    await user.type(nameInput, "team-agent");
+    await user.click(screen.getByTestId("digitalocean-new-agent-submit"));
+
+    // Assert
+    await waitFor(() => expect(onClose).toHaveBeenCalled());
+    expect(bridge.createOpenHandsAgent).toHaveBeenCalledWith({
+      name: "team-agent",
+      size: "mars-1vcpu-1gb",
+    });
+    expect(bridge.createSession).toHaveBeenCalledWith(
+      "cfg_new",
+      expect.stringMatching(/^team-agent-/),
+    );
+    expect(bridge.openTunnel).toHaveBeenCalledWith(
+      expect.objectContaining({ sessionId: "sess_new" }),
+    );
+  });
+
+  it("expanding an agent lists its sessions and opens the chosen one", async () => {
+    // Arrange
+    const bridge = fakeMarsBridge({ signedIn: true });
+    bridge.listConfigSessions.mockResolvedValue({
+      sessions: [
+        {
+          session_id: "sess_1",
+          name: "fix-login",
+          status: "SESSION_STATUS_READY",
+          config_id: "cfg_oh",
+        },
+        {
+          session_id: "sess_2",
+          name: "refactor-api",
+          status: "SESSION_STATUS_PAUSED",
+          config_id: "cfg_oh",
+        },
+      ],
+      nextPageToken: null,
+    });
+    const onClose = vi.fn();
+    const user = userEvent.setup();
+    renderWithProviders(<AddBackendModal onClose={onClose} />);
+    await user.click(screen.getByTestId("add-backend-option-providers"));
+    await user.click(screen.getByTestId("add-backend-provider-digitalocean"));
+
+    // Act
+    await user.click(
+      await screen.findByTestId("digitalocean-agent-toggle-cfg_oh"),
+    );
+    await user.click(screen.getByTestId("digitalocean-session-sess_2"));
+
+    // Assert
+    await waitFor(() => expect(onClose).toHaveBeenCalled());
+    expect(bridge.openTunnel).toHaveBeenCalledWith(
+      expect.objectContaining({ sessionId: "sess_2" }),
+    );
+  });
+});

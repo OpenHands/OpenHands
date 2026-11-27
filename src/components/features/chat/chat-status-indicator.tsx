@@ -1,0 +1,50 @@
+import { cn } from "@heroui/react";
+import { motion, AnimatePresence } from "framer-motion";
+import DebugStackframeDot from "#/icons/debug-stackframe-dot.svg?react";
+
+interface ChatStatusIndicatorProps {
+  status: string;
+  statusColor: string;
+}
+
+function ChatStatusIndicator({
+  status,
+  statusColor,
+}: ChatStatusIndicatorProps) {
+  return (
+    <div
+      data-testid="chat-status-indicator"
+      className={cn(
+        "w-full max-w-full rounded-pill p-1 bg-surface flex items-center gap-1",
+      )}
+    >
+      <AnimatePresence mode="wait">
+        {/* Dot */}
+        <motion.span
+          key={`dot-${status}`}
+          className="flex-shrink-0 animate-chat-status-pulse"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.3 }}
+        >
+          <DebugStackframeDot className="w-4 h-4" color={statusColor} />
+        </motion.span>
+
+        {/* Text */}
+        <motion.span
+          key={`text-${status}`}
+          initial={{ opacity: 0, y: -2 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: 2 }}
+          transition={{ duration: 0.3 }}
+          className="pr-1.5 font-normal text-2xs leading-4 normal-case break-words whitespace-normal"
+        >
+          {status}
+        </motion.span>
+      </AnimatePresence>
+    </div>
+  );
+}
+
+export default ChatStatusIndicator;

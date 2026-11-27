@@ -1,0 +1,213 @@
+name: Mock-LLM E2E Tests
+
+on:
+  push:
+    branches: [main]
+  # The release-please PR, on every update: only it changes this file.
+  pull_request:
+    paths:
+      - .release-please-manifest.json
+  workflow_dispatch:
+
+concurrency:
+  group: mock-llm-e2e-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  mock-llm-e2e:
+    runs-on: ubuntu-24.04
+    # Full-suite runs can spend several minutes on dependency, browser, uv,
+    # and frontend setup before Playwright starts. Keep Playwright's own
+    # 20-minute test deadline below, but give the job enough wall-clock room
+    # for setup plus reporting so GitHub does not terminate it mid-suite.
+    timeout-minutes: 30
+
+    env:
+      MOCK_LLM_REPORT_PATH: mock-llm-report.md
+      MOCK_LLM_WORKFLOW_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Read defaults from config/defaults.json
+        id: defaults
+        run: |
+          echo "agent_server_version=$(node -p "require('./config/defaults.json').versions.agentServer")" >> "$GITHUB_OUTPUT"
+          echo "automation_version=$(node -p "require('./config/defaults.json').versions.automation")" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: "24.22.1"
+          cache: npm
+
+      - name: Install npm dependencies
+        run: npm ci
+
+      - name: Get Playwright version
+        id: pw_version
+        run: echo "version=$(npx playwright --version | awk '{print $2}')" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Playwright browsers
+        id: pw_cache
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.pw_version.outputs.version }}
+
+      - name: Install Playwright Chromium
+        if: steps.pw_cache.outputs.cache-hit != 'true'
+        run: npx playwright install chromium
+
+      - name: Install Playwright system deps
+        run: npx playwright install-deps chromium
+
+      - name: Install uv
+        run: |
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Install openhands-sdk (for mock LLM server)
+        env:
+          AGENT_SERVER_VERSION: ${{ steps.defaults.outputs.agent_server_version }}
+        run: |
+          uv venv .mock-llm-venv
+          uv pip install -p .mock-llm-venv "openhands-sdk==$AGENT_SERVER_VERSION" pytest
+
+      - name: Pre-warm automation backend (uvx cache)
+        env:
+          AUTOMATION_VERSION: ${{ steps.defaults.outputs.automation_version }}
+        run: |
+          # Pre-install openhands-automation into the uvx cache so the
+          # agent-canvas binary doesn't need to download it at startup.
+          # Without this, the 180s Playwright webServer timeout expires
+          # before the automation backend finishes installing (~60-90s).
+          uvx --from "openhands-automation==$AUTOMATION_VERSION" python -c "from openhands.automation.app import app; print('automation package cached')"
+
+      - name: Test mock LLM server
+        run: .mock-llm-venv/bin/python3 -m pytest tests/e2e/mock-llm/scripts -q
+
+      - name: Verify mock LLM server starts
+        run: |
+          .mock-llm-venv/bin/python3 tests/e2e/mock-llm/scripts/mock-llm-server.py --port 9998 &
+          SERVER_PID=$!
+          # Retry up to 30 seconds — openhands-sdk's litellm import is slow
+          for i in $(seq 1 30); do
+            if curl -sf http://127.0.0.1:9998/v1/chat/completions \
+              -H "Content-Type: application/json" \
+              -d '{"model":"test","messages":[]}' > /dev/null 2>&1; then
+              echo "Mock LLM server responded on attempt $i"
+              break
+            fi
+            sleep 1
+          done
+          curl -sf http://127.0.0.1:9998/v1/chat/completions \
+            -H "Content-Type: application/json" \
+            -d '{"model":"test","messages":[]}' | python3 -m json.tool
+          kill $SERVER_PID
+
+      - name: Build frontend (for agent-canvas binary)
+        run: npm run build:app
+
+      - name: Run mock-LLM E2E tests
+        id: run_tests
+        env:
+          MOCK_LLM_PYTHON: .mock-llm-venv/bin/python3
+          MOCK_LLM_GLOBAL_TIMEOUT_MS: 1200000
+        run: |
+          set +e
+          MARKER_DIR=".mock-llm-markers"
+          DONE_MARKER="$MARKER_DIR/.tests-done"
+          PASS_MARKER="$MARKER_DIR/.all-passed"
+          rm -rf "$MARKER_DIR"
+
+          # Run Playwright in background so our shell survives if we have
+          # to kill it (the webServer teardown can hang indefinitely).
+          npm run test:e2e:mock-llm &
+          PW_PID=$!
+
+          # Wait for tests to complete. Playwright's globalTimeout is 20 min
+          # in CI; we add 60s buffer for webServer startup/teardown.
+          # The custom DoneMarkerReporter writes .tests-done only after ALL
+          # tests finish (pass or fail), before webServer teardown begins.
+          # .results.json is flushed after every single test, so even if we
+          # hit the deadline mid-suite the report script still has data.
+          deadline=$((SECONDS + (MOCK_LLM_GLOBAL_TIMEOUT_MS / 1000) + 60))
+          while [ "$SECONDS" -lt "$deadline" ]; do
+            if ! kill -0 "$PW_PID" 2>/dev/null; then
+              break
+            fi
+            if [ -f "$DONE_MARKER" ]; then
+              echo "Tests completed: $(cat "$DONE_MARKER")"
+              break
+            fi
+            sleep 2
+          done
+
+          # If Playwright is still running (teardown hang or deadline hit),
+          # give it 5s grace then force-kill.
+          if kill -0 "$PW_PID" 2>/dev/null; then
+            sleep 5
+            if kill -0 "$PW_PID" 2>/dev/null; then
+              if [ -f "$DONE_MARKER" ]; then
+                echo "::warning::Killing lingering Playwright process (teardown hung)"
+              else
+                echo "::warning::Killing Playwright process (deadline reached, tests still running)"
+              fi
+              kill "$PW_PID" 2>/dev/null
+              sleep 5
+              kill -9 "$PW_PID" 2>/dev/null
+            fi
+            wait "$PW_PID" 2>/dev/null
+            pw_exit=124
+          else
+            wait "$PW_PID"
+            pw_exit=$?
+          fi
+
+          echo "Playwright exited with code $pw_exit"
+
+          # When killed during teardown, the exit code is non-zero but
+          # tests may have passed. The reporter writes .all-passed only
+          # when all tests pass, so use that as the definitive signal.
+          if [ "$pw_exit" -ne 0 ] && [ -f "$PASS_MARKER" ]; then
+            echo "::notice::All tests passed (marker file present); non-zero exit was teardown-related"
+            pw_exit=0
+          fi
+
+          echo "exit_code=$pw_exit" >> "$GITHUB_OUTPUT"
+          exit 0
+
+      - name: Upload test artifacts
+        id: upload_artifacts
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: mock-llm-e2e-results
+          if-no-files-found: ignore
+          retention-days: 14
+          path: |
+            playwright-report-mock-llm/
+            test-results-mock-llm/
+
+      - name: Render test report
+        if: always()
+        run: |
+          node tests/e2e/mock-llm/scripts/render-mock-llm-report.mjs \
+            --results "test-results-mock-llm/results.json" \
+            --output "$MOCK_LLM_REPORT_PATH" \
+            --workflow-url "$MOCK_LLM_WORKFLOW_URL" \
+            --commit "${{ github.sha }}" \
+            --artifact-url "${{ steps.upload_artifacts.outputs.artifact-url || '' }}" \
+            --exit-code "${{ steps.run_tests.outputs.exit_code }}"
+          cat "$MOCK_LLM_REPORT_PATH" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Fail job when tests fail
+        if: always()
+        run: |
+          exit_code="${{ steps.run_tests.outputs.exit_code }}"
+          exit "${exit_code:-1}"

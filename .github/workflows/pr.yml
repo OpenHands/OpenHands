@@ -1,0 +1,21 @@
+name: pr
+
+# Lints PR titles (Conventional Commits) and applies `type:` labels that drive
+# release notes + the version release-please derives (OpenHands/release-actions).
+#
+# pull_request_target (not pull_request) so it also runs on fork PRs, where the
+# label step needs a writable token. Safe ONLY because the reusable workflow
+# never checks out PR code (reads the title from the payload) and this caller
+# does NOT pass `secrets: inherit` (so the App token stays out of scope). Don't
+# add a checkout step or `secrets: inherit`.
+on:
+  pull_request_target:
+    # synchronize: re-run on each push so the check stays green on release-please's
+    # force-pushed release PR.
+    types: [opened, edited, reopened, synchronize]
+
+jobs:
+  pr-title:
+    permissions:
+      pull-requests: write
+    uses: OpenHands/release-actions/.github/workflows/pr-title.yml@main

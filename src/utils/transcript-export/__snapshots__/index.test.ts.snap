@@ -1,0 +1,61 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`conversation transcript export > renders a self-contained HTML document 1`] = `
+"<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src data:">
+  <title>Debug session</title>
+  <style>
+    :root { color-scheme: light dark; font-family: ui-sans-serif, system-ui, sans-serif; }
+    body { margin: 0; background: #111827; color: #e5e7eb; line-height: 1.55; }
+    main { box-sizing: border-box; width: min(860px, 100%); margin: 0 auto; padding: 48px 24px 80px; }
+    h1 { margin: 0; font-size: 2rem; }
+    h2 { margin: 0; font-size: 1rem; }
+    .model { margin: 8px 0 32px; color: #9ca3af; }
+    .message, details, .tool-summary, .note { margin: 16px 0; border: 1px solid #374151; border-radius: 10px; padding: 16px; background: #1f2937; }
+    .user { border-left: 4px solid #60a5fa; }
+    .assistant { border-left: 4px solid #34d399; }
+    .error { border-left: 4px solid #f87171; }
+    .note { border-left: 4px solid #a78bfa; }
+    header, summary, .tool-summary { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; }
+    summary { cursor: pointer; }
+    time { flex: none; color: #9ca3af; font-size: .75rem; font-weight: 400; }
+    .content { margin-top: 10px; white-space: pre-wrap; overflow-wrap: anywhere; }
+    pre { margin: 14px 0 0; padding: 14px; overflow-x: auto; border-radius: 7px; background: #111827; color: #d1d5db; white-space: pre-wrap; overflow-wrap: anywhere; }
+    @media (prefers-color-scheme: light) {
+      body { background: #f9fafb; color: #111827; }
+      .message, details, .tool-summary, .note { border-color: #d1d5db; background: #fff; }
+      pre { background: #f3f4f6; color: #1f2937; }
+      .model, time { color: #6b7280; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Debug session</h1>
+    <p class="model"><strong>Model:</strong> anthropic/claude-sonnet</p>
+    <section class="message user">
+  <header><h2>User</h2><time datetime="2026-07-10T12:34:56.000Z">2026-07-10T12:34:56.000Z</time></header>
+  <div class="content">Please diagnose **the failure**.</div>
+</section>
+<details>
+  <summary><strong>Tool:</strong> Run the unit tests<time datetime="2026-07-10T12:34:58.000Z">2026-07-10T12:34:58.000Z</time></summary>
+  <pre>Command: \`npm test\`
+
+Output:
+\`\`\`sh
+3 tests passed
+\`\`\`</pre>
+</details>
+<section class="message assistant">
+  <header><h2>Assistant</h2><time datetime="2026-07-10T12:35:00.000Z">2026-07-10T12:35:00.000Z</time></header>
+  <div class="content">The service is healthy now.</div>
+</section>
+  </main>
+</body>
+</html>
+"
+`;

@@ -1,0 +1,85 @@
+import React from "react";
+import { Trans, useTranslation } from "react-i18next";
+import {
+  BaseModalDescription,
+  BaseModalTitle,
+} from "#/components/shared/modals/confirmation-modals/base-modal";
+import { ModalBackdrop } from "#/components/shared/modals/modal-backdrop";
+import { ModalBody } from "#/components/shared/modals/modal-body";
+import { BrandButton } from "../settings/brand-button";
+import { I18nKey } from "#/i18n/declaration";
+
+interface ConfirmDeleteModalProps {
+  onConfirm: () => void;
+  onCancel: () => void;
+  conversationTitle?: string;
+  title?: string;
+  description?: React.ReactNode;
+  isConfirmDisabled?: boolean;
+  isPending?: boolean;
+}
+
+export function ConfirmDeleteModal({
+  onConfirm,
+  onCancel,
+  conversationTitle,
+  title,
+  description,
+  isConfirmDisabled = false,
+  isPending = false,
+}: ConfirmDeleteModalProps) {
+  const { t } = useTranslation("openhands");
+
+  let confirmationMessage: React.ReactNode;
+  if (description != null) {
+    confirmationMessage = description;
+  } else if (conversationTitle) {
+    confirmationMessage = (
+      <Trans
+        ns="openhands"
+        i18nKey={I18nKey.CONVERSATION$DELETE_WARNING_WITH_TITLE}
+        values={{ title: conversationTitle }}
+        components={{ title: <span className="text-contrast" /> }}
+      />
+    );
+  } else {
+    confirmationMessage = t(I18nKey.CONVERSATION$DELETE_WARNING);
+  }
+
+  return (
+    <ModalBackdrop onClose={onCancel}>
+      <ModalBody className="items-start border border-border">
+        <div className="flex flex-col gap-2">
+          <BaseModalTitle
+            title={title ?? t(I18nKey.CONVERSATION$CONFIRM_DELETE)}
+          />
+          <BaseModalDescription>{confirmationMessage}</BaseModalDescription>
+        </div>
+        <div
+          className="flex justify-end gap-2 w-full"
+          onClick={(event) => event.stopPropagation()}
+        >
+          <BrandButton
+            type="button"
+            variant="secondary"
+            onClick={onCancel}
+            testId="cancel-button"
+            isDisabled={isPending}
+          >
+            {t(I18nKey.BUTTON$CANCEL)}
+          </BrandButton>
+          <BrandButton
+            type="button"
+            variant="primary"
+            onClick={onConfirm}
+            testId="confirm-button"
+            isDisabled={isConfirmDisabled || isPending}
+            aria-busy={isPending}
+          >
+            {t(I18nKey.ACTION$CONFIRM_DELETE)}
+          </BrandButton>
+        </div>
+      </ModalBody>
+    </ModalBackdrop>
+  );
+}

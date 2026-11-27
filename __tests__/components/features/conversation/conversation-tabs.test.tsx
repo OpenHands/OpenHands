@@ -1,0 +1,896 @@
+import { render, screen, waitFor, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { MemoryRouter } from "react-router";
+import { ConversationTabs } from "#/components/features/conversation/conversation-tabs/conversation-tabs";
+import { CONVERSATION_TAB_PANEL_ID } from "#/components/features/conversation/conversation-tabs/conversation-tab-ids";
+import { useConversationStore } from "#/stores/conversation-store";
+import { AgentState } from "#/types/agent-state";
+import { ActiveBackendProvider } from "#/contexts/active-backend-context";
+import { __resetActiveStoreForTests } from "#/api/backend-registry/active-store";
+import {
+  ACTIVE_BACKEND_STORAGE_KEY,
+  BACKENDS_STORAGE_KEY,
+} from "#/api/backend-registry/storage";
+import type { Backend } from "#/api/backend-registry/types";
+
+const TASK_CONVERSATION_ID = "task-ec03fb2ab8604517b24af632b058c2fd";
+const REAL_CONVERSATION_ID = "conv-abc123";
+
+let mockConversationId = TASK_CONVERSATION_ID;
+
+vi.mock("#/hooks/use-conversation-id", () => ({
+  useOptionalConversationId: () => ({ conversationId: mockConversationId }),
+  useConversationId: () => ({ conversationId: mockConversationId }),
+}));
+
+let mockHasTaskList = false;
+vi.mock("#/hooks/use-task-list", () => ({
+  useTaskList: () => ({
+    hasTaskList: mockHasTaskList,
+    taskList: [],
+  }),
+}));
+
+let mockProjectId: string | undefined;
+vi.mock("#/hooks/query/use-conversation-project", () => ({
+  useConversationProjectId: () => mockProjectId,
+}));
+
+const mockRefetchGitChanges = vi.fn();
+let mockIsFetchingGitChanges = false;
+vi.mock("#/hooks/query/use-unified-get-git-changes", () => ({
+  useUnifiedGetGitChanges: () => ({
+    refetch: mockRefetchGitChanges,
+    isFetching: mockIsFetchingGitChanges,
+    data: [],
+  }),
+}));
+
+const mockHandleBuildPlanClick = vi.fn();
+vi.mock("#/hooks/use-handle-build-plan-click", () => ({
+  useHandleBuildPlanClick: () => ({
+    handleBuildPlanClick: mockHandleBuildPlanClick,
+  }),
+}));
+
+let mockCurAgentState = AgentState.AWAITING_USER_INPUT;
+vi.mock("#/hooks/use-agent-state", () => ({
+  useAgentState: () => ({ curAgentState: mockCurAgentState }),
+  usePlanningAgentState: () => ({
+    localPlanningConversationId: null,
+    curPlanningAgentState: AgentState.AWAITING_USER_INPUT,
+    isPlanningAgentRunning: false,
+  }),
+}));
+
+vi.mock("#/hooks/query/use-unified-vscode-url", () => ({
+  useUnifiedVSCodeUrl: () => ({
+    data: { url: "http://localhost:8001", error: null },
+    isLoading: false,
+    refetch: vi
+      .fn()
+      .mockResolvedValue({ data: { url: "http://localhost:8001" } }),
+  }),
+}));
+
+const createWrapper = (conversationId: string) =>
+  function ({ children }: { children: React.ReactNode }) {
+    return (
+      <MemoryRouter initialEntries={[`/conversations/${conversationId}`]}>
+        <QueryClientProvider client={new QueryClient()}>
+          <ActiveBackendProvider>{children}</ActiveBackendProvider>
+        </QueryClientProvider>
+      </MemoryRouter>
+    );
+  };
+
+const seedConversationState = (
+  conversationId: string,
+  overrides: Record<string, unknown> = {},
+) => {
+  localStorage.setItem(
+    `conversation-state-${conversationId}`,
+    JSON.stringify({
+      selectedTab: "files",
+      unpinnedTabs: [],
+      unpinnedOverviewSections: [],
+      unpinnedOverviewGitParts: [],
+      conversationMode: "code",
+      subConversationTaskId: null,
+      draftMessage: null,
+      ...overrides,
+    }),
+  );
+};
+
+function seedActiveBackend(backend: Backend): void {
+  localStorage.setItem(BACKENDS_STORAGE_KEY, JSON.stringify([backend]));
+  localStorage.setItem(
+    ACTIVE_BACKEND_STORAGE_KEY,
+    JSON.stringify({ backendId: backend.id, orgId: null }),
+  );
+  __resetActiveStoreForTests();
+}
+
+const setActiveTabState = (tab: "files" | "planner" | "usage") => {
+  seedConversationState(REAL_CONVERSATION_ID, {
+    selectedTab: tab,
+    rightPanelShown: true,
+  });
+  useConversationStore.setState({
+    selectedTab: tab,
+    isRightPanelShown: true,
+    hasRightPanelToggled: true,
+  });
+};
+
+describe("ConversationTabs localStorage behavior", () => {
+  beforeEach(() => {
+    localStorage.clear();
+    __resetActiveStoreForTests();
+    vi.resetAllMocks();
+    mockRefetchGitChanges.mockReset();
+    mockHandleBuildPlanClick.mockReset();
+    mockConversationId = TASK_CONVERSATION_ID;
+    mockHasTaskList = false;
+    mockProjectId = undefined;
+    mockIsFetchingGitChanges = false;
+    mockCurAgentState = AgentState.AWAITING_USER_INPUT;
+    useConversationStore.setState({
+      selectedTab: null,
+      isRightPanelShown: false,
+      hasRightPanelToggled: false,
+      planContent: null,
+    });
+  });
+
+  describe("Project tab", () => {
+    it("is absent outside projects", () => {
+      mockConversationId = REAL_CONVERSATION_ID;
+      render(<ConversationTabs />, {
+        wrapper: createWrapper(REAL_CONVERSATION_ID),
+      });
+      expect(screen.queryByTestId("conversation-tab-project")).toBeNull();
+    });
+
+    it("leads the strip in a project conversation and opens the panel on it", async () => {
+      mockConversationId = REAL_CONVERSATION_ID;
+      mockProjectId = "aa000000000040008000000000000001";
+      const user = userEvent.setup();
+      render(<ConversationTabs />, {
+        wrapper: createWrapper(REAL_CONVERSATION_ID),
+      });
+
+      const tabs = screen
+        .getAllByRole("tab")
+        .map((tab) => tab.getAttribute("data-testid"));
+      expect(tabs[0]).toBe("conversation-tab-project");
+      expect(tabs[1]).toBe("conversation-tab-files");
+
+      await user.click(screen.getByTestId("conversation-tab-project"));
+      expect(useConversationStore.getState().selectedTab).toBe("project");
+      expect(useConversationStore.getState().isRightPanelShown).toBe(true);
+    });
+  });
+
+  describe("task-prefixed conversation IDs", () => {
+    it("should not create localStorage entries for task-prefixed conversation IDs", () => {
+      render(<ConversationTabs />, {
+        wrapper: createWrapper(TASK_CONVERSATION_ID),
+      });
+
+      expect(
+        localStorage.getItem(`conversation-state-${TASK_CONVERSATION_ID}`),
+      ).toBeNull();
+    });
+  });
+
+  describe("consolidated localStorage key", () => {
+    it("should use a single consolidated key for tab state", async () => {
+      mockConversationId = REAL_CONVERSATION_ID;
+      const user = userEvent.setup();
+
+      render(<ConversationTabs />, {
+        wrapper: createWrapper(REAL_CONVERSATION_ID),
+      });
+
+      const changesTab = screen.getByTestId("conversation-tab-files");
+      await user.click(changesTab);
+
+      const consolidatedKey = `conversation-state-${REAL_CONVERSATION_ID}`;
+      const storedState = localStorage.getItem(consolidatedKey);
+      expect(storedState).not.toBeNull();
+
+      const parsed = JSON.parse(storedState!);
+      expect(parsed).toHaveProperty("selectedTab");
+      expect(parsed).toHaveProperty("unpinnedTabs");
+      expect(parsed.rightPanelShown).toBe(true);
+    });
+  });
+
+  describe("hook integration", () => {
+    it("should open panel and select tab when clicking a tab while panel is closed", async () => {
+      mockConversationId = REAL_CONVERSATION_ID;
+      const user = userEvent.setup();
+
+      // Arrange: Panel is closed, no tab selected
+      useConversationStore.setState({
+        selectedTab: null,
+        isRightPanelShown: false,
+        hasRightPanelToggled: false,
+      });
+
+      render(<ConversationTabs />, {
+        wrapper: createWrapper(REAL_CONVERSATION_ID),
+      });
+
+      // Act: Click the terminal tab
+      const terminalTab = screen.getByTestId("conversation-tab-terminal");
+      await user.click(terminalTab);
+
+      // Assert: Panel should be open and terminal tab selected.
+      expect(useConversationStore.getState().selectedTab).toBe("terminal");
+      expect(useConversationStore.getState().hasRightPanelToggled).toBe(true);
+
+      const storedState = JSON.parse(
+        localStorage.getItem(`conversation-state-${REAL_CONVERSATION_ID}`)!,
+      );
+      expect(storedState.selectedTab).toBe("terminal");
+      expect(storedState.rightPanelShown).toBe(true);
+    });
+
+    it("should close panel when clicking the same active tab", async () => {
+      mockConversationId = REAL_CONVERSATION_ID;
+      const user = userEvent.setup();
+
+      // Arrange: Panel is open with editor tab selected
+      seedConversationState(REAL_CONVERSATION_ID, {
+        selectedTab: "files",
+        rightPanelShown: true,
+      });
+      useConversationStore.setState({
+        selectedTab: "files",
+        isRightPanelShown: true,
+        hasRightPanelToggled: true,
+      });
+
+      render(<ConversationTabs />, {
+        wrapper: createWrapper(REAL_CONVERSATION_ID),
+      });
+
+      // Act: Click the editor tab again
+      const editorTab = screen.getByTestId("conversation-tab-files");
+      await user.click(editorTab);
+
+      // Assert: Panel should be closed and persisted.
+      expect(useConversationStore.getState().hasRightPanelToggled).toBe(false);
+
+      const storedState = JSON.parse(
+        localStorage.getItem(`conversation-state-${REAL_CONVERSATION_ID}`)!,
+      );
+      expect(storedState.rightPanelShown).toBe(false);
+    });
+
+    it("should switch to different tab when clicking another tab while panel is open", async () => {
+      mockConversationId = REAL_CONVERSATION_ID;
+      const user = userEvent.setup();
+
+      // Arrange: Panel is open with editor tab selected
+      seedConversationState(REAL_CONVERSATION_ID, {
+        selectedTab: "files",
+        rightPanelShown: true,
+      });
+      useConversationStore.setState({
+        selectedTab: "files",
+        isRightPanelShown: true,
+        hasRightPanelToggled: true,
+      });
+
+      render(<ConversationTabs />, {
+        wrapper: createWrapper(REAL_CONVERSATION_ID),
+      });
+
+      // Act: Click the browser tab
+      const browserTab = screen.getByTestId("conversation-tab-browser");
+      await user.click(browserTab);
+
+      // Assert: Browser tab should be selected, panel still open
+      expect(useConversationStore.getState().selectedTab).toBe("browser");
+      expect(useConversationStore.getState().hasRightPanelToggled).toBe(true);
+
+      // Verify localStorage was updated
+      const storedState = JSON.parse(
+        localStorage.getItem(`conversation-state-${REAL_CONVERSATION_ID}`)!,
+      );
+      expect(storedState.selectedTab).toBe("browser");
+    });
+  });
+
+  describe("tab action buttons", () => {
+    beforeEach(() => {
+      mockConversationId = REAL_CONVERSATION_ID;
+    });
+
+    it("no longer renders the refresh button in the top tab bar (it now lives inside the Files tab toolbar)", () => {
+      setActiveTabState("files");
+
+      render(<ConversationTabs />, {
+        wrapper: createWrapper(REAL_CONVERSATION_ID),
+      });
+
+      // The old conversation-tabs refresh button used aria-label "COMMON$FILES"
+      // on a top-bar <button>. Our `conversation-tab-files` button uses a
+      // different DOM shape, so any <button> matching that aria-label here
+      // would be the legacy refresh button.
+      const buttons = Array.from(
+        document.querySelectorAll('button[aria-label="COMMON$FILES"]'),
+      );
+      // The only remaining match should be the tab nav itself (a button with
+      // data-testid conversation-tab-files), if anything. There must be no
+      // standalone refresh button.
+      const refreshButtons = buttons.filter(
+        (b) => b.getAttribute("data-testid") !== "conversation-tab-files",
+      );
+      expect(refreshButtons).toHaveLength(0);
+    });
+
+    it("places the Files tab leftmost, followed by Commits", () => {
+      setActiveTabState("files");
+
+      render(<ConversationTabs />, {
+        wrapper: createWrapper(REAL_CONVERSATION_ID),
+      });
+
+      const tabs = Array.from(
+        document.querySelectorAll('[data-testid^="conversation-tab-"]'),
+      );
+      const testIds = tabs.map((t) => t.getAttribute("data-testid"));
+      // Files must be the first tab; Commits sits beside it as the git view.
+      expect(testIds[0]).toBe("conversation-tab-files");
+      expect(testIds).toContain("conversation-tab-commits");
+      expect(testIds).not.toContain("conversation-tab-changes");
+      expect(testIds.indexOf("conversation-tab-files")).toBeLessThan(
+        testIds.indexOf("conversation-tab-commits"),
+      );
+    });
+
+    it("keeps Files leftmost even when the task list tab is present", () => {
+      setActiveTabState("files");
+      mockHasTaskList = true;
+
+      render(<ConversationTabs />, {
+        wrapper: createWrapper(REAL_CONVERSATION_ID),
+      });
+
+      const tabs = Array.from(
+        document.querySelectorAll('[data-testid^="conversation-tab-"]'),
+      );
+      const testIds = tabs.map((t) => t.getAttribute("data-testid"));
+      expect(testIds[0]).toBe("conversation-tab-files");
+      // Task list should still be visible, just not first.
+      expect(testIds).toContain("conversation-tab-tasklist");
+    });
+
+    it("shows an unpinned tab in the bar while it is selected", () => {
+      mockConversationId = REAL_CONVERSATION_ID;
+      // Planner is cloud-only, so a cloud backend is required to exercise
+      // the unpinned-while-selected logic against the planner tab.
+      seedActiveBackend({
+        id: "cloud-test",
+        name: "Cloud Test",
+        host: "https://app.example.com",
+        apiKey: "secret",
+        kind: "cloud",
+      });
+      seedConversationState(REAL_CONVERSATION_ID, {
+        selectedTab: "planner",
+        unpinnedTabs: ["planner"],
+        rightPanelShown: true,
+      });
+      useConversationStore.setState({
+        selectedTab: "planner",
+        isRightPanelShown: true,
+        hasRightPanelToggled: true,
+      });
+
+      render(<ConversationTabs />, {
+        wrapper: createWrapper(REAL_CONVERSATION_ID),
+      });
+
+      expect(
+        screen.getByTestId("conversation-tab-planner"),
+      ).toBeInTheDocument();
+    });
+
+    it("hides an unpinned tab from the bar once another tab is selected", () => {
+      mockConversationId = REAL_CONVERSATION_ID;
+      // Cloud backend so the planner tab would be eligible — it stays
+      // hidden here because it is unpinned and not the selected tab.
+      seedActiveBackend({
+        id: "cloud-test",
+        name: "Cloud Test",
+        host: "https://app.example.com",
+        apiKey: "secret",
+        kind: "cloud",
+      });
+      seedConversationState(REAL_CONVERSATION_ID, {
+        selectedTab: "files",
+        unpinnedTabs: ["planner"],
+        rightPanelShown: true,
+      });
+      useConversationStore.setState({
+        selectedTab: "files",
+        isRightPanelShown: true,
+        hasRightPanelToggled: true,
+      });
+
+      render(<ConversationTabs />, {
+        wrapper: createWrapper(REAL_CONVERSATION_ID),
+      });
+
+      expect(
+        screen.queryByTestId("conversation-tab-planner"),
+      ).not.toBeInTheDocument();
+      expect(screen.getByTestId("conversation-tab-files")).toBeInTheDocument();
+    });
+
+    it("does not show the build button when the planner tab is inactive", () => {
+      setActiveTabState("files");
+      useConversationStore.setState({
+        planContent: "# Plan content",
+      });
+
+      render(<ConversationTabs />, {
+        wrapper: createWrapper(REAL_CONVERSATION_ID),
+      });
+
+      expect(
+        screen.queryByTestId("planner-tab-build-button"),
+      ).not.toBeInTheDocument();
+    });
+
+    it("shows the build button when the planner tab is active", async () => {
+      setActiveTabState("planner");
+      useConversationStore.setState({
+        planContent: "# Plan content",
+      });
+
+      render(<ConversationTabs />, {
+        wrapper: createWrapper(REAL_CONVERSATION_ID),
+      });
+
+      expect(
+        await screen.findByTestId("planner-tab-build-button"),
+      ).toBeInTheDocument();
+    });
+
+    it("disables the build button when there is no plan content", async () => {
+      setActiveTabState("planner");
+
+      render(<ConversationTabs />, {
+        wrapper: createWrapper(REAL_CONVERSATION_ID),
+      });
+
+      expect(
+        await screen.findByTestId("planner-tab-build-button"),
+      ).toBeDisabled();
+    });
+
+    it("disables the build button when the agent is running", async () => {
+      mockCurAgentState = AgentState.RUNNING;
+      setActiveTabState("planner");
+      useConversationStore.setState({
+        planContent: "# Plan content",
+      });
+
+      render(<ConversationTabs />, {
+        wrapper: createWrapper(REAL_CONVERSATION_ID),
+      });
+
+      expect(
+        await screen.findByTestId("planner-tab-build-button"),
+      ).toBeDisabled();
+    });
+
+    it("leaves the build bar out of the compact tab row, which sits in the fixed-height phone top bar", () => {
+      setActiveTabState("planner");
+      useConversationStore.setState({
+        planContent: "# Plan content",
+      });
+
+      render(<ConversationTabs variant="compact" />, {
+        wrapper: createWrapper(REAL_CONVERSATION_ID),
+      });
+
+      expect(
+        screen.getByTestId("conversation-tab-planner"),
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByTestId("planner-tab-build-button"),
+      ).not.toBeInTheDocument();
+    });
+
+    it("calls the build handler when the build button is clicked", async () => {
+      const user = userEvent.setup();
+      setActiveTabState("planner");
+      useConversationStore.setState({
+        planContent: "# Plan content",
+      });
+
+      render(<ConversationTabs />, {
+        wrapper: createWrapper(REAL_CONVERSATION_ID),
+      });
+
+      await user.click(await screen.findByTestId("planner-tab-build-button"));
+
+      expect(mockHandleBuildPlanClick).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe("planner tab visibility by backend kind", () => {
+    beforeEach(() => {
+      mockConversationId = REAL_CONVERSATION_ID;
+    });
+
+    it("should show the planner tab when the active backend is local", () => {
+      // Arrange
+      seedActiveBackend({
+        id: "local-test",
+        name: "Local Test",
+        host: "http://localhost:8000",
+        apiKey: "",
+        kind: "local",
+      });
+
+      // Act
+      render(<ConversationTabs />, {
+        wrapper: createWrapper(REAL_CONVERSATION_ID),
+      });
+
+      // Assert: local planning is now supported, so the tab is shown.
+      expect(
+        screen.getByTestId("conversation-tab-planner"),
+      ).toBeInTheDocument();
+    });
+
+    it("should show the planner tab when the active backend is cloud", () => {
+      // Arrange
+      seedActiveBackend({
+        id: "cloud-test",
+        name: "Cloud Test",
+        host: "https://app.example.com",
+        apiKey: "secret",
+        kind: "cloud",
+      });
+
+      // Act
+      render(<ConversationTabs />, {
+        wrapper: createWrapper(REAL_CONVERSATION_ID),
+      });
+
+      // Assert
+      expect(
+        screen.getByTestId("conversation-tab-planner"),
+      ).toBeInTheDocument();
+    });
+  });
+
+  describe("vscode link visibility by backend kind", () => {
+    beforeEach(() => {
+      mockConversationId = REAL_CONVERSATION_ID;
+    });
+
+    it("should show the vscode link when the active backend is local", () => {
+      // Arrange
+      seedActiveBackend({
+        id: "local-test",
+        name: "Local Test",
+        host: "http://localhost:8000",
+        apiKey: "",
+        kind: "local",
+      });
+
+      // Act
+      render(<ConversationTabs />, {
+        wrapper: createWrapper(REAL_CONVERSATION_ID),
+      });
+
+      // Assert — self-hosted backends serve VSCode too; the URL comes from
+      // the agent server's /api/vscode/url via useUnifiedVSCodeUrl's local
+      // branch, rather than from cloud `exposed_urls`.
+      expect(screen.getByTestId("drawer-vscode-link")).toBeInTheDocument();
+    });
+
+    it("should show the vscode link when the active backend is cloud", () => {
+      // Arrange
+      seedActiveBackend({
+        id: "cloud-test",
+        name: "Cloud Test",
+        host: "https://app.example.com",
+        apiKey: "secret",
+        kind: "cloud",
+      });
+
+      // Act
+      render(<ConversationTabs />, {
+        wrapper: createWrapper(REAL_CONVERSATION_ID),
+      });
+
+      // Assert
+      expect(screen.getByTestId("drawer-vscode-link")).toBeInTheDocument();
+    });
+
+    it("re-measures the tab row when the vscode button's own width changes", () => {
+      // The button's width is folded into how many tabs fit inline, and its
+      // presence is now resolved asynchronously (the hook probes
+      // /api/vscode/status). It sits inside an `ml-auto shrink-0` wrapper, so
+      // it appearing or disappearing leaves the row's own box unchanged —
+      // observing only the row would leave the fit computed against a button
+      // that is no longer on screen, permanently costing an inline tab.
+      const observed: Element[] = [];
+      class RecordingResizeObserver {
+        observe = (el: Element) => {
+          observed.push(el);
+        };
+
+        unobserve = vi.fn();
+
+        disconnect = vi.fn();
+      }
+      // Swap only this global back afterwards: vi.unstubAllGlobals() would
+      // also drop the localStorage/ResizeObserver stubs vitest.setup.ts
+      // installs in beforeAll, breaking every later test in the file.
+      const originalResizeObserver = globalThis.ResizeObserver;
+      globalThis.ResizeObserver =
+        RecordingResizeObserver as unknown as typeof ResizeObserver;
+
+      try {
+        seedActiveBackend({
+          id: "local-test",
+          name: "Local Test",
+          host: "http://localhost:8000",
+          apiKey: "",
+          kind: "local",
+        });
+
+        render(<ConversationTabs />, {
+          wrapper: createWrapper(REAL_CONVERSATION_ID),
+        });
+
+        const vscodeWrapper =
+          screen.getByTestId("drawer-vscode-link").parentElement;
+        expect(vscodeWrapper).not.toBeNull();
+        expect(observed).toContain(vscodeWrapper);
+      } finally {
+        globalThis.ResizeObserver = originalResizeObserver;
+      }
+    });
+  });
+
+  describe("ellipsis context menu", () => {
+    beforeEach(() => {
+      mockConversationId = REAL_CONVERSATION_ID;
+    });
+
+    it("opens the context menu when the ellipsis button is clicked", async () => {
+      const user = userEvent.setup();
+
+      render(<ConversationTabs />, {
+        wrapper: createWrapper(REAL_CONVERSATION_ID),
+      });
+
+      expect(
+        screen.queryByTestId("conversation-tabs-menu-open-files"),
+      ).not.toBeInTheDocument();
+
+      await user.click(screen.getByTestId("ellipsis-button"));
+
+      expect(
+        screen.getByTestId("conversation-tabs-menu-open-files"),
+      ).toBeInTheDocument();
+    });
+  });
+
+  describe("tasklist tab", () => {
+    beforeEach(() => {
+      mockConversationId = REAL_CONVERSATION_ID;
+      mockHasTaskList = true;
+    });
+
+    it("should show tasklist tab when hasTaskList is true", () => {
+      render(<ConversationTabs />, {
+        wrapper: createWrapper(REAL_CONVERSATION_ID),
+      });
+
+      expect(
+        screen.getByTestId("conversation-tab-tasklist"),
+      ).toBeInTheDocument();
+    });
+
+    it("should select tasklist tab when clicked", async () => {
+      const user = userEvent.setup();
+
+      render(<ConversationTabs />, {
+        wrapper: createWrapper(REAL_CONVERSATION_ID),
+      });
+
+      const tasklistTab = screen.getByTestId("conversation-tab-tasklist");
+      await user.click(tasklistTab);
+
+      const { selectedTab, hasRightPanelToggled } =
+        useConversationStore.getState();
+      expect(selectedTab).toBe("tasklist");
+      expect(hasRightPanelToggled).toBe(true);
+    });
+  });
+  describe("accessible tab semantics", () => {
+    beforeEach(() => {
+      mockConversationId = REAL_CONVERSATION_ID;
+    });
+
+    it("exposes the tab strip as a tablist and marks the open tab selected", () => {
+      setActiveTabState("files");
+
+      render(<ConversationTabs />, {
+        wrapper: createWrapper(REAL_CONVERSATION_ID),
+      });
+
+      const tablist = screen.getByRole("tablist");
+      expect(within(tablist).getAllByRole("tab").length).toBeGreaterThan(1);
+
+      const filesTab = screen.getByTestId("conversation-tab-files");
+      expect(filesTab).toHaveAttribute("aria-selected", "true");
+      expect(filesTab).toHaveAttribute(
+        "aria-controls",
+        CONVERSATION_TAB_PANEL_ID,
+      );
+      expect(screen.getByTestId("conversation-tab-browser")).toHaveAttribute(
+        "aria-selected",
+        "false",
+      );
+    });
+
+    it("keeps the selected tab marked, and on the tab stop, while the drawer is closed", () => {
+      // The strip stays in the accessibility tree when the drawer collapses,
+      // so the tab the drawer will reopen on must still read as selected.
+      seedConversationState(REAL_CONVERSATION_ID, { selectedTab: "terminal" });
+      useConversationStore.setState({
+        selectedTab: "terminal",
+        isRightPanelShown: false,
+        hasRightPanelToggled: false,
+      });
+
+      render(<ConversationTabs />, {
+        wrapper: createWrapper(REAL_CONVERSATION_ID),
+      });
+
+      const terminalTab = screen.getByTestId("conversation-tab-terminal");
+      expect(terminalTab).toHaveAttribute("aria-selected", "true");
+      expect(terminalTab).toHaveAttribute("tabindex", "0");
+      expect(screen.getByTestId("conversation-tab-files")).toHaveAttribute(
+        "tabindex",
+        "-1",
+      );
+    });
+
+    it("names every tab, including the ones rendering icon-only", () => {
+      setActiveTabState("files");
+
+      render(<ConversationTabs />, {
+        wrapper: createWrapper(REAL_CONVERSATION_ID),
+      });
+
+      // Inactive tabs hide their label, so without an explicit name they
+      // would be announced as an unlabelled button.
+      expect(
+        screen.getByRole("tab", { name: "COMMON$BROWSER" }),
+      ).toBeInTheDocument();
+    });
+
+    it("gives the open tab the strip's only tab stop", () => {
+      setActiveTabState("files");
+
+      render(<ConversationTabs />, {
+        wrapper: createWrapper(REAL_CONVERSATION_ID),
+      });
+
+      expect(screen.getByTestId("conversation-tab-files")).toHaveAttribute(
+        "tabindex",
+        "0",
+      );
+      expect(screen.getByTestId("conversation-tab-commits")).toHaveAttribute(
+        "tabindex",
+        "-1",
+      );
+    });
+
+    it("moves focus with the arrow keys without changing the open tab", async () => {
+      setActiveTabState("files");
+      const user = userEvent.setup();
+
+      render(<ConversationTabs />, {
+        wrapper: createWrapper(REAL_CONVERSATION_ID),
+      });
+
+      screen.getByTestId("conversation-tab-files").focus();
+      await user.keyboard("{ArrowRight}");
+
+      expect(screen.getByTestId("conversation-tab-commits")).toHaveFocus();
+      expect(useConversationStore.getState().selectedTab).toBe("files");
+
+      // Wraps around the start of the strip.
+      await user.keyboard("{ArrowLeft}{ArrowLeft}");
+      expect(screen.getByTestId("conversation-tab-usage")).toHaveFocus();
+    });
+
+    it("keeps a later selected tab visible when the strip overflows", async () => {
+      setActiveTabState("usage");
+      const originalRect = HTMLElement.prototype.getBoundingClientRect;
+      vi.spyOn(
+        HTMLElement.prototype,
+        "getBoundingClientRect",
+      ).mockImplementation(function getTabRect(this: HTMLElement) {
+        const element = this;
+        if (element.dataset.tabMeasure === "true") {
+          return { width: 40 } as DOMRect;
+        }
+        if (element.className.includes("w-full min-w-0 flex-nowrap")) {
+          return { width: 245 } as DOMRect;
+        }
+        if (element.querySelector('[data-testid="ellipsis-button"]')) {
+          return { width: 40 } as DOMRect;
+        }
+        if (element.querySelector('[data-testid="drawer-vscode-link"]')) {
+          return { width: 0 } as DOMRect;
+        }
+        return originalRect.call(element);
+      });
+
+      render(<ConversationTabs />, {
+        wrapper: createWrapper(REAL_CONVERSATION_ID),
+      });
+
+      await waitFor(() =>
+        expect(screen.getByTestId("conversation-tab-usage")).toHaveAttribute(
+          "aria-selected",
+          "true",
+        ),
+      );
+
+      const tablist = screen.getByRole("tablist");
+      expect(
+        within(tablist).getByRole("tab", { name: "COMMON$USAGE" }),
+      ).toBeInTheDocument();
+      expect(screen.queryByTestId("conversation-tab-browser")).toBeNull();
+    });
+
+    it("activates the focused tab with Enter", async () => {
+      setActiveTabState("files");
+      const user = userEvent.setup();
+
+      render(<ConversationTabs />, {
+        wrapper: createWrapper(REAL_CONVERSATION_ID),
+      });
+
+      screen.getByTestId("conversation-tab-files").focus();
+      await user.keyboard("{ArrowRight}{Enter}");
+
+      expect(useConversationStore.getState().selectedTab).toBe("commits");
+    });
+
+    it("names the overflow trigger for what it customizes", () => {
+      setActiveTabState("files");
+
+      render(<ConversationTabs />, {
+        wrapper: createWrapper(REAL_CONVERSATION_ID),
+      });
+
+      expect(screen.getByTestId("ellipsis-button")).toHaveAttribute(
+        "aria-label",
+        "CONVERSATION$CUSTOMIZE_TABS",
+      );
+    });
+  });
+});

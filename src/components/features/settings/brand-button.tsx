@@ -1,0 +1,77 @@
+import { forwardRef } from "react";
+import { cn } from "#/utils/utils";
+import { formControlButtonClassName } from "#/utils/form-control-classes";
+
+interface BrandButtonProps {
+  testId?: string;
+  name?: string;
+  variant: "primary" | "secondary" | "tertiary" | "danger" | "ghost-danger";
+  type: React.ButtonHTMLAttributes<HTMLButtonElement>["type"];
+  isDisabled?: boolean;
+  className?: string;
+  onClick?: (event?: React.MouseEvent<HTMLButtonElement>) => void;
+  startContent?: React.ReactNode;
+  /** Accessible label for icon-only buttons */
+  ariaLabel?: string;
+  /** Indicates busy/loading state for screen readers */
+  "aria-busy"?: boolean;
+  "aria-haspopup"?: React.AriaAttributes["aria-haspopup"];
+  "aria-expanded"?: boolean;
+}
+
+export const BrandButton = forwardRef<
+  HTMLButtonElement,
+  React.PropsWithChildren<BrandButtonProps>
+>(function BrandButton(
+  {
+    testId,
+    name,
+    children,
+    variant,
+    type,
+    isDisabled,
+    className,
+    onClick,
+    startContent,
+    ariaLabel,
+    "aria-busy": ariaBusy,
+    "aria-haspopup": ariaHasPopup,
+    "aria-expanded": ariaExpanded,
+  },
+  ref,
+) {
+  return (
+    <button
+      ref={ref}
+      name={name}
+      data-testid={testId}
+      disabled={isDisabled}
+      // The type is already passed as a prop to the button component
+
+      type={type}
+      onClick={onClick}
+      aria-label={ariaLabel}
+      aria-busy={ariaBusy}
+      aria-haspopup={ariaHasPopup}
+      aria-expanded={ariaExpanded}
+      className={cn(
+        formControlButtonClassName,
+        variant === "primary" &&
+          "bg-primary text-on-accent hover:opacity-80 disabled:bg-interactive-hover disabled:text-muted disabled:opacity-100",
+        variant === "secondary" &&
+          "border border-border-input bg-base-secondary text-contrast hover:bg-surface-raised dark:border-border",
+        variant === "tertiary" &&
+          "bg-interactive-hover text-contrast hover:opacity-80",
+        variant === "danger" &&
+          "bg-feedback-error text-contrast-foreground hover:bg-feedback-error/90",
+        variant === "ghost-danger" &&
+          "h-auto min-h-0 bg-transparent px-0 text-feedback-error underline hover:no-underline font-normal",
+        startContent && "flex items-center justify-center gap-2",
+        className,
+      )}
+    >
+      {startContent}
+      {children}
+    </button>
+  );
+});

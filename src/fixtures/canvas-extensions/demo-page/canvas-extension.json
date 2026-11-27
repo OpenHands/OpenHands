@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "name": "demo-page",
+  "display_name": "Demo page",
+  "version": "0.1.0",
+  "description": "A dependency-free fixture for the Canvas Extension page ABI.",
+  "entrypoint": "extension.js",
+  "contributes": {
+    "pages": [
+      {
+        "id": "hello",
+        "title": "Hello from an extension",
+        "path": "/hello",
+        "nav_label": "Extension demo"
+      }
+    ]
+  }
+}

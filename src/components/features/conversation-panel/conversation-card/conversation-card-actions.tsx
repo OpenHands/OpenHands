@@ -1,0 +1,156 @@
+import React, { useLayoutEffect, useReducer, useRef } from "react";
+import { useTranslation } from "react-i18next";
+import { cn } from "#/utils/utils";
+import { I18nKey } from "#/i18n/declaration";
+import { ExecutionStatus } from "#/types/agent-server/core/base/common";
+import { canStopRuntime, isExecutionPaused } from "#/utils/status";
+import type { SandboxStatus } from "#/api/conversation-service/agent-server-conversation-service.types";
+import { useCloseOnEscape } from "#/hooks/use-close-on-escape";
+import { ConversationCardContextMenu } from "./conversation-card-context-menu";
+import { EllipsisButton } from "../ellipsis-button";
+import { AppearancePortal } from "#/components/shared/appearance-portal";
+
+interface ConversationCardActionsProps {
+  contextMenuOpen: boolean;
+  onContextMenuToggle: (isOpen: boolean) => void;
+  onDelete?: (event: React.MouseEvent<HTMLButtonElement>) => void;
+  onArchive?: (event: React.MouseEvent<HTMLButtonElement>) => void;
+  onUnarchive?: (event: React.MouseEvent<HTMLButtonElement>) => void;
+  onStop?: (event: React.MouseEvent<HTMLButtonElement>) => void;
+  onNewConversationInSandbox?: (
+    event: React.MouseEvent<HTMLButtonElement>,
+  ) => void;
+  onEdit?: (event: React.MouseEvent<HTMLButtonElement>) => void;
+  onEditTags?: (event: React.MouseEvent<HTMLButtonElement>) => void;
+  onDownloadViaVSCode?: (event: React.MouseEvent<HTMLButtonElement>) => void;
+  onDownloadConversation?: (event: React.MouseEvent<HTMLButtonElement>) => void;
+  isShared?: boolean;
+  onToggleShared?: (event: React.MouseEvent<HTMLButtonElement>) => void;
+  executionStatus?: ExecutionStatus | null;
+  sandboxStatus?: SandboxStatus | null;
+  conversationId?: string;
+  showOptions?: boolean;
+}
+
+export function ConversationCardActions({
+  contextMenuOpen,
+  onContextMenuToggle,
+  onDelete,
+  onArchive,
+  onUnarchive,
+  onStop,
+  onNewConversationInSandbox,
+  onEdit,
+  onEditTags,
+  onDownloadViaVSCode,
+  onDownloadConversation,
+  isShared,
+  onToggleShared,
+  executionStatus,
+  sandboxStatus,
+  conversationId,
+  showOptions,
+}: ConversationCardActionsProps) {
+  const { t } = useTranslation("openhands");
+  const isPaused = isExecutionPaused(executionStatus);
+  const canStop = canStopRuntime(executionStatus, sandboxStatus);
+  const anchorRef = useRef<HTMLButtonElement>(null);
+  const [, bumpPosition] = useReducer((i: number) => i + 1, 0);
+  useCloseOnEscape(
+    contextMenuOpen,
+    () => onContextMenuToggle(false),
+    anchorRef,
+  );
+
+  useLayoutEffect(() => {
+    if (!contextMenuOpen) return undefined;
+    // Anchor ref is assigned after the ellipsis mounts; measure on the next frame.
+    bumpPosition();
+    // The scroll listener is in capture phase so it fires for nested scroll
+    // containers too. Coalesce bursts via rAF so fast scrolling triggers at
+    // most one reposition per paint frame instead of one per scroll event.
+    let frame = 0;
+    const update = () => {
+      if (frame) return;
+      frame = window.requestAnimationFrame(() => {
+        frame = 0;
+        bumpPosition();
+      });
+    };
+    window.addEventListener("resize", update);
+    window.addEventListener("scroll", update, true);
+    return () => {
+      if (frame) window.cancelAnimationFrame(frame);
+      window.removeEventListener("resize", update);
+      window.removeEventListener("scroll", update, true);
+    };
+  }, [contextMenuOpen]);
+
+  const floatingStyle: React.CSSProperties | undefined = (() => {
+    if (!contextMenuOpen || !anchorRef.current) return undefined;
+    const rect = anchorRef.current.getBoundingClientRect();
+    const vw = Number(window.innerWidth) || 0;
+    const vh = Number(window.innerHeight) || 0;
+    const bottom = Number(rect.bottom) || 0;
+    const rectRight = Number(rect.right) || 0;
+    // Conservative cap on this menu's intrinsic height (~7 items at
+    // ~36px + padding). When the anchor is so close to the viewport
+    // bottom that opening downward would clip the menu, flip it above
+    // the anchor instead. Slight over-estimate is fine — it just means
+    // we flip a few pixels earlier than strictly necessary.
+    const ESTIMATED_MENU_HEIGHT = 320;
+    const gutter = 8;
+    const overflowsDownward = bottom + ESTIMATED_MENU_HEIGHT + gutter > vh;
+    const top = overflowsDownward
+      ? Math.max(gutter, rect.top - ESTIMATED_MENU_HEIGHT - 4)
+      : bottom + 4;
+    return {
+      position: "fixed",
+      top,
+      right: Math.max(gutter, vw - rectRight),
+      zIndex: 100_000,
+    };
+  })();
+
+  const portalTarget = typeof document !== "undefined" ? document.body : null;
+
+  return (
+    <>
+      <EllipsisButton
+        ref={anchorRef}
+        onClick={(event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          onContextMenuToggle(!contextMenuOpen);
+        }}
+        ariaLabel={t(I18nKey.COMMON$MORE_OPTIONS)}
+        className={cn(isPaused && "opacity-60")}
+      />
+      {contextMenuOpen && floatingStyle && portalTarget ? (
+        <AppearancePortal container={portalTarget}>
+          <ConversationCardContextMenu
+            ignoreOutsideClickRef={anchorRef}
+            floatingStyle={floatingStyle}
+            onClose={() => onContextMenuToggle(false)}
+            onDelete={onDelete}
+            onArchive={onArchive}
+            onUnarchive={onUnarchive}
+            onStop={canStop ? onStop : undefined}
+            onNewConversationInSandbox={onNewConversationInSandbox}
+            onEdit={onEdit}
+            onEditTags={onEditTags}
+            onDownloadViaVSCode={
+              conversationId && showOptions ? onDownloadViaVSCode : undefined
+            }
+            onDownloadConversation={
+              conversationId ? onDownloadConversation : undefined
+            }
+            isShared={isShared}
+            onToggleShared={onToggleShared}
+            position="bottom"
+          />
+        </AppearancePortal>
+      ) : null}
+    </>
+  );
+}

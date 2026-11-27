@@ -1,0 +1,101 @@
+import { useRef, type ReactNode, type CSSProperties } from "react";
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
+import { ChatInterface } from "../../chat/chat-interface";
+import { ConversationOverviewPanel } from "../conversation-overview-panel";
+import { useConversationStore } from "#/stores/conversation-store";
+import { useBreakpoint } from "#/hooks/use-breakpoint";
+import { useConversationOverviewColumnSpace } from "#/hooks/use-conversation-overview-column-space";
+import {
+  CONVERSATION_OVERVIEW_COLUMN_WIDTH_PX,
+  CONVERSATION_OVERVIEW_PANEL_TRANSITION,
+} from "../conversation-overview-panel.constants";
+
+interface ChatInterfaceWrapperProps {
+  isRightPanelShown: boolean;
+  pendingContent?: ReactNode;
+  showGitControlBar?: boolean;
+  showEmptyStateSuggestions?: boolean;
+  composerDockTarget?: HTMLElement | null;
+  onDockedComposerSubmit?: () => void;
+  minimalComposer?: boolean;
+  composerPlaceholder?: string;
+}
+
+const THREAD_CLASSNAME =
+  "w-full min-w-0 max-w-200 h-full flex flex-col min-h-0";
+
+export function ChatInterfaceWrapper({
+  isRightPanelShown: _isRightPanelShown,
+  showGitControlBar = true,
+  showEmptyStateSuggestions = true,
+  composerDockTarget = null,
+  onDockedComposerSubmit,
+  minimalComposer = false,
+  composerPlaceholder,
+  pendingContent,
+}: ChatInterfaceWrapperProps) {
+  const isMobile = useBreakpoint();
+  const reduceMotion = useReducedMotion();
+  const enableOverviewMotion = !reduceMotion && import.meta.env.MODE !== "test";
+  const isOverviewPanelShown = useConversationStore(
+    (state) => state.isOverviewPanelShown,
+  );
+  const containerRef = useRef<HTMLDivElement>(null);
+  const wantsOverviewPanel = !isMobile && isOverviewPanelShown;
+  const hasOverviewColumnSpace = useConversationOverviewColumnSpace(
+    containerRef,
+    wantsOverviewPanel,
+  );
+  const showOverviewPanel = wantsOverviewPanel && hasOverviewColumnSpace;
+
+  return (
+    <div
+      ref={containerRef}
+      className="flex h-full min-h-0 w-full overflow-hidden"
+    >
+      <div className="flex min-h-0 min-w-0 flex-1 justify-center overflow-hidden">
+        <div className={THREAD_CLASSNAME}>
+          {pendingContent ?? (
+            <ChatInterface
+              showGitControlBar={showGitControlBar}
+              showEmptyStateSuggestions={showEmptyStateSuggestions}
+              composerDockTarget={composerDockTarget}
+              onDockedComposerSubmit={onDockedComposerSubmit}
+              minimalComposer={minimalComposer}
+              composerPlaceholder={composerPlaceholder}
+            />
+          )}
+        </div>
+      </div>
+      <AnimatePresence>
+        {showOverviewPanel ? (
+          <motion.div
+            key="conversation-overview-column"
+            data-testid="conversation-overview-column"
+            initial={enableOverviewMotion ? { width: 0, opacity: 0 } : false}
+            animate={{
+              width: CONVERSATION_OVERVIEW_COLUMN_WIDTH_PX,
+              opacity: 1,
+            }}
+            exit={
+              enableOverviewMotion ? { width: 0, opacity: 0 } : { opacity: 0 }
+            }
+            transition={CONVERSATION_OVERVIEW_PANEL_TRANSITION}
+            className="flex shrink-0 flex-col items-start overflow-hidden pt-4 pl-3 pr-4"
+          >
+            <div
+              className="w-(--conversation-overview-column-width) shrink-0"
+              style={
+                {
+                  "--conversation-overview-column-width": `${CONVERSATION_OVERVIEW_COLUMN_WIDTH_PX}px`,
+                } as CSSProperties
+              }
+            >
+              {!pendingContent && <ConversationOverviewPanel />}
+            </div>
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
+    </div>
+  );
+}

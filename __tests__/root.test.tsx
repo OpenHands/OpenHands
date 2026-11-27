@@ -1,0 +1,1195 @@
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { Children, type ReactElement, type ReactNode } from "react";
+import { createRoutesStub } from "react-router";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { http, HttpResponse } from "msw";
+import App, { Layout, links } from "#/root";
+import { AgentServerUIRoot } from "#/components/providers/agent-server-ui-root";
+import { server } from "#/mocks/node";
+import { __resetActiveStoreForTests } from "#/api/backend-registry/active-store";
+import { LOCKED_CLOUD_BACKEND_ID } from "#/api/backend-registry/default-backend";
+import { __resetHealthStoreForTests } from "#/api/backend-registry/health-store";
+import {
+  BACKEND_HEALTH_STORAGE_KEY,
+  MAX_CONSECUTIVE_FAILURES,
+} from "#/api/backend-registry/health-storage";
+import { CLOUD_BACKEND_LOGGED_OUT_ERROR } from "#/hooks/query/use-backends-health";
+import { ActiveBackendProvider } from "#/contexts/active-backend-context";
+import { ONBOARDING_COMPLETED_STORAGE_KEY } from "#/components/features/onboarding/use-onboarding-completion";
+
+const rootMocks = vi.hoisted(() => ({
+  settings: {
+    data: { user_consents_to_analytics: false as boolean | null },
+    isLoading: false,
+    isSuccess: true,
+  },
+  showTelemetryBanner: false,
+}));
+
+vi.mock("#/api/settings-service/settings-service.api", () => ({
+  default: {
+    getSettings: vi.fn(async () => rootMocks.settings.data),
+    saveSettings: vi.fn(async () => true),
+  },
+}));
+
+vi.mock(
+  "#/components/features/analytics/telemetry-consent-banner",
+  async () => {
+    const React = await import("react");
+
+    return {
+      TelemetryConsentBanner: ({
+        onChoice,
+      }: {
+        onChoice?: (granted: boolean) => void;
+      }) => {
+        if (!rootMocks.showTelemetryBanner) return null;
+
+        return React.createElement(
+          "div",
+          { role: "dialog", "aria-label": "Help improve OpenHands" },
+          React.createElement(
+            "form",
+            {
+              "data-testid": "telemetry-consent-form",
+              onSubmit: (event: { preventDefault: () => void }) => {
+                event.preventDefault();
+                rootMocks.showTelemetryBanner = false;
+                onChoice?.(true);
+              },
+            },
+            React.createElement(
+              "button",
+              {
+                type: "submit",
+                "data-testid": "confirm-telemetry-preferences",
+              },
+              "Confirm preferences",
+            ),
+          ),
+        );
+      },
+    };
+  },
+);
+
+const TRANSLATIONS: Record<string, string> = {
+  BACKEND$MANAGE_TITLE: "Manage backends",
+  BACKEND$RECONNECT_CLOUD_TITLE: "Reconnect to Cloud",
+  BACKEND$RECONNECT_CLOUD: "Reconnect to Cloud",
+  BACKEND$MANAGE_EMPTY: "No backends yet.",
+  BACKEND$ADD: "+ Add Backend",
+  BACKEND$LOG_BACK_IN: "Log back in",
+  BACKEND$LOGGED_OUT: "Logged out",
+  BACKEND$KIND_LOCAL: "Local",
+  BACKEND$KIND_CLOUD: "Cloud",
+  BACKEND$EDIT: "Edit",
+  BACKEND$REMOVE: "Remove",
+  HOME$DONE: "Done",
+};
+
+vi.mock("react-i18next", () => ({
+  useTranslation: () => ({
+    t: (key: string, options?: Record<string, string | number>) => {
+      let value = TRANSLATIONS[key] ?? key;
+      for (const [optionKey, optionValue] of Object.entries(options ?? {})) {
+        value = value.replaceAll(`{{${optionKey}}}`, String(optionValue));
+      }
+      return value;
+    },
+  }),
+}));
+
+vi.mock("#/components/features/onboarding/onboarding-modal", async () => {
+  const React = await import("react");
+  const { useNavigation } = await import("#/context/navigation-context");
+
+  return {
+    OnboardingModal: ({ onClose }: { onClose: () => void }) => {
+      const { navigate } = useNavigation();
+      return React.createElement(
+        "div",
+        {
+          "data-testid": "onboarding-modal",
+          role: "dialog",
+          "aria-label": "Welcome to OpenHands",
+        },
+        React.createElement("div", {
+          "data-testid": "onboarding-step-check-backend",
+        }),
+        React.createElement(
+          "button",
+          {
+            type: "button",
+            "data-testid": "mock-onboarding-launch",
+            onClick: () => {
+              navigate("/conversations/mock-conversation");
+              onClose();
+            },
+          },
+          "Launch conversation",
+        ),
+      );
+    },
+  };
+});
+
+const ORIGINAL_LOCATION = window.location;
+
+const RouterStub = createRoutesStub([
+  {
+    Component: App,
+    path: "/",
+    children: [
+      {
+        Component: () => <div data-testid="app-outlet">app outlet</div>,
+        path: "/",
+      },
+      {
+        Component: () => (
+          <div data-testid="conversation-outlet">conversation outlet</div>
+        ),
+        path: "/conversations/:conversationId",
+      },
+    ],
+  },
+]);
+
+const renderApp = async (initialEntries: string[] = ["/"]) => {
+  const result = render(<RouterStub initialEntries={initialEntries} />, {
+    wrapper: ({ children }) => (
+      <QueryClientProvider
+        client={
+          new QueryClient({
+            defaultOptions: { queries: { retry: false } },
+          })
+        }
+      >
+        <ActiveBackendProvider>{children}</ActiveBackendProvider>
+      </QueryClientProvider>
+    ),
+  });
+
+  // Wait for real lazy-loaded gates, not the query timeout for cold Vite imports.
+  await act(() => vi.dynamicImportSettled());
+  return result;
+};
+
+const COOKIE_DEPLOYMENT_ORIGIN = "https://pr-254.staging.openhands.dev";
+
+/**
+ * Simulate an OHE-hosted Canvas: served from the locked Cloud host itself, so
+ * the single locked backend authenticates with the main-app session cookie.
+ * Returns the `window.location.assign` spy that observes login redirects.
+ */
+function mockLockedCookieDeployment() {
+  const assign = vi.fn();
+  Object.defineProperty(window, "location", {
+    configurable: true,
+    value: {
+      ...ORIGINAL_LOCATION,
+      origin: COOKIE_DEPLOYMENT_ORIGIN,
+      hostname: "pr-254.staging.openhands.dev",
+      pathname: "/canvas",
+      search: "",
+      hash: "",
+      assign,
+    },
+  });
+  vi.stubEnv("VITE_LOCK_TO_CLOUD", COOKIE_DEPLOYMENT_ORIGIN);
+  vi.stubEnv("VITE_SESSION_API_KEY", "");
+  delete (window as unknown as Record<string, unknown>)
+    .__AGENT_CANVAS_SESSION_API_KEY__;
+  __resetActiveStoreForTests();
+  return assign;
+}
+
+describe("App root agent-server availability guard", () => {
+  beforeEach(() => {
+    window.localStorage.clear();
+    __resetHealthStoreForTests();
+    vi.unstubAllEnvs();
+    delete (window as unknown as Record<string, unknown>)
+      .__AGENT_CANVAS_AUTH_REQUIRED__;
+    delete (window as unknown as Record<string, unknown>)
+      .__AGENT_CANVAS_LOCK_TO_CLOUD__;
+    (
+      window as unknown as Record<string, unknown>
+    ).__AGENT_CANVAS_SESSION_API_KEY__ = "test-session-key";
+    __resetActiveStoreForTests();
+    rootMocks.settings = {
+      data: { user_consents_to_analytics: false },
+      isLoading: false,
+      isSuccess: true,
+    };
+    rootMocks.showTelemetryBanner = false;
+
+    server.use(
+      http.get("*/api/settings", () =>
+        HttpResponse.json({
+          agent_settings: {},
+          conversation_settings: {},
+          llm_api_key_is_set: false,
+          misc_settings: {
+            app_preferences: { user_consents_to_analytics: false },
+          },
+        }),
+      ),
+    );
+  });
+
+  afterEach(() => {
+    Object.defineProperty(window, "location", {
+      configurable: true,
+      value: ORIGINAL_LOCATION,
+    });
+  });
+
+  it("shows first-run onboarding before the auth gate when public mode has no backend key", async () => {
+    vi.stubEnv("VITE_AUTH_REQUIRED", "true");
+    vi.stubEnv("VITE_SESSION_API_KEY", "");
+    delete (window as unknown as Record<string, unknown>)
+      .__AGENT_CANVAS_SESSION_API_KEY__;
+    window.localStorage.clear();
+    __resetActiveStoreForTests();
+
+    await renderApp(["/"]);
+
+    await waitFor(() => {
+      expect(
+        screen.getByTestId("first-run-onboarding-screen"),
+      ).toBeInTheDocument();
+    });
+    expect(await screen.findByTestId("onboarding-modal")).toBeInTheDocument();
+    expect(
+      await screen.findByTestId("onboarding-step-check-backend"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("api-key-entry-screen"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("shows first-run onboarding before the recovery modal when no backend is configured", async () => {
+    vi.stubEnv("VITE_SESSION_API_KEY", "");
+    delete (window as unknown as Record<string, unknown>)
+      .__AGENT_CANVAS_SESSION_API_KEY__;
+    window.localStorage.clear();
+    __resetActiveStoreForTests();
+
+    await renderApp(["/"]);
+
+    await waitFor(() => {
+      expect(
+        screen.getByTestId("first-run-onboarding-screen"),
+      ).toBeInTheDocument();
+    });
+    expect(await screen.findByTestId("onboarding-modal")).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("agent-server-onboarding-screen"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("manage-backends-modal"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("collects local telemetry consent before showing first-run onboarding", async () => {
+    rootMocks.settings = {
+      data: { user_consents_to_analytics: null },
+      isLoading: false,
+      isSuccess: true,
+    };
+    rootMocks.showTelemetryBanner = true;
+
+    server.use(
+      http.get("*/api/settings", () =>
+        HttpResponse.json({
+          agent_settings: {},
+          conversation_settings: {},
+          llm_api_key_is_set: false,
+          misc_settings: {
+            app_preferences: { user_consents_to_analytics: null },
+          },
+        }),
+      ),
+      http.get("*/server_info", () =>
+        HttpResponse.json({ uptime: 0, idle_time: 0, version: "1.63.1" }),
+      ),
+    );
+
+    await renderApp(["/"]);
+
+    expect(
+      await screen.findByTestId("telemetry-consent-form"),
+    ).toBeInTheDocument();
+    expect(screen.getAllByRole("dialog")).toHaveLength(1);
+    expect(screen.queryByTestId("onboarding-modal")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId("confirm-telemetry-preferences"));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("onboarding-modal")).toBeInTheDocument();
+    });
+    expect(
+      screen.queryByTestId("telemetry-consent-form"),
+    ).not.toBeInTheDocument();
+    expect(screen.getAllByRole("dialog")).toHaveLength(1);
+  });
+
+  it("lets root-level onboarding navigate to the launched conversation before closing", async () => {
+    server.use(
+      http.get("*/server_info", () =>
+        HttpResponse.json({ uptime: 0, idle_time: 0, version: "1.63.1" }),
+      ),
+    );
+
+    await renderApp(["/"]);
+
+    fireEvent.click(await screen.findByTestId("mock-onboarding-launch"));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("conversation-outlet")).toBeInTheDocument();
+    });
+    expect(window.localStorage.getItem(ONBOARDING_COMPLETED_STORAGE_KEY)).toBe(
+      "1",
+    );
+    expect(
+      screen.queryByTestId("first-run-onboarding-screen"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("shows first-run onboarding before the recovery modal when locked to Cloud with no backend", async () => {
+    vi.stubEnv("VITE_LOCK_TO_CLOUD", "https://app.all-hands.dev");
+    vi.stubEnv("VITE_SESSION_API_KEY", "");
+    delete (window as unknown as Record<string, unknown>)
+      .__AGENT_CANVAS_SESSION_API_KEY__;
+    window.localStorage.clear();
+    __resetActiveStoreForTests();
+
+    await renderApp(["/"]);
+
+    await waitFor(() => {
+      expect(
+        screen.getByTestId("first-run-onboarding-screen"),
+      ).toBeInTheDocument();
+    });
+    expect(await screen.findByTestId("onboarding-modal")).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("agent-server-onboarding-screen"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("manage-backends-modal"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("shows first-run onboarding when locked to Cloud even if a session API key is baked in", async () => {
+    // Reproduces Hiep's report on PR #1389: a pre-built bundle with a baked-in
+    // VITE_SESSION_API_KEY plus --lock-to-cloud used to seed a disconnected
+    // Local backend, which skipped onboarding and landed on the Manage Backends
+    // recovery modal. Locked mode must not seed a Local backend, so onboarding
+    // still owns the first-run Cloud login.
+    vi.stubEnv("VITE_LOCK_TO_CLOUD", "https://app.all-hands.dev");
+    vi.stubEnv("VITE_SESSION_API_KEY", "baked-session-key");
+    (
+      window as unknown as Record<string, unknown>
+    ).__AGENT_CANVAS_SESSION_API_KEY__ = "baked-session-key";
+    window.localStorage.clear();
+    __resetActiveStoreForTests();
+
+    await renderApp(["/"]);
+
+    await waitFor(() => {
+      expect(
+        screen.getByTestId("first-run-onboarding-screen"),
+      ).toBeInTheDocument();
+    });
+    expect(await screen.findByTestId("onboarding-modal")).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("agent-server-onboarding-screen"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("manage-backends-modal"),
+    ).not.toBeInTheDocument();
+    // No Local backend should have been seeded into the registry.
+    expect(window.localStorage.getItem("openhands-backends")).toBeNull();
+  });
+
+  it("shows first-run onboarding when locked to Cloud with a stale persisted Local backend", async () => {
+    // A Local backend persisted from a previous non-locked session must not
+    // bypass onboarding once the deployment is locked to Cloud.
+    vi.stubEnv("VITE_LOCK_TO_CLOUD", "https://app.all-hands.dev");
+    vi.stubEnv("VITE_SESSION_API_KEY", "");
+    delete (window as unknown as Record<string, unknown>)
+      .__AGENT_CANVAS_SESSION_API_KEY__;
+    window.localStorage.setItem(
+      "openhands-backends",
+      JSON.stringify([
+        {
+          id: "default-local",
+          name: "Local",
+          host: "http://127.0.0.1:8000",
+          apiKey: "stale-key",
+          kind: "local",
+        },
+      ]),
+    );
+    window.localStorage.setItem(
+      "openhands-active-backend",
+      JSON.stringify({ backendId: "default-local", orgId: null }),
+    );
+    __resetActiveStoreForTests();
+
+    await renderApp(["/"]);
+
+    await waitFor(() => {
+      expect(
+        screen.getByTestId("first-run-onboarding-screen"),
+      ).toBeInTheDocument();
+    });
+    expect(await screen.findByTestId("onboarding-modal")).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("manage-backends-modal"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("forces first-run onboarding in locked mode even when a stale Local backend reports a configured LLM", async () => {
+    // Critical regression for PR #1389 review: in locked-to-Cloud mode the
+    // stale Local backend must not bypass onboarding, even when it happens
+    // to report a configured LLM. The user must be routed through the Cloud
+    // login / replacement flow instead.
+    vi.stubEnv("VITE_LOCK_TO_CLOUD", "https://app.all-hands.dev");
+    vi.stubEnv("VITE_SESSION_API_KEY", "");
+    delete (window as unknown as Record<string, unknown>)
+      .__AGENT_CANVAS_SESSION_API_KEY__;
+    window.localStorage.setItem(
+      "openhands-backends",
+      JSON.stringify([
+        {
+          id: "user-added-local",
+          name: "My agent-server",
+          host: "http://127.0.0.1:8000",
+          apiKey: "stale-key",
+          kind: "local",
+        },
+      ]),
+    );
+    window.localStorage.setItem(
+      "openhands-active-backend",
+      JSON.stringify({ backendId: "user-added-local", orgId: null }),
+    );
+    __resetActiveStoreForTests();
+    server.use(
+      http.get("*/api/settings", () =>
+        HttpResponse.json({
+          llm_api_key_is_set: true,
+          agent_settings: {
+            llm: { model: "openai/gpt-5.5", api_key: "stored" },
+          },
+          misc_settings: {
+            app_preferences: { user_consents_to_analytics: false },
+          },
+        }),
+      ),
+      http.get("*/server_info", () =>
+        HttpResponse.json({ uptime: 0, idle_time: 0, version: "1.63.1" }),
+      ),
+    );
+
+    await renderApp(["/"]);
+
+    await waitFor(() => {
+      expect(
+        screen.getByTestId("first-run-onboarding-screen"),
+      ).toBeInTheDocument();
+    });
+    expect(await screen.findByTestId("onboarding-modal")).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("manage-backends-modal"),
+    ).not.toBeInTheDocument();
+    // Backend readiness must NOT persist onboarding completion.
+    expect(
+      window.localStorage.getItem(ONBOARDING_COMPLETED_STORAGE_KEY),
+    ).toBeNull();
+  });
+
+  it("forces first-run onboarding in locked mode when a Cloud backend points at a different host with a configured LLM", async () => {
+    // Companion to the stale-Local test: a Cloud backend on a *different*
+    // host than the locked Cloud host must also be forced through
+    // onboarding, even if it reports a configured LLM. `kind === "cloud"`
+    // alone is not enough — the host must match the locked host.
+    vi.stubEnv("VITE_LOCK_TO_CLOUD", "https://app.all-hands.dev");
+    vi.stubEnv("VITE_SESSION_API_KEY", "");
+    delete (window as unknown as Record<string, unknown>)
+      .__AGENT_CANVAS_SESSION_API_KEY__;
+    const otherCloud = {
+      id: "other-cloud",
+      name: "Other Cloud",
+      host: "https://other-cloud.example.com",
+      apiKey: "other-token",
+      kind: "cloud",
+    };
+    window.localStorage.setItem(
+      "openhands-backends",
+      JSON.stringify([otherCloud]),
+    );
+    window.localStorage.setItem(
+      "openhands-active-backend",
+      JSON.stringify({ backendId: otherCloud.id, orgId: null }),
+    );
+    __resetActiveStoreForTests();
+    server.use(
+      http.get("*/api/settings", () =>
+        HttpResponse.json({
+          llm_api_key_set: true,
+          agent_settings: {
+            llm: { model: "openai/gpt-5.5" },
+          },
+        }),
+      ),
+      http.get("*/server_info", () =>
+        HttpResponse.json({ uptime: 0, idle_time: 0, version: "1.63.1" }),
+      ),
+    );
+
+    await renderApp(["/"]);
+
+    await waitFor(() => {
+      expect(
+        screen.getByTestId("first-run-onboarding-screen"),
+      ).toBeInTheDocument();
+    });
+    expect(await screen.findByTestId("onboarding-modal")).toBeInTheDocument();
+    expect(
+      window.localStorage.getItem(ONBOARDING_COMPLETED_STORAGE_KEY),
+    ).toBeNull();
+  });
+
+  it("shows first-run onboarding when locked to Cloud even if onboarding was previously completed", async () => {
+    // Reproduces hieptl's report on PR #1389: the user had previously
+    // completed onboarding in a non-locked session (so the
+    // `openhands-onboarded` localStorage flag is set), then relaunched the
+    // static server with --lock-to-cloud. The stale completion flag used to
+    // suppress first-run onboarding, so the app fell through to the Manage
+    // Backends recovery modal ("Add Backend") instead of going straight to
+    // Cloud login. In locked-to-Cloud mode the completion flag must not
+    // bypass onboarding when the active backend is not a connected Cloud
+    // backend.
+    vi.stubEnv("VITE_LOCK_TO_CLOUD", "https://app.all-hands.dev");
+    vi.stubEnv("VITE_SESSION_API_KEY", "");
+    delete (window as unknown as Record<string, unknown>)
+      .__AGENT_CANVAS_SESSION_API_KEY__;
+    window.localStorage.clear();
+    window.localStorage.setItem(ONBOARDING_COMPLETED_STORAGE_KEY, "1");
+    __resetActiveStoreForTests();
+
+    await renderApp(["/"]);
+
+    await waitFor(() => {
+      expect(
+        screen.getByTestId("first-run-onboarding-screen"),
+      ).toBeInTheDocument();
+    });
+    expect(await screen.findByTestId("onboarding-modal")).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("agent-server-onboarding-screen"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("manage-backends-modal"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("shows the auth gate after onboarding was already completed", async () => {
+    vi.stubEnv("VITE_AUTH_REQUIRED", "true");
+    vi.stubEnv("VITE_SESSION_API_KEY", "");
+    delete (window as unknown as Record<string, unknown>)
+      .__AGENT_CANVAS_SESSION_API_KEY__;
+    window.localStorage.clear();
+    window.localStorage.setItem(ONBOARDING_COMPLETED_STORAGE_KEY, "1");
+    __resetActiveStoreForTests();
+
+    await renderApp(["/"]);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("api-key-entry-screen")).toBeInTheDocument();
+    });
+    expect(screen.queryByTestId("onboarding-modal")).not.toBeInTheDocument();
+  });
+
+  it("opens a ready DO session without the local API-key form when the backend carries a marsSessionId", async () => {
+    // A DigitalOcean MARS session is an ordinary `kind: "local"` backend with
+    // an intentionally empty guest key (the session's own agent-server key is
+    // set by the sandbox template, not us). On a page with no baked session
+    // key the auth gate must not treat it as an unkeyed local backend and show
+    // the full-screen local API-key form.
+    vi.stubEnv("VITE_AUTH_REQUIRED", "true");
+    vi.stubEnv("VITE_SESSION_API_KEY", "");
+    delete (window as unknown as Record<string, unknown>)
+      .__AGENT_CANVAS_SESSION_API_KEY__;
+    window.localStorage.clear();
+    window.localStorage.setItem(ONBOARDING_COMPLETED_STORAGE_KEY, "1");
+    window.localStorage.setItem(
+      "openhands-backends",
+      JSON.stringify([
+        {
+          id: "mars-session-1",
+          name: "DO session",
+          host: "http://127.0.0.1:8000",
+          apiKey: "",
+          kind: "local",
+          marsSessionId: "sess_1",
+          marsConfigId: "cfg_1",
+        },
+      ]),
+    );
+    window.localStorage.setItem(
+      "openhands-active-backend",
+      JSON.stringify({ backendId: "mars-session-1", orgId: null }),
+    );
+    __resetActiveStoreForTests();
+
+    renderApp(["/"]);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("app-outlet")).toBeInTheDocument();
+    });
+    expect(
+      screen.queryByTestId("api-key-entry-screen"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("still shows the API-key form for an ordinary keyless local backend", async () => {
+    // The marsSessionId exemption is scoped: an unrelated local backend with
+    // no key on a page with no baked key must still land on the local
+    // API-key form, not silently bypass the auth gate.
+    vi.stubEnv("VITE_AUTH_REQUIRED", "true");
+    vi.stubEnv("VITE_SESSION_API_KEY", "");
+    delete (window as unknown as Record<string, unknown>)
+      .__AGENT_CANVAS_SESSION_API_KEY__;
+    window.localStorage.clear();
+    window.localStorage.setItem(ONBOARDING_COMPLETED_STORAGE_KEY, "1");
+    window.localStorage.setItem(
+      "openhands-backends",
+      JSON.stringify([
+        {
+          id: "plain-local",
+          name: "Local server",
+          host: "http://127.0.0.1:8000",
+          apiKey: "",
+          kind: "local",
+        },
+      ]),
+    );
+    window.localStorage.setItem(
+      "openhands-active-backend",
+      JSON.stringify({ backendId: "plain-local", orgId: null }),
+    );
+    __resetActiveStoreForTests();
+
+    renderApp(["/"]);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("api-key-entry-screen")).toBeInTheDocument();
+    });
+    expect(screen.queryByTestId("app-outlet")).not.toBeInTheDocument();
+  });
+
+  it("shows the manage-backends modal when the connected server reports an old version", async () => {
+    window.localStorage.setItem(ONBOARDING_COMPLETED_STORAGE_KEY, "1");
+    server.use(
+      http.get("*/server_info", () =>
+        HttpResponse.json({ uptime: 0, idle_time: 0, version: "1.27.1" }),
+      ),
+    );
+
+    await renderApp(["/"]);
+
+    await waitFor(() => {
+      expect(
+        screen.getByTestId("agent-server-onboarding-screen"),
+      ).toBeInTheDocument();
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId("manage-backends-modal")).toBeInTheDocument();
+    });
+    expect(screen.queryByTestId("app-outlet")).not.toBeInTheDocument();
+  });
+
+  it("shows the manage-backends modal when the server omits a version field", async () => {
+    window.localStorage.setItem(ONBOARDING_COMPLETED_STORAGE_KEY, "1");
+    server.use(
+      http.get("*/server_info", () =>
+        HttpResponse.json({ uptime: 0, idle_time: 0 }),
+      ),
+    );
+
+    await renderApp(["/"]);
+
+    await waitFor(() => {
+      expect(
+        screen.getByTestId("agent-server-onboarding-screen"),
+      ).toBeInTheDocument();
+    });
+    expect(screen.queryByTestId("app-outlet")).not.toBeInTheDocument();
+  });
+
+  it("shows the manage-backends modal when the backend is unreachable", async () => {
+    let serverInfoRequests = 0;
+    window.localStorage.setItem(ONBOARDING_COMPLETED_STORAGE_KEY, "1");
+
+    // Use "*" prefix to match both relative paths and absolute URLs (e.g.,
+    // http://127.0.0.1:8000/server_info) when VITE_BACKEND_BASE_URL is configured.
+    server.use(
+      http.get("*/server_info", () => {
+        serverInfoRequests += 1;
+        return HttpResponse.error();
+      }),
+    );
+
+    await renderApp(["/"]);
+
+    await waitFor(() => {
+      expect(
+        screen.getByTestId("agent-server-onboarding-screen"),
+      ).toBeInTheDocument();
+    });
+
+    // The onboarding placeholder now hosts the Manage Backends modal
+    // directly so the user can edit/add a backend immediately. The
+    // modal additionally probes /server_info per registered backend
+    // for its status dot + version label, so the request count is
+    // bounded but greater than the single config probe.
+    await waitFor(() => {
+      expect(screen.getByTestId("manage-backends-modal")).toBeInTheDocument();
+    });
+    expect(serverInfoRequests).toBeGreaterThanOrEqual(1);
+    expect(screen.queryByTestId("app-outlet")).not.toBeInTheDocument();
+  });
+
+  it("shows the manage-backends recovery modal when the active cloud backend is logged out", async () => {
+    const cloudBackend = {
+      id: "cloud-expired",
+      name: "OpenHands Cloud",
+      host: "https://app.all-hands.dev",
+      apiKey: "expired-token",
+      kind: "cloud",
+    };
+    window.localStorage.setItem(
+      "openhands-backends",
+      JSON.stringify([cloudBackend]),
+    );
+    window.localStorage.setItem(
+      "openhands-active-backend",
+      JSON.stringify({ backendId: cloudBackend.id, orgId: null }),
+    );
+    window.sessionStorage.setItem(
+      "openhands-active-backend",
+      JSON.stringify({ backendId: cloudBackend.id, orgId: null }),
+    );
+    window.localStorage.setItem(ONBOARDING_COMPLETED_STORAGE_KEY, "1");
+    __resetActiveStoreForTests();
+    server.use(
+      http.get("https://app.all-hands.dev/api/keys/current", () =>
+        HttpResponse.json({ detail: "NoCredentialsError" }, { status: 401 }),
+      ),
+    );
+
+    await renderApp(["/"]);
+
+    await waitFor(() => {
+      expect(
+        screen.getByTestId("agent-server-onboarding-screen"),
+      ).toBeInTheDocument();
+    });
+    expect(screen.getByTestId("manage-backends-modal")).toBeInTheDocument();
+    expect(screen.getByText("Logged out")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Log back in" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByTestId("app-outlet")).not.toBeInTheDocument();
+  });
+
+  it("shows locked Cloud reconnect recovery without add-backend controls", async () => {
+    vi.stubEnv("VITE_LOCK_TO_CLOUD", "https://app.all-hands.dev");
+    const cloudBackend = {
+      id: "cloud-expired",
+      name: "OpenHands Cloud",
+      host: "https://app.all-hands.dev",
+      apiKey: "expired-token",
+      kind: "cloud",
+    };
+    window.localStorage.setItem(
+      "openhands-backends",
+      JSON.stringify([cloudBackend]),
+    );
+    window.localStorage.setItem(
+      "openhands-active-backend",
+      JSON.stringify({ backendId: cloudBackend.id, orgId: null }),
+    );
+    window.sessionStorage.setItem(
+      "openhands-active-backend",
+      JSON.stringify({ backendId: cloudBackend.id, orgId: null }),
+    );
+    window.localStorage.setItem(ONBOARDING_COMPLETED_STORAGE_KEY, "1");
+    __resetActiveStoreForTests();
+    server.use(
+      http.get("https://app.all-hands.dev/api/keys/current", () =>
+        HttpResponse.json({ detail: "NoCredentialsError" }, { status: 401 }),
+      ),
+    );
+
+    await renderApp(["/"]);
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole("heading", { name: "Reconnect to Cloud" }),
+      ).toBeInTheDocument();
+    });
+    expect(screen.queryByTestId("manage-backends-add")).not.toBeInTheDocument();
+    expect(
+      screen.getByTestId("manage-backends-reconnect-cloud-login-button"),
+    ).toHaveTextContent("Reconnect to Cloud");
+    expect(screen.queryByTestId("app-outlet")).not.toBeInTheDocument();
+  });
+
+  it("renders the routed page when the agent server is reachable", async () => {
+    window.localStorage.setItem(ONBOARDING_COMPLETED_STORAGE_KEY, "1");
+
+    await renderApp(["/"]);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("app-outlet")).toBeInTheDocument();
+    });
+
+    expect(
+      screen.queryByTestId("agent-server-onboarding-screen"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("shows first-run onboarding for the launcher-seeded default-local backend even when the agent-server reports a configured LLM", async () => {
+    // Regression for mock-llm-onboarding-regressions.spec.ts:16
+    // ("keeps the modal open on backdrop click and Escape") and
+    // mock-llm-auth-modes.spec.ts:57 ("reaches the onboarding modal
+    // without pre-seeded localStorage"). The shared mock-LLM
+    // agent-server retains a previously-configured LLM across browser
+    // sessions, so a genuinely fresh browser install (launcher-seeded
+    // default-local backend, no `openhands-onboarded` flag) must NOT
+    // have onboarding auto-marked complete by backend readiness.
+    vi.stubEnv("VITE_BACKEND_BASE_URL", "http://127.0.0.1:8000");
+    vi.stubEnv("VITE_SESSION_API_KEY", "test-session-key");
+    // The launcher-seeded default-local backend (id
+    // SEEDED_DEFAULT_BACKEND_ID) is created from these env stubs by
+    // readStoredBackends().
+    __resetActiveStoreForTests();
+    server.use(
+      http.get("*/api/settings", () =>
+        HttpResponse.json({
+          llm_api_key_is_set: true,
+          agent_settings: {
+            llm: { model: "openai/gpt-5.5", api_key: "stored" },
+          },
+          misc_settings: {
+            app_preferences: { user_consents_to_analytics: false },
+          },
+        }),
+      ),
+      http.get("*/server_info", () =>
+        HttpResponse.json({ uptime: 0, idle_time: 0, version: "1.63.1" }),
+      ),
+    );
+
+    await renderApp(["/"]);
+
+    await waitFor(() => {
+      expect(
+        screen.getByTestId("first-run-onboarding-screen"),
+      ).toBeInTheDocument();
+    });
+    expect(screen.queryByTestId("app-outlet")).not.toBeInTheDocument();
+
+    expect(
+      window.localStorage.getItem(ONBOARDING_COMPLETED_STORAGE_KEY),
+    ).toBeNull();
+  });
+
+  it("renders Cloud login directly for a fresh locked-to-Cloud first run", async () => {
+    vi.stubEnv("VITE_LOCK_TO_CLOUD", "https://app.all-hands.dev");
+    vi.stubEnv("VITE_SESSION_API_KEY", "");
+    delete (window as unknown as Record<string, unknown>)
+      .__AGENT_CANVAS_SESSION_API_KEY__;
+    __resetActiveStoreForTests();
+
+    await renderApp(["/"]);
+
+    await waitFor(() => {
+      expect(
+        screen.getByTestId("first-run-onboarding-screen"),
+      ).toBeInTheDocument();
+    });
+
+    expect(await screen.findByTestId("onboarding-modal")).toBeInTheDocument();
+    expect(screen.getByTestId("add-backend-cloud-title")).toBeVisible();
+    expect(screen.getByTestId("add-backend-login-button")).toBeVisible();
+    expect(
+      screen.queryByTestId("onboarding-step-check-backend"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("onboarding-progress-bar"),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByTestId("add-backend-close")).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("add-backend-advanced-toggle"),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByTestId("app-outlet")).not.toBeInTheDocument();
+  });
+
+  it("redirects unauthenticated locked-cookie deployments to main app login", async () => {
+    const assign = vi.fn();
+    Object.defineProperty(window, "location", {
+      configurable: true,
+      value: {
+        ...ORIGINAL_LOCATION,
+        origin: "https://pr-254.staging.openhands.dev",
+        hostname: "pr-254.staging.openhands.dev",
+        pathname: "/canvas",
+        search: "?tab=home",
+        hash: "#top",
+        assign,
+      },
+    });
+    vi.stubEnv("VITE_LOCK_TO_CLOUD", "https://pr-254.staging.all-hands.dev");
+    vi.stubEnv("VITE_SESSION_API_KEY", "");
+    delete (window as unknown as Record<string, unknown>)
+      .__AGENT_CANVAS_SESSION_API_KEY__;
+    server.use(
+      http.post("*/api/authenticate", () =>
+        HttpResponse.json({ error: "unauthenticated" }, { status: 401 }),
+      ),
+    );
+    __resetActiveStoreForTests();
+
+    await renderApp(["/"]);
+
+    await waitFor(() => {
+      expect(assign).toHaveBeenCalledWith(
+        "/login?returnTo=%2Fcanvas%3Ftab%3Dhome%23top",
+      );
+    });
+    expect(screen.queryByTestId("app-outlet")).not.toBeInTheDocument();
+  });
+
+  it("redirects to main app login when the cookie session expires after the Canvas loaded", async () => {
+    // Arrange: the session is valid at load, then expires — the Cloud probe
+    // starts returning 401 and the next main-app auth check confirms it.
+    const assign = mockLockedCookieDeployment();
+    let sessionExpired = false;
+    server.use(
+      http.post("*/api/authenticate", () =>
+        sessionExpired
+          ? HttpResponse.json({ error: "unauthenticated" }, { status: 401 })
+          : HttpResponse.json({ ok: true }),
+      ),
+      http.get(`${COOKIE_DEPLOYMENT_ORIGIN}/api/organizations`, () => {
+        sessionExpired = true;
+        return HttpResponse.json(
+          { detail: "Not authenticated" },
+          { status: 401 },
+        );
+      }),
+    );
+
+    // Act
+    await renderApp(["/"]);
+
+    // Assert: main-app login, not the device-flow recovery modal.
+    await waitFor(() => {
+      expect(assign).toHaveBeenCalledWith("/login?returnTo=%2Fcanvas");
+    });
+    expect(
+      screen.queryByTestId("manage-backends-modal"),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByTestId("app-outlet")).not.toBeInTheDocument();
+  });
+
+  it("keeps a valid cookie session on the app when a stale logged-out health entry is persisted", async () => {
+    // Arrange: a previous visit left the locked backend persisted as disabled
+    // and "Logged out", but the user has since logged back in on the main app.
+    const assign = mockLockedCookieDeployment();
+    window.localStorage.setItem(
+      BACKEND_HEALTH_STORAGE_KEY,
+      JSON.stringify({
+        [LOCKED_CLOUD_BACKEND_ID]: {
+          consecutiveFailures: MAX_CONSECUTIVE_FAILURES,
+          lastError: CLOUD_BACKEND_LOGGED_OUT_ERROR,
+          lastFailureAt: 1,
+          disabled: true,
+        },
+      }),
+    );
+    __resetHealthStoreForTests();
+    server.use(
+      http.get(`${COOKIE_DEPLOYMENT_ORIGIN}/api/organizations`, () =>
+        HttpResponse.json({ items: [], current_org_id: null }),
+      ),
+    );
+
+    // Act
+    await renderApp(["/"]);
+
+    // Assert: the stale health verdict must not bounce a valid session to
+    // /login (which would loop back via returnTo); the app renders instead.
+    await waitFor(() => {
+      expect(screen.getByTestId("app-outlet")).toBeInTheDocument();
+    });
+    expect(assign).not.toHaveBeenCalled();
+  });
+
+  it("hides first-run onboarding immediately after Cloud login completes in locked-to-Cloud mode (no flicker)", async () => {
+    // Regression for hieptl's flicker report on PR #1389: after Cloud
+    // login succeeds in locked-to-Cloud mode, the onboarding modal's
+    // onClose marks onboarding complete. The root first-run gate must
+    // honor that completion IMMEDIATELY — without waiting for the Cloud
+    // settings probe to confirm a configured LLM — so the first-run
+    // screen disappears and the routed app renders, rather than the
+    // modal flickering back via OnboardingHost. This test simulates the
+    // post-login state (active locked Cloud backend + completion flag
+    // set by the modal's onClose) with the Cloud settings probe
+    // reporting NO configured LLM, which is exactly the window where
+    // the old LLM-readiness gate kept the first-run screen mounted and
+    // caused the reopen.
+    vi.stubEnv("VITE_LOCK_TO_CLOUD", "https://app.all-hands.dev");
+    vi.stubEnv("VITE_SESSION_API_KEY", "");
+    delete (window as unknown as Record<string, unknown>)
+      .__AGENT_CANVAS_SESSION_API_KEY__;
+    const lockedCloud = {
+      id: "locked-cloud",
+      name: "OpenHands Cloud",
+      host: "https://app.all-hands.dev",
+      apiKey: "cloud-session-key",
+      kind: "cloud",
+    };
+    window.localStorage.setItem(
+      "openhands-backends",
+      JSON.stringify([lockedCloud]),
+    );
+    window.localStorage.setItem(
+      "openhands-active-backend",
+      JSON.stringify({ backendId: lockedCloud.id, orgId: null }),
+    );
+    // The onboarding modal's onClose (markCompleted) sets this right
+    // after Cloud login succeeds — before the Cloud settings probe
+    // resolves. Seed it to reproduce the post-login moment.
+    window.localStorage.setItem(ONBOARDING_COMPLETED_STORAGE_KEY, "1");
+    __resetActiveStoreForTests();
+    // Cloud settings probe reports no configured LLM. The completed
+    // onboarding flag should still hide first-run onboarding once the
+    // locked Cloud backend is active.
+    server.use(
+      http.get("https://app.all-hands.dev/api/v1/settings", () =>
+        HttpResponse.json({ llm_api_key_set: false }),
+      ),
+      http.get("https://app.all-hands.dev/api/keys/current", () =>
+        HttpResponse.json({ org_id: "org-1" }),
+      ),
+    );
+
+    await renderApp(["/"]);
+
+    // The first-run onboarding screen must NOT be mounted (no reopen),
+    // and the routed app must render instead.
+    await waitFor(() => {
+      expect(screen.getByTestId("app-outlet")).toBeInTheDocument();
+    });
+    expect(
+      screen.queryByTestId("first-run-onboarding-screen"),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByTestId("onboarding-modal")).not.toBeInTheDocument();
+  });
+});
+
+describe("App root viewport sizing", () => {
+  it("uses a dynamic viewport constraint for the outer UI wrapper", () => {
+    const layout = Layout({ children: <div /> }) as ReactElement<{
+      children: ReactNode;
+    }>;
+    const body = Children.toArray(layout.props.children)[1] as ReactElement<{
+      children: ReactNode;
+    }>;
+    const uiRoot = Children.toArray(body.props.children)[0] as ReactElement<{
+      contentClassName: string;
+    }>;
+
+    expect(uiRoot.type).toBe(AgentServerUIRoot);
+    expect(uiRoot.props.contentClassName).toBe("h-dvh min-h-0");
+  });
+});
+
+describe("App root document links", () => {
+  it("declares the SVG favicon used by the browser tab", () => {
+    // Act
+    const documentLinks = links();
+
+    // Assert
+    expect(documentLinks).toContainEqual({
+      rel: "icon",
+      type: "image/svg+xml",
+      href: "/favicon.svg",
+    });
+  });
+
+  it("prefixes document links when Canvas is mounted under a base path", () => {
+    // Arrange
+    vi.stubEnv("VITE_BASE_PATH", "/canvas");
+
+    // Act
+    const documentLinks = links();
+
+    // Assert
+    expect(documentLinks).toContainEqual({
+      rel: "icon",
+      type: "image/svg+xml",
+      href: "/canvas/favicon.svg",
+    });
+    expect(documentLinks).toContainEqual({
+      rel: "manifest",
+      href: "/canvas/site.webmanifest",
+    });
+
+    vi.unstubAllEnvs();
+  });
+
+  it("provides install metadata and relative icon assets", () => {
+    const manifest = JSON.parse(
+      readFileSync("public/site.webmanifest", "utf8"),
+    );
+
+    expect(manifest).toMatchObject({
+      name: expect.any(String),
+      short_name: expect.any(String),
+      description: expect.any(String),
+      start_url: "./",
+      scope: "./",
+      display: "standalone",
+      categories: ["productivity"],
+    });
+    expect(manifest.name).not.toBe("");
+    expect(manifest.short_name).not.toBe("");
+
+    for (const icon of manifest.icons) {
+      expect(icon.src).not.toMatch(/^\//);
+      const png = readFileSync(resolve("public", icon.src));
+      expect(png.subarray(1, 4).toString()).toBe("PNG");
+      expect(png.readUInt32BE(16)).toBe(Number(icon.sizes.split("x")[0]));
+      expect(png.readUInt32BE(20)).toBe(Number(icon.sizes.split("x")[1]));
+    }
+  });
+});

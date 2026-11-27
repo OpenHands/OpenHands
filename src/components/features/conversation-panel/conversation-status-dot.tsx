@@ -1,0 +1,199 @@
+import { useTranslation } from "react-i18next";
+import { FaArchive } from "react-icons/fa";
+import { LoaderCircle } from "lucide-react";
+import { I18nKey } from "#/i18n/declaration";
+import { ExecutionStatus } from "#/types/agent-server/core/base/common";
+import { SandboxStatus } from "#/api/conversation-service/agent-server-conversation-service.types";
+import { StyledTooltip } from "#/components/shared/buttons/styled-tooltip";
+import { isMissingSandboxStatus } from "#/utils/conversation-archive-status";
+
+interface ConversationStatusDotProps {
+  executionStatus: ExecutionStatus | null | undefined;
+  /**
+   * Cloud-only sandbox lifecycle status. When provided, MISSING and ERROR
+   * override the execution-status visual so the dot reflects the sandbox
+   * state rather than the last agent execution state.
+   */
+  sandboxStatus?: SandboxStatus | null;
+  /**
+   * Wrap the dot in a tooltip showing the human-readable status label.
+   * Disable this when the dot is already nested inside a larger tooltip
+   * (e.g. the collapsed-sidebar conversation preview) so the smaller
+   * tooltip doesn't intercept the hover.
+   */
+  showTooltip?: boolean;
+  isStarting?: boolean;
+  /**
+   * The row's effective archived state (explicit archive or a missing
+   * runtime). When true the dot shows the archive presentation even if the
+   * sandbox/execution state would otherwise render as working, finished, or
+   * errored, so the dot never disagrees with the "Archived" chip. Leave
+   * undefined for the runtime-derived archived case, which is inferred from
+   * `sandboxStatus`.
+   */
+  isArchived?: boolean;
+}
+
+type Visual =
+  "check" | "working" | "active" | "paused" | "error" | "unknown" | "starting";
+
+const visualFor = (status: ExecutionStatus | null | undefined): Visual => {
+  switch (status) {
+    case ExecutionStatus.FINISHED:
+      return "check";
+    case ExecutionStatus.RUNNING:
+      return "working";
+    case ExecutionStatus.IDLE:
+    case ExecutionStatus.WAITING_FOR_CONFIRMATION:
+      return "active";
+    case ExecutionStatus.PAUSED:
+      return "paused";
+    case ExecutionStatus.ERROR:
+    case ExecutionStatus.STUCK:
+      return "error";
+    default:
+      return "unknown";
+  }
+};
+
+const labelKeyFor = (visual: Visual, isArchived?: boolean): string => {
+  if (isArchived) return "COMMON$ARCHIVED";
+  switch (visual) {
+    case "starting":
+      return I18nKey.CONVERSATION$STARTING_CONVERSATION;
+    case "check":
+      return "COMMON$FINISHED";
+    case "working":
+    case "active":
+      return "COMMON$WORKING";
+    case "paused":
+      return "COMMON$PAUSED";
+    case "error":
+      return "COMMON$ERROR";
+    default:
+      return "COMMON$STOPPED";
+  }
+};
+
+function renderIndicator(visual: Visual) {
+  switch (visual) {
+    case "starting":
+      return (
+        <LoaderCircle
+          aria-hidden="true"
+          className="size-2.5 animate-spin text-muted motion-reduce:animate-none"
+        />
+      );
+    case "check":
+      return (
+        <svg
+          data-testid="conversation-status-check"
+          viewBox="0 0 12 12"
+          className="w-2.5 h-2.5 stroke-status-success"
+          fill="none"
+          strokeWidth={2.25}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          aria-hidden="true"
+        >
+          <path d="M2.5 6.5 5 9l4.5-5.5" />
+        </svg>
+      );
+    case "working":
+      return (
+        <span
+          data-testid="conversation-status-working"
+          className="w-1.5 h-1.5 rounded-full animate-pulse bg-status-success"
+        />
+      );
+    case "active":
+      return (
+        <span
+          data-testid="conversation-status-active"
+          className="w-1.5 h-1.5 rounded-full bg-status-success"
+        />
+      );
+    case "paused":
+      return (
+        <span
+          data-testid="conversation-status-paused"
+          className="w-1.5 h-1.5 rounded-full bg-muted"
+        />
+      );
+    case "error":
+      return (
+        <span
+          data-testid="conversation-status-error"
+          className="w-1.5 h-1.5 rounded-full bg-status-error"
+        />
+      );
+    default:
+      return (
+        <span
+          data-testid="conversation-status-unknown"
+          className="w-1.5 h-1.5 rounded-full bg-tertiary"
+        />
+      );
+  }
+}
+
+export function ConversationStatusDot({
+  executionStatus,
+  sandboxStatus,
+  showTooltip = true,
+  isStarting = false,
+  isArchived,
+}: ConversationStatusDotProps) {
+  const { t } = useTranslation("openhands");
+
+  // An archived row (explicit archive or missing runtime) downloads to a gray
+  // archive icon so it matches the "Archived" chip. A missing sandbox is
+  // inferred here for callers that only pass `sandboxStatus`; an unarchived
+  // `ERROR` row keeps its red "Error" dot.
+  const archived = isArchived ?? isMissingSandboxStatus(sandboxStatus);
+  const executionVisual = visualFor(executionStatus);
+  const effectiveVisual: Visual =
+    sandboxStatus === "ERROR" && !archived
+      ? "error"
+      : archived
+        ? "paused"
+        : isStarting && executionVisual !== "error"
+          ? "starting"
+          : executionVisual;
+
+  const visual = effectiveVisual;
+  const label = t(labelKeyFor(visual, archived));
+  const indicator = archived ? (
+    <FaArchive
+      data-testid="conversation-status-archived"
+      size={10}
+      className="shrink-0 text-muted opacity-60"
+      aria-hidden
+    />
+  ) : (
+    renderIndicator(visual)
+  );
+
+  const dot = (
+    <div
+      className="w-2.5 h-2.5 flex items-center justify-center shrink-0"
+      role={visual === "starting" ? "img" : undefined}
+      aria-label={visual === "starting" ? label : undefined}
+    >
+      {indicator}
+    </div>
+  );
+
+  if (!showTooltip) return dot;
+
+  return (
+    <StyledTooltip
+      content={label}
+      placement="right"
+      showArrow
+      tooltipClassName="bg-canvas-base text-contrast text-xs shadow-lg"
+    >
+      {dot}
+    </StyledTooltip>
+  );
+}

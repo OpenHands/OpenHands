@@ -1,0 +1,995 @@
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import { AutomationRunStatus } from "#/types/automation";
+import type {
+  Automation,
+  AutomationRun,
+  AutomationsResponse,
+  AutomationRunsResponse,
+} from "#/types/automation";
+import type { Backend } from "#/api/backend-registry/types";
+import type { InternalAxiosRequestConfig } from "axios";
+
+// Use vi.hoisted to define mocks that will be available during vi.mock hoisting
+const {
+  mockGet,
+  mockPatch,
+  mockPost,
+  mockDelete,
+  mockCallCloudProxy,
+  mockGetActive,
+  mockGetEffectiveLocal,
+  mockGetTelemetryDistinctId,
+  capturedInterceptors,
+} = vi.hoisted(() => {
+  const interceptors: Array<
+    (
+      config: InternalAxiosRequestConfig,
+    ) => InternalAxiosRequestConfig | Promise<InternalAxiosRequestConfig>
+  > = [];
+  return {
+    mockGet: vi.fn(),
+    mockPatch: vi.fn(),
+    mockPost: vi.fn(),
+    mockDelete: vi.fn(),
+    mockCallCloudProxy: vi.fn(),
+    mockGetActive: vi.fn(),
+    mockGetEffectiveLocal: vi.fn(),
+    mockGetTelemetryDistinctId: vi.fn(),
+    capturedInterceptors: interceptors,
+  };
+});
+
+vi.mock("axios", () => ({
+  default: {
+    create: () => ({
+      get: mockGet,
+      post: mockPost,
+
+      patch: mockPatch,
+      delete: mockDelete,
+      interceptors: {
+        request: {
+          use: (
+            fn: (
+              config: InternalAxiosRequestConfig,
+            ) =>
+              | InternalAxiosRequestConfig
+              | Promise<InternalAxiosRequestConfig>,
+          ) => {
+            capturedInterceptors.push(fn);
+          },
+        },
+      },
+    }),
+  },
+}));
+
+vi.mock("#/api/cloud/proxy", () => ({
+  callCloudProxy: mockCallCloudProxy,
+}));
+
+vi.mock("#/api/backend-registry/active-store", () => ({
+  getActiveBackend: mockGetActive,
+  getEffectiveLocalBackend: mockGetEffectiveLocal,
+}));
+
+vi.mock("#/services/telemetry", () => ({
+  getTelemetryDistinctId: mockGetTelemetryDistinctId,
+}));
+
+// Import after mocking
+import AutomationService from "#/api/automation-service/automation-service.api";
+
+const localBackend: Backend = {
+  id: "local-1",
+  name: "Local",
+  host: "http://localhost:8000",
+  apiKey: "session-key",
+  kind: "local",
+};
+
+const expectedAutomationTelemetryHeaders = {
+  "X-OpenHands-Client": "agent_canvas",
+  "X-OpenHands-Client-Version": expect.any(String),
+  "X-OpenHands-Telemetry-Distinct-Id": "ph-test-distinct-id",
+};
+
+const cloudBackend: Backend = {
+  id: "cloud-1",
+  name: "Production",
+  host: "https://app.all-hands.dev",
+  apiKey: "bearer-key",
+  kind: "cloud",
+};
+
+/** Build a minimal InternalAxiosRequestConfig for interceptor tests. */
+function makeAxiosConfig(
+  overrides: Partial<InternalAxiosRequestConfig> = {},
+): InternalAxiosRequestConfig {
+  const headers = {
+    set: vi.fn(),
+    get: vi.fn(),
+  } as unknown as InternalAxiosRequestConfig["headers"];
+  return {
+    headers,
+    ...overrides,
+  } as unknown as InternalAxiosRequestConfig;
+}
+
+const mockAutomation: Automation = {
+  id: "1",
+  name: "Test Automation",
+  prompt: "A test automation",
+  trigger: { type: "schedule", schedule_human: "Daily at 09:00" },
+  enabled: true,
+  model: "daily-profile",
+  created_at: "2026-01-01T00:00:00Z",
+  updated_at: "2026-01-02T00:00:00Z",
+};
+
+const mockRun: AutomationRun = {
+  id: "run-1",
+  status: AutomationRunStatus.PENDING,
+  conversation_id: null,
+  bash_command_id: null,
+  error_detail: null,
+  started_at: "2026-01-03T00:00:00Z",
+  completed_at: null,
+};
+
+describe("AutomationService", () => {
+  beforeEach(() => {
+    // restoreAllMocks (vs clearAllMocks) re-attaches the original
+    // implementations of any class methods spied via vi.spyOn in earlier
+    // tests, so the cloud-routing assertions actually exercise the real
+    // method bodies instead of stale spies.
+    vi.restoreAllMocks();
+    mockGet.mockReset();
+    mockPatch.mockReset();
+    mockPost.mockReset();
+    mockDelete.mockReset();
+    mockCallCloudProxy.mockReset();
+    // Default: active backend is local. Cloud-routing tests override this.
+    mockGetActive.mockReset();
+    mockGetActive.mockReturnValue({ backend: localBackend, orgId: null });
+    mockGetEffectiveLocal.mockReset();
+    mockGetEffectiveLocal.mockReturnValue(localBackend);
+    mockGetTelemetryDistinctId.mockReset();
+    mockGetTelemetryDistinctId.mockResolvedValue("ph-test-distinct-id");
+  });
+
+  describe("listAutomations", () => {
+    it("fetches paginated automations list with params object", async () => {
+      const response: AutomationsResponse = {
+        automations: [mockAutomation],
+        total: 1,
+      };
+      mockGet.mockResolvedValue({ data: response });
+
+      const result = await AutomationService.listAutomations({
+        limit: 10,
+        offset: 5,
+      });
+
+      expect(mockGet).toHaveBeenCalledWith("/api/automation/v1", {
+        params: { limit: 10, offset: 5 },
+      });
+      expect(result).toEqual(response);
+    });
+
+    it("exposes the preset_metadata repositories and plugins of each listed automation", async () => {
+      mockGet.mockResolvedValue({
+        data: {
+          automations: [
+            {
+              ...mockAutomation,
+              preset_metadata: {
+                repos: [{ url: "acme/repo", ref: "main" }],
+                plugins: [{ source: "github:acme/plugin" }],
+              },
+            },
+          ],
+          total: 1,
+        },
+      });
+
+      const { automations } = await AutomationService.listAutomations();
+
+      expect(automations[0].repositories).toEqual([
+        { url: "acme/repo", ref: "main" },
+      ]);
+      expect(automations[0].plugins).toEqual(["github:acme/plugin"]);
+    });
+
+    it("uses default params when none provided", async () => {
+      const response: AutomationsResponse = {
+        automations: [],
+        total: 0,
+      };
+      mockGet.mockResolvedValue({ data: response });
+
+      await AutomationService.listAutomations();
+
+      expect(mockGet).toHaveBeenCalledWith("/api/automation/v1", {
+        params: { limit: 50, offset: 0 },
+      });
+    });
+
+    it("sends the owner filter as run_as", async () => {
+      mockGet.mockResolvedValue({ data: { automations: [], total: 0 } });
+
+      await AutomationService.listAutomations({ runAs: "others" });
+
+      expect(mockGet).toHaveBeenCalledWith("/api/automation/v1", {
+        params: { limit: 50, offset: 0, run_as: "others" },
+      });
+    });
+  });
+
+  describe("getAutomations", () => {
+    it("delegates to listAutomations", async () => {
+      const response: AutomationsResponse = {
+        automations: [mockAutomation],
+        total: 1,
+      };
+      vi.spyOn(AutomationService, "listAutomations").mockResolvedValue(
+        response,
+      );
+
+      const result = await AutomationService.getAutomations(10, 5);
+
+      expect(AutomationService.listAutomations).toHaveBeenCalledWith({
+        limit: 10,
+        offset: 5,
+      });
+      expect(result).toEqual(response);
+    });
+  });
+
+  describe("getAutomation", () => {
+    it("fetches a single automation by id", async () => {
+      mockGet.mockResolvedValue({
+        data: mockAutomation,
+      });
+
+      const result = await AutomationService.getAutomation("1");
+
+      expect(mockGet).toHaveBeenCalledWith("/api/automation/v1/1");
+      expect(result).toEqual(mockAutomation);
+    });
+
+    it("exposes the repository with its ref and the plugin stored in preset_metadata", async () => {
+      mockGet.mockResolvedValue({
+        data: {
+          ...mockAutomation,
+          preset_metadata: {
+            preset_type: "plugin",
+            repos: [
+              { url: "https://github.com/qa-example/qa-repo", ref: "main" },
+            ],
+            plugins: [{ source: "github:qa-example/qa-plugin" }],
+          },
+        },
+      });
+
+      const result = await AutomationService.getAutomation("1");
+
+      expect(result.repositories).toEqual([
+        { url: "https://github.com/qa-example/qa-repo", ref: "main" },
+      ]);
+      expect(result.plugins).toEqual(["github:qa-example/qa-plugin"]);
+    });
+
+    it("keeps every repository and plugin entry stored in preset_metadata", async () => {
+      mockGet.mockResolvedValue({
+        data: {
+          ...mockAutomation,
+          preset_metadata: {
+            repos: [
+              { url: "https://github.com/qa-example/qa-repo", ref: "main" },
+              { url: "qa-example/docs", provider: "github" },
+            ],
+            plugins: [
+              { source: "github:qa-example/qa-plugin" },
+              { source: "github:qa-example/other-plugin", ref: "v1" },
+            ],
+          },
+        },
+      });
+
+      const result = await AutomationService.getAutomation("1");
+
+      expect(result.repositories).toEqual([
+        { url: "https://github.com/qa-example/qa-repo", ref: "main" },
+        { url: "qa-example/docs", provider: "github" },
+      ]);
+      expect(result.plugins).toEqual([
+        "github:qa-example/qa-plugin",
+        "github:qa-example/other-plugin",
+      ]);
+    });
+
+    it("adds no repositories or plugins when preset_metadata has none", async () => {
+      mockGet.mockResolvedValue({
+        data: { ...mockAutomation, preset_metadata: { preset_type: "prompt" } },
+      });
+
+      const result = await AutomationService.getAutomation("1");
+
+      expect(result).not.toHaveProperty("repositories");
+      expect(result).not.toHaveProperty("plugins");
+    });
+
+    it("falls back to a top-level repository, branch and plugins", async () => {
+      mockGet.mockResolvedValue({
+        data: {
+          ...mockAutomation,
+          repository: "acme/repo",
+          branch: "develop",
+          plugins: ["GitHub"],
+        },
+      });
+
+      const result = await AutomationService.getAutomation("1");
+
+      expect(result.repositories).toEqual([
+        { url: "acme/repo", ref: "develop" },
+      ]);
+      expect(result.plugins).toEqual(["GitHub"]);
+    });
+  });
+
+  describe("updateAutomation", () => {
+    it("patches an automation with the provided body", async () => {
+      const updated = { ...mockAutomation, name: "Updated Name" };
+      mockPatch.mockResolvedValue({ data: updated });
+
+      const result = await AutomationService.updateAutomation("1", {
+        name: "Updated Name",
+      });
+
+      expect(mockPatch).toHaveBeenCalledWith("/api/automation/v1/1", {
+        name: "Updated Name",
+      });
+      expect(result).toEqual(updated);
+    });
+
+    it("sends model profile updates to the automation API", async () => {
+      const updated = { ...mockAutomation, model: "careful-profile" };
+      mockPatch.mockResolvedValue({ data: updated });
+
+      const result = await AutomationService.updateAutomation("1", {
+        model: "careful-profile",
+      });
+
+      expect(mockPatch).toHaveBeenCalledWith("/api/automation/v1/1", {
+        model: "careful-profile",
+      });
+      expect(result).toEqual(updated);
+    });
+  });
+
+  describe("changeRunAs", () => {
+    it("posts the target identity to the run-as endpoint for cloud backends", async () => {
+      mockGetActive.mockReturnValue({ backend: cloudBackend, orgId: "org-1" });
+      mockCallCloudProxy.mockResolvedValue({
+        ...mockAutomation,
+        enabled: false,
+      });
+
+      await AutomationService.changeRunAs("1", {
+        to: "service",
+        service_account_id: "sa-1",
+      });
+
+      expect(mockCallCloudProxy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          method: "POST",
+          path: "/api/automation/v1/1/run-as",
+          body: { to: "service", service_account_id: "sa-1" },
+        }),
+      );
+    });
+  });
+
+  describe("deleteAutomation", () => {
+    it("deletes an automation by id", async () => {
+      mockDelete.mockResolvedValue({});
+
+      await AutomationService.deleteAutomation("1");
+
+      expect(mockDelete).toHaveBeenCalledWith("/api/automation/v1/1");
+    });
+  });
+
+  describe("listAutomationRuns", () => {
+    it("fetches runs with params object", async () => {
+      const response: AutomationRunsResponse = { runs: [], total: 0 };
+      mockGet.mockResolvedValue({ data: response });
+
+      const result = await AutomationService.listAutomationRuns("1", {
+        limit: 20,
+        offset: 10,
+      });
+
+      expect(mockGet).toHaveBeenCalledWith("/api/automation/v1/1/runs", {
+        params: { limit: 20, offset: 10 },
+      });
+      expect(result).toEqual(response);
+    });
+
+    it("uses default params when none provided", async () => {
+      const response: AutomationRunsResponse = { runs: [], total: 0 };
+      mockGet.mockResolvedValue({ data: response });
+
+      await AutomationService.listAutomationRuns("1");
+
+      expect(mockGet).toHaveBeenCalledWith("/api/automation/v1/1/runs", {
+        params: { limit: 50, offset: 0 },
+      });
+    });
+  });
+
+  describe("getAutomationRuns", () => {
+    it("delegates to listAutomationRuns", async () => {
+      const response: AutomationRunsResponse = { runs: [], total: 0 };
+      vi.spyOn(AutomationService, "listAutomationRuns").mockResolvedValue(
+        response,
+      );
+
+      const result = await AutomationService.getAutomationRuns("1", 25, 5);
+
+      expect(AutomationService.listAutomationRuns).toHaveBeenCalledWith("1", {
+        limit: 25,
+        offset: 5,
+      });
+      expect(result).toEqual(response);
+    });
+  });
+
+  describe("toggleAutomation", () => {
+    it("delegates to updateAutomation with enabled field", async () => {
+      const toggled = { ...mockAutomation, enabled: false };
+      vi.spyOn(AutomationService, "updateAutomation").mockResolvedValue(
+        toggled,
+      );
+
+      const result = await AutomationService.toggleAutomation("1", false);
+
+      expect(AutomationService.updateAutomation).toHaveBeenCalledWith("1", {
+        enabled: false,
+      });
+      expect(result).toEqual(toggled);
+    });
+  });
+
+  describe("dispatchAutomation", () => {
+    it("posts to the dispatch endpoint for local backends", async () => {
+      const run = {
+        id: "run-1",
+        status: "PENDING",
+        conversation_id: null,
+        bash_command_id: null,
+        error_detail: null,
+        started_at: "2026-01-01T00:00:00Z",
+        completed_at: null,
+      };
+      mockPost.mockResolvedValue({ data: run });
+
+      const result = await AutomationService.dispatchAutomation("1");
+
+      expect(mockPost).toHaveBeenCalledWith("/api/automation/v1/1/dispatch");
+      expect(result).toEqual(run);
+    });
+  });
+
+  // When the active backend is cloud the local axios instance must be
+  // bypassed entirely; calls must route through `callCloudProxy`, which
+  // sends them directly to the cloud host from the browser (the automation
+  // service grants permissive CORS to API-key requests, automation#185).
+  describe("cloud routing", () => {
+    beforeEach(() => {
+      mockGetActive.mockReturnValue({ backend: cloudBackend, orgId: null });
+    });
+
+    it("listAutomations routes to callCloudProxy with pagination in the path", async () => {
+      const response: AutomationsResponse = {
+        automations: [mockAutomation],
+        total: 1,
+      };
+      mockCallCloudProxy.mockResolvedValue(response);
+
+      const result = await AutomationService.listAutomations({
+        limit: 10,
+        offset: 5,
+      });
+
+      expect(mockCallCloudProxy).toHaveBeenCalledWith({
+        backend: cloudBackend,
+        method: "GET",
+        path: "/api/automation/v1?limit=10&offset=5",
+        headers: expectedAutomationTelemetryHeaders,
+      });
+      expect(mockGet).not.toHaveBeenCalled();
+      expect(result).toEqual(response);
+    });
+
+    it("listAutomations adds the owner filter to the path", async () => {
+      mockCallCloudProxy.mockResolvedValue({ automations: [], total: 0 });
+
+      await AutomationService.listAutomations({ runAs: "service" });
+
+      expect(mockCallCloudProxy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          path: "/api/automation/v1?limit=50&offset=0&run_as=service",
+        }),
+      );
+    });
+
+    it.each([
+      {
+        name: "getAutomation",
+        arrange: () => mockAutomation,
+        act: () => AutomationService.getAutomation("abc"),
+        expectedRequest: { method: "GET", path: "/api/automation/v1/abc" },
+        localMock: mockGet,
+      },
+      {
+        name: "dispatchAutomation",
+        arrange: () => mockRun,
+        act: () => AutomationService.dispatchAutomation("abc"),
+        expectedRequest: {
+          method: "POST",
+          path: "/api/automation/v1/abc/dispatch",
+        },
+        localMock: mockPost,
+      },
+      {
+        name: "updateAutomation",
+        arrange: () => ({ ...mockAutomation, enabled: false }),
+        act: () =>
+          AutomationService.updateAutomation("abc", { enabled: false }),
+        expectedRequest: {
+          method: "PATCH",
+          path: "/api/automation/v1/abc",
+          body: { enabled: false },
+        },
+        localMock: mockPatch,
+      },
+      {
+        name: "deleteAutomation",
+        arrange: () => undefined,
+        act: () => AutomationService.deleteAutomation("abc"),
+        expectedRequest: { method: "DELETE", path: "/api/automation/v1/abc" },
+        localMock: mockDelete,
+      },
+    ])(
+      "$name routes through callCloudProxy on cloud backends",
+      async ({ arrange, act, expectedRequest, localMock }) => {
+        const response = arrange();
+        mockCallCloudProxy.mockResolvedValue(response);
+
+        const result = await act();
+
+        expect(mockCallCloudProxy).toHaveBeenCalledWith({
+          backend: cloudBackend,
+          headers: expectedAutomationTelemetryHeaders,
+          ...expectedRequest,
+        });
+        expect(localMock).not.toHaveBeenCalled();
+        expect(result).toEqual(response);
+      },
+    );
+
+    it("getAutomation exposes preset_metadata repositories from the cloud proxy response", async () => {
+      mockCallCloudProxy.mockResolvedValue({
+        ...mockAutomation,
+        preset_metadata: { repos: [{ url: "acme/repo", ref: "main" }] },
+      });
+
+      const result = await AutomationService.getAutomation("abc");
+
+      expect(result.repositories).toEqual([{ url: "acme/repo", ref: "main" }]);
+    });
+
+    it("checkHealth calls the cloud host with a fail-fast timeout and returns the upstream status", async () => {
+      mockCallCloudProxy.mockResolvedValue({ status: "ok" });
+
+      const result = await AutomationService.checkHealth();
+
+      // Property access (vs whole-object matching) keeps these assertions
+      // resilient to future additive CloudProxyRequest fields.
+      const call = mockCallCloudProxy.mock.calls[0]![0];
+      expect(call.method).toBe("GET");
+      expect(call.path).toBe("/api/automation/health");
+      expect(call.timeoutSeconds).toBe(5);
+      expect(mockGet).not.toHaveBeenCalled();
+      expect(result).toEqual({ status: "ok" });
+    });
+
+    it("checkHealth resolves to an error status instead of throwing when the cloud call fails", async () => {
+      mockCallCloudProxy.mockRejectedValue(new Error("proxy unreachable"));
+
+      const result = await AutomationService.checkHealth();
+
+      expect(result).toEqual({ status: "error" });
+    });
+  });
+
+  // The interceptor must read the session API key from the active backend
+  // registry rather than the build-time VITE_SESSION_API_KEY env var so that
+  // the published npm package picks up the runtime-injected key (issue #829).
+  describe("localAutomationAxios interceptor", () => {
+    it("sets telemetry headers and X-Session-API-Key from the effective local backend apiKey", async () => {
+      const interceptor = capturedInterceptors[0];
+      expect(interceptor).toBeDefined();
+
+      const backendWithKey: Backend = {
+        ...localBackend,
+        apiKey: "runtime-injected-key",
+      };
+      mockGetEffectiveLocal.mockReturnValue(backendWithKey);
+
+      const config = makeAxiosConfig();
+      await interceptor(config);
+
+      expect(config.headers.set).toHaveBeenCalledWith(
+        "X-OpenHands-Client",
+        "agent_canvas",
+      );
+      expect(config.headers.set).toHaveBeenCalledWith(
+        "X-OpenHands-Telemetry-Distinct-Id",
+        "ph-test-distinct-id",
+      );
+      expect(config.headers.set).toHaveBeenCalledWith(
+        "X-Session-API-Key",
+        "runtime-injected-key",
+      );
+    });
+
+    it("does not set X-Session-API-Key when backend apiKey is empty", async () => {
+      const interceptor = capturedInterceptors[0];
+      expect(interceptor).toBeDefined();
+
+      mockGetEffectiveLocal.mockReturnValue({
+        ...localBackend,
+        apiKey: "",
+      });
+
+      const config = makeAxiosConfig();
+      await interceptor(config);
+
+      expect(config.headers.set).not.toHaveBeenCalledWith(
+        "X-Session-API-Key",
+        expect.anything(),
+      );
+    });
+
+    it("sets baseURL from effective local backend host when not already set", async () => {
+      const interceptor = capturedInterceptors[0];
+      expect(interceptor).toBeDefined();
+
+      mockGetEffectiveLocal.mockReturnValue({
+        ...localBackend,
+        host: "http://custom-host:9000",
+        apiKey: "key",
+      });
+
+      const config = makeAxiosConfig();
+      await interceptor(config);
+
+      expect(config.baseURL).toBe("http://custom-host:9000");
+    });
+
+    it("does not overwrite an already-set baseURL", async () => {
+      const interceptor = capturedInterceptors[0];
+      expect(interceptor).toBeDefined();
+
+      mockGetEffectiveLocal.mockReturnValue({
+        ...localBackend,
+        host: "http://should-not-use:9000",
+        apiKey: "key",
+      });
+
+      const config = makeAxiosConfig({ baseURL: "http://already-set:8000" });
+      await interceptor(config);
+
+      expect(config.baseURL).toBe("http://already-set:8000");
+    });
+  });
+
+  describe("supportsAutomationDrafts", () => {
+    it.each([
+      {
+        name: "advertised feature",
+        capabilities: {
+          ready: true,
+          features: ["automationDrafts"],
+          triggerKinds: [],
+          eventSources: [],
+          eventTypes: [],
+          triggers: {},
+        },
+        expected: true,
+      },
+      {
+        name: "missing feature",
+        capabilities: {
+          ready: true,
+          features: ["presetPrompt"],
+          triggerKinds: [],
+          eventSources: [],
+          eventTypes: [],
+          triggers: {},
+        },
+        expected: false,
+      },
+      { name: "null capabilities", capabilities: null, expected: false },
+      {
+        name: "undefined capabilities",
+        capabilities: undefined,
+        expected: false,
+      },
+    ])("returns $expected for $name", ({ capabilities, expected }) => {
+      expect(AutomationService.supportsAutomationDrafts(capabilities)).toBe(
+        expected,
+      );
+    });
+  });
+
+  describe("createServerDraft", () => {
+    it("posts the snake_case body to /v1/drafts and normalizes the response", async () => {
+      const raw = {
+        id: "draft-1",
+        endpoint: "/v1/preset/prompt",
+        name: "PR Reviewer",
+        draft: { prompt: "review prs" },
+        validation_errors: null,
+        dispatchable: true,
+        source_automation_id: null,
+        materialized_automation_id: null,
+        last_test_run_id: null,
+        created_at: "2026-01-01T00:00:00Z",
+        updated_at: "2026-01-01T00:00:00Z",
+      };
+      mockPost.mockResolvedValue({ data: raw });
+
+      const result = await AutomationService.createServerDraft({
+        endpoint: "/v1/preset/prompt",
+        draft: { prompt: "review prs" } as never,
+        name: "PR Reviewer",
+      });
+
+      expect(mockPost).toHaveBeenCalledWith("/api/automation/v1/drafts", {
+        endpoint: "/v1/preset/prompt",
+        draft: { prompt: "review prs" },
+        name: "PR Reviewer",
+      });
+      expect(result.id).toBe("draft-1");
+      expect(result.sourceAutomationId).toBeNull();
+      expect(result.createdAt).toBe("2026-01-01T00:00:00Z");
+      expect(result.dispatchable).toBe(true);
+    });
+
+    it("omits name and source_automation_id when not provided", async () => {
+      mockPost.mockResolvedValue({
+        data: { id: "draft-2", endpoint: "/v1/preset/prompt" },
+      });
+
+      await AutomationService.createServerDraft({
+        endpoint: "/v1/preset/prompt",
+        draft: {} as never,
+      });
+
+      const [, body] = mockPost.mock.calls[0];
+      expect(body).not.toHaveProperty("name");
+      expect(body).not.toHaveProperty("source_automation_id");
+    });
+
+    it("routes to callCloudProxy for cloud backends", async () => {
+      mockGetActive.mockReturnValue({ backend: cloudBackend, orgId: "org-1" });
+      mockCallCloudProxy.mockResolvedValue({ id: "cloud-draft" });
+
+      const result = await AutomationService.createServerDraft({
+        endpoint: "/v1/preset/prompt",
+        draft: {} as never,
+      });
+
+      expect(mockCallCloudProxy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          backend: cloudBackend,
+          method: "POST",
+          path: "/api/automation/v1/drafts",
+        }),
+      );
+      expect(result.id).toBe("cloud-draft");
+    });
+  });
+
+  describe("updateServerDraft", () => {
+    it("patches only the provided fields", async () => {
+      mockPatch.mockResolvedValue({
+        data: { id: "draft-1", endpoint: "/v1/preset/prompt" },
+      });
+
+      await AutomationService.updateServerDraft("draft-1", {
+        name: "New name",
+      });
+
+      expect(mockPatch).toHaveBeenCalledWith(
+        "/api/automation/v1/drafts/draft-1",
+        { name: "New name" },
+      );
+    });
+  });
+
+  describe("getServerDraft", () => {
+    it("fetches and normalizes a single draft", async () => {
+      mockGet.mockResolvedValue({
+        data: {
+          id: "draft-9",
+          endpoint: "/v1",
+          validation_errors: [
+            { field: "name", code: "value_error", message: "required" },
+          ],
+        },
+      });
+
+      const result = await AutomationService.getServerDraft("draft-9");
+
+      expect(mockGet).toHaveBeenCalledWith("/api/automation/v1/drafts/draft-9");
+      expect(result.id).toBe("draft-9");
+      expect(result.validationErrors?.[0].message).toBe("required");
+    });
+  });
+
+  describe("deleteServerDraft", () => {
+    it("deletes a draft by id", async () => {
+      mockDelete.mockResolvedValue({});
+
+      await AutomationService.deleteServerDraft("draft-1");
+
+      expect(mockDelete).toHaveBeenCalledWith(
+        "/api/automation/v1/drafts/draft-1",
+      );
+    });
+  });
+
+  describe("listServerDrafts", () => {
+    it("lists drafts with pagination and normalizes the response", async () => {
+      mockGet.mockResolvedValue({
+        data: {
+          drafts: [{ id: "d1", endpoint: "/v1/preset/prompt" }],
+          total: 1,
+        },
+      });
+
+      const result = await AutomationService.listServerDrafts({
+        limit: 10,
+        offset: 5,
+      });
+
+      expect(mockGet).toHaveBeenCalledWith(
+        "/api/automation/v1/drafts?limit=10&offset=5",
+      );
+      expect(result.total).toBe(1);
+      expect(result.drafts[0].id).toBe("d1");
+    });
+
+    it("routes to callCloudProxy for cloud backends", async () => {
+      mockGetActive.mockReturnValue({ backend: cloudBackend, orgId: "org-1" });
+      mockCallCloudProxy.mockResolvedValue({
+        drafts: [],
+        total: 0,
+      });
+
+      const result = await AutomationService.listServerDrafts({
+        limit: 10,
+        offset: 5,
+      });
+
+      expect(mockCallCloudProxy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          backend: cloudBackend,
+          method: "GET",
+          path: "/api/automation/v1/drafts?limit=10&offset=5",
+        }),
+      );
+      expect(result).toEqual({ drafts: [], total: 0 });
+    });
+  });
+
+  describe("listCustomWebhooks", () => {
+    it("fetches paginated webhook sources through the local automation service", async () => {
+      const response = { webhooks: [], total: 0 };
+      mockGet.mockResolvedValue({ data: response });
+
+      expect(
+        await AutomationService.listCustomWebhooks({ limit: 50, offset: 25 }),
+      ).toEqual(response);
+      expect(mockGet).toHaveBeenCalledWith("/api/automation/v1/webhooks", {
+        params: { limit: 50, offset: 25 },
+      });
+    });
+
+    it("fetches cloud webhook sources with authenticated proxy headers", async () => {
+      mockGetActive.mockReturnValue({ backend: cloudBackend, orgId: "org-1" });
+      mockCallCloudProxy.mockResolvedValue({ webhooks: [], total: 0 });
+
+      await AutomationService.listCustomWebhooks({ limit: 50, offset: 0 });
+
+      expect(mockCallCloudProxy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          backend: cloudBackend,
+          method: "GET",
+          path: "/api/automation/v1/webhooks?limit=50&offset=0",
+          headers: expectedAutomationTelemetryHeaders,
+        }),
+      );
+    });
+  });
+
+  describe("createCustomWebhook", () => {
+    it("posts custom webhook configuration to the automation API", async () => {
+      const webhook = {
+        id: "webhook-1",
+        org_id: "org-1",
+        name: "Incident webhook",
+        source: "incident-alerts",
+        webhook_url:
+          "https://app.all-hands.dev/v1/events/org-1/incident-alerts",
+        event_key_expr: "event.type",
+        signature_header: "X-Incident-Signature",
+        signature_scheme: "hmac_sha256_hex",
+        enabled: true,
+        created_at: "2026-01-01T00:00:00Z",
+        updated_at: "2026-01-01T00:00:00Z",
+        webhook_secret: "generated-secret",
+      };
+      mockPost.mockResolvedValue({ data: webhook });
+
+      const result = await AutomationService.createCustomWebhook({
+        name: "Incident webhook",
+        source: "incident-alerts",
+        event_key_expr: "event.type",
+        signature_header: "X-Incident-Signature",
+        signature_scheme: "hmac_sha256_hex",
+      });
+
+      expect(mockPost).toHaveBeenCalledWith("/api/automation/v1/webhooks", {
+        name: "Incident webhook",
+        source: "incident-alerts",
+        event_key_expr: "event.type",
+        signature_header: "X-Incident-Signature",
+        signature_scheme: "hmac_sha256_hex",
+      });
+      expect(result).toEqual(webhook);
+    });
+  });
+
+  describe("dispatchServerDraft", () => {
+    it("posts to the dispatch endpoint and returns the run", async () => {
+      mockPost.mockResolvedValue({ data: mockRun });
+
+      const result = await AutomationService.dispatchServerDraft("draft-1");
+
+      expect(mockPost).toHaveBeenCalledWith(
+        "/api/automation/v1/drafts/draft-1/dispatch",
+      );
+      expect(result).toEqual(mockRun);
+    });
+
+    it("sends a synthetic event payload when provided", async () => {
+      mockPost.mockResolvedValue({ data: mockRun });
+
+      await AutomationService.dispatchServerDraft("draft-1", {
+        eventPayload: { type: "issue.created", action: "opened" },
+      });
+
+      expect(mockPost).toHaveBeenCalledWith(
+        "/api/automation/v1/drafts/draft-1/dispatch",
+        { event_payload: { type: "issue.created", action: "opened" } },
+      );
+    });
+  });
+});

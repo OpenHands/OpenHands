@@ -1,0 +1,989 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  setActiveSelection,
+  setRegisteredBackends,
+} from "#/api/backend-registry/active-store";
+import type { Backend } from "#/api/backend-registry/types";
+import type { Automation, AutomationSpec } from "#/types/automation";
+import type { GitSyncStatus } from "#/types/git-sync";
+import { bytesToBase64 } from "#/utils/base64";
+import AutomationService from "./automation-service.api";
+
+const {
+  localAxios,
+  callCloudProxy,
+  clearPendingLocalTelemetryRevocation,
+  getTelemetryConsent,
+  getTelemetryDistinctId,
+  getTelemetryDistinctIdForConsentSync,
+} = vi.hoisted(() => ({
+  localAxios: {
+    interceptors: { request: { use: vi.fn() } },
+    get: vi.fn(),
+    post: vi.fn(),
+    put: vi.fn(),
+    patch: vi.fn(),
+    delete: vi.fn(),
+  },
+  callCloudProxy: vi.fn(),
+  clearPendingLocalTelemetryRevocation: vi.fn(),
+  getTelemetryConsent: vi.fn(),
+  getTelemetryDistinctId: vi.fn(),
+  getTelemetryDistinctIdForConsentSync: vi.fn(),
+}));
+
+vi.mock("axios", () => ({
+  default: {
+    create: () => localAxios,
+    post: vi.fn(),
+  },
+}));
+
+vi.mock("#/api/cloud/proxy", () => ({
+  callCloudProxy,
+}));
+
+vi.mock("#/services/telemetry", () => ({
+  clearPendingLocalTelemetryRevocation,
+  getTelemetryConsent,
+  getTelemetryDistinctId,
+  getTelemetryDistinctIdForConsentSync,
+}));
+
+const localBackend: Backend = {
+  id: "local-test",
+  name: "Local test backend",
+  host: "http://localhost:3000",
+  apiKey: "test-session-key",
+  kind: "local",
+};
+
+const cloudBackend: Backend = {
+  id: "cloud-test",
+  name: "Cloud test backend",
+  host: "https://app.example.test",
+  apiKey: "cloud-api-key",
+  kind: "cloud",
+};
+
+const spec: AutomationSpec = {
+  name: "Imported review",
+  prompt: "Review open pull requests.",
+  trigger: {
+    type: "cron",
+    schedule: "0 9 * * *",
+    schedule_human: "Daily at 09:00",
+  },
+  enabled: true,
+  repository: "openhands/agent-canvas",
+  branch: "main",
+  plugins: ["github:openhands/extensions"],
+  model: "fast",
+  timezone: "America/Los_Angeles",
+};
+
+const createdAutomation: Automation = {
+  id: "created-automation",
+  name: spec.name,
+  prompt: spec.prompt,
+  trigger: { type: "cron", schedule: spec.trigger.schedule },
+  enabled: true,
+  model: spec.model,
+  created_at: "2026-07-10T00:00:00Z",
+  updated_at: "2026-07-10T00:00:00Z",
+};
+
+describe("AutomationService.getSdkVersion", () => {
+  beforeEach(() => {
+    setRegisteredBackends([localBackend]);
+    setActiveSelection({ backendId: localBackend.id });
+  });
+
+  afterEach(() => {
+    setActiveSelection(null);
+    setRegisteredBackends([]);
+    vi.clearAllMocks();
+  });
+
+  it("fetches the local automation SDK version from the automation sidecar", async () => {
+    localAxios.get.mockResolvedValueOnce({ data: { sdk_version: "1.36.1" } });
+
+    await expect(AutomationService.getSdkVersion()).resolves.toBe("1.36.1");
+
+    expect(localAxios.get).toHaveBeenCalledWith("/api/automation/sdk-version", {
+      timeout: 5000,
+    });
+  });
+
+  it("fetches the cloud automation SDK version through the cloud proxy", async () => {
+    setRegisteredBackends([cloudBackend]);
+    setActiveSelection({ backendId: cloudBackend.id, orgId: "org-1" });
+    callCloudProxy.mockResolvedValueOnce({ sdk_version: "1.36.2" });
+
+    await expect(AutomationService.getSdkVersion()).resolves.toBe("1.36.2");
+
+    expect(callCloudProxy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        backend: cloudBackend,
+        method: "GET",
+        path: "/api/automation/sdk-version",
+        headers: expect.objectContaining({ "X-Org-Id": "org-1" }),
+        timeoutSeconds: 5,
+      }),
+    );
+  });
+
+  it("returns null when the SDK version endpoint is unavailable", async () => {
+    localAxios.get.mockRejectedValueOnce(new Error("not running"));
+
+    await expect(AutomationService.getSdkVersion()).resolves.toBeNull();
+  });
+});
+
+describe("AutomationService.syncTelemetryConsent", () => {
+  beforeEach(() => {
+    setRegisteredBackends([localBackend]);
+    setActiveSelection({ backendId: localBackend.id });
+    getTelemetryConsent.mockReturnValue("pending");
+    getTelemetryDistinctIdForConsentSync.mockResolvedValue("ph-fe-sync");
+    localAxios.post.mockResolvedValue({ data: { consent_granted: true } });
+  });
+
+  afterEach(() => {
+    setActiveSelection(null);
+    setRegisteredBackends([]);
+    vi.clearAllMocks();
+  });
+
+  it("posts local telemetry consent with the frontend PostHog distinct ID", async () => {
+    await AutomationService.syncTelemetryConsent("granted");
+
+    expect(localAxios.post).toHaveBeenCalledWith(
+      "/api/automation/v1/telemetry/consent",
+      {
+        consent_granted: true,
+        frontend_distinct_id: "ph-fe-sync",
+      },
+      { timeout: 5000 },
+    );
+  });
+
+  it("uses the current telemetry consent when no explicit value is supplied", async () => {
+    getTelemetryConsent.mockReturnValue("denied");
+
+    await AutomationService.syncTelemetryConsent();
+
+    expect(localAxios.post).toHaveBeenCalledWith(
+      "/api/automation/v1/telemetry/consent",
+      {
+        consent_granted: false,
+        frontend_distinct_id: "ph-fe-sync",
+      },
+      { timeout: 5000 },
+    );
+    expect(clearPendingLocalTelemetryRevocation).toHaveBeenCalledWith(
+      "ph-fe-sync",
+    );
+  });
+
+  it("keeps a pending local revocation when consent sync fails", async () => {
+    localAxios.post.mockRejectedValueOnce(new Error("automation unavailable"));
+
+    await expect(
+      AutomationService.syncTelemetryConsent("denied"),
+    ).rejects.toThrow("automation unavailable");
+
+    expect(clearPendingLocalTelemetryRevocation).not.toHaveBeenCalled();
+  });
+
+  it("skips cloud backends because cloud consent is handled by auth", async () => {
+    setRegisteredBackends([cloudBackend]);
+    setActiveSelection({ backendId: cloudBackend.id, orgId: "org-1" });
+
+    await AutomationService.syncTelemetryConsent("granted");
+
+    expect(localAxios.post).not.toHaveBeenCalled();
+  });
+});
+
+describe("AutomationService.createAutomation", () => {
+  beforeEach(() => {
+    setRegisteredBackends([localBackend]);
+    setActiveSelection({ backendId: localBackend.id });
+    localAxios.post.mockResolvedValue({ data: createdAutomation });
+    localAxios.patch.mockImplementation(
+      async (_path: string, body: Partial<Automation>) => ({
+        data: { ...createdAutomation, ...body },
+      }),
+    );
+  });
+
+  afterEach(() => {
+    setActiveSelection(null);
+    setRegisteredBackends([]);
+    vi.clearAllMocks();
+  });
+
+  it("creates plugin automations through the preset API and disables them", async () => {
+    const created = await AutomationService.createAutomation(spec);
+
+    expect(localAxios.post).toHaveBeenCalledWith(
+      "/api/automation/v1/preset/plugin",
+      {
+        name: spec.name,
+        prompt: spec.prompt,
+        model: spec.model,
+        trigger: {
+          type: "event",
+          source: "agent-canvas-import",
+          on: expect.stringMatching(/^pending\./),
+        },
+        repos: [
+          {
+            url: spec.repository,
+            ref: spec.branch,
+            provider: "github",
+          },
+        ],
+        plugins: [{ source: spec.plugins![0] }],
+      },
+      {
+        baseURL: localBackend.host,
+        headers: expect.objectContaining({
+          "X-Session-API-Key": localBackend.apiKey,
+        }),
+      },
+    );
+    expect(localAxios.patch).toHaveBeenCalledWith(
+      "/api/automation/v1/created-automation",
+      {
+        trigger: {
+          type: "cron",
+          schedule: spec.trigger.schedule,
+          timezone: spec.timezone,
+        },
+        enabled: false,
+      },
+      {
+        baseURL: localBackend.host,
+        headers: expect.objectContaining({
+          "X-Session-API-Key": localBackend.apiKey,
+        }),
+      },
+    );
+    expect(created.enabled).toBe(false);
+  });
+
+  it("uses the prompt preset path when no plugins are configured", async () => {
+    await AutomationService.createAutomation({
+      ...spec,
+      plugins: undefined,
+    });
+
+    expect(localAxios.post).toHaveBeenCalledWith(
+      "/api/automation/v1/preset/prompt",
+      expect.not.objectContaining({ plugins: expect.anything() }),
+      expect.any(Object),
+    );
+  });
+
+  it("applies the imported event trigger while disabling the automation", async () => {
+    const eventTrigger = {
+      type: "event",
+      source: "github",
+      on: ["pull_request.opened", "pull_request.synchronize"],
+      filter: "repository.full_name == 'openhands/agent-canvas'",
+    };
+
+    await AutomationService.createAutomation({
+      ...spec,
+      trigger: eventTrigger,
+    });
+
+    expect(localAxios.patch).toHaveBeenCalledWith(
+      "/api/automation/v1/created-automation",
+      { trigger: eventTrigger, enabled: false },
+      expect.any(Object),
+    );
+  });
+
+  it("uses the selected cloud backend and organization for both requests", async () => {
+    setRegisteredBackends([cloudBackend]);
+    setActiveSelection({ backendId: cloudBackend.id, orgId: "org-1" });
+    callCloudProxy
+      .mockResolvedValueOnce(createdAutomation)
+      .mockResolvedValueOnce({ ...createdAutomation, enabled: false });
+
+    const created = await AutomationService.createAutomation(spec);
+
+    expect(callCloudProxy).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        backend: cloudBackend,
+        method: "POST",
+        path: "/api/automation/v1/preset/plugin",
+        body: expect.objectContaining({ name: spec.name }),
+        headers: expect.objectContaining({ "X-Org-Id": "org-1" }),
+      }),
+    );
+    expect(callCloudProxy).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        backend: cloudBackend,
+        method: "PATCH",
+        path: "/api/automation/v1/created-automation",
+        body: expect.objectContaining({ enabled: false }),
+        headers: expect.objectContaining({ "X-Org-Id": "org-1" }),
+      }),
+    );
+    expect(created.enabled).toBe(false);
+  });
+
+  it("removes the inert automation when disabling it fails", async () => {
+    const updateError = new Error("update failed");
+    localAxios.patch.mockRejectedValueOnce(updateError);
+
+    await expect(AutomationService.createAutomation(spec)).rejects.toBe(
+      updateError,
+    );
+
+    expect(localAxios.delete).toHaveBeenCalledWith(
+      "/api/automation/v1/created-automation",
+      {
+        baseURL: localBackend.host,
+        headers: expect.objectContaining({
+          "X-Session-API-Key": localBackend.apiKey,
+        }),
+      },
+    );
+  });
+
+  it("includes the timeout in the create request when the spec sets one", async () => {
+    await AutomationService.createAutomation({ ...spec, timeout: 1200 });
+
+    expect(localAxios.post).toHaveBeenCalledWith(
+      "/api/automation/v1/preset/plugin",
+      expect.objectContaining({ timeout: 1200 }),
+      expect.any(Object),
+    );
+  });
+
+  it("creates the automation in a factory only when one is given", async () => {
+    await AutomationService.createAutomation(spec, "factory-1");
+    await AutomationService.createAutomation(spec);
+
+    const [inFactory, outsideFactory] = localAxios.post.mock.calls.map(
+      ([, body]) => body,
+    );
+    expect(inFactory).toHaveProperty("factory_id", "factory-1");
+    expect(outsideFactory).not.toHaveProperty("factory_id");
+  });
+
+  it("creates a script automation in a factory in its single create request", async () => {
+    const scriptSpec: AutomationSpec = {
+      name: "Socials monitor",
+      prompt: null,
+      trigger: { type: "cron", schedule: "0 9 * * *", timezone: "UTC" },
+      enabled: false,
+      script: {
+        entrypoint: "python3 main.py",
+        tarball_base64: bytesToBase64(new Uint8Array([0x1f, 0x8b, 8])),
+      },
+    };
+    localAxios.post.mockResolvedValueOnce({
+      data: { tarball_path: "oh-internal://uploads/socials-monitor" },
+    });
+
+    await AutomationService.createAutomation(scriptSpec, "factory-1");
+
+    expect(localAxios.post).toHaveBeenNthCalledWith(
+      2,
+      "/api/automation/v1",
+      expect.objectContaining({ factory_id: "factory-1" }),
+      expect.anything(),
+    );
+  });
+
+  it("uploads the bundle and creates a script automation disabled in one request", async () => {
+    const bundle = new Uint8Array([0x1f, 0x8b, 8, 0, 1, 2, 3]);
+    const scriptSpec: AutomationSpec = {
+      name: "Socials monitor",
+      prompt: null,
+      trigger: { type: "cron", schedule: "0,30 9-17 * * 1-5", timezone: "UTC" },
+      enabled: false,
+      model: "fast",
+      timeout: 900,
+      script: {
+        entrypoint: "python3 main.py",
+        setup_script_path: "setup.sh",
+        tarball_base64: bytesToBase64(bundle),
+      },
+    };
+    localAxios.post.mockResolvedValueOnce({
+      data: { tarball_path: "oh-internal://uploads/socials-monitor" },
+    });
+
+    const created = await AutomationService.createAutomation(scriptSpec);
+
+    expect(localAxios.post).toHaveBeenNthCalledWith(
+      1,
+      "/api/automation/v1/uploads?name=Socials%20monitor",
+      bundle,
+      { headers: { "Content-Type": "application/gzip" } },
+    );
+    expect(localAxios.post).toHaveBeenNthCalledWith(
+      2,
+      "/api/automation/v1",
+      {
+        name: "Socials monitor",
+        trigger: {
+          type: "cron",
+          schedule: "0,30 9-17 * * 1-5",
+          timezone: "UTC",
+        },
+        enabled: false,
+        tarball_path: "oh-internal://uploads/socials-monitor",
+        entrypoint: "python3 main.py",
+        setup_script_path: "setup.sh",
+        model: "fast",
+        timeout: 900,
+      },
+      expect.objectContaining({ baseURL: localBackend.host }),
+    );
+    expect(localAxios.patch).not.toHaveBeenCalled();
+    expect(created).toEqual(createdAutomation);
+  });
+});
+
+const gitSyncStatus: GitSyncStatus = {
+  enabled: true,
+  repo_url: "https://example.com/org/repo.git",
+  branch: "main",
+  path: "automations",
+  encryption_enabled: false,
+  interval_seconds: 0,
+  last_synced_commit: "abc123",
+  last_synced_at: "2026-07-10T00:00:00Z",
+  last_error: null,
+  last_error_at: null,
+  dirty_count: 0,
+};
+
+describe("AutomationService.createPluginSpecAutomation", () => {
+  const pluginSpecAutomation: Automation = {
+    ...createdAutomation,
+    id: "plugin-spec-automation",
+    name: "recipe (org)",
+  };
+
+  const pluginSpecRequest = {
+    name: "recipe (org)",
+    plugin: {
+      source: "github:org/recipe",
+      ref: "main",
+      repo_path: "plugins/recipe",
+    },
+    config: { repository: "org/repo" },
+    enabled: true,
+  };
+
+  beforeEach(() => {
+    setRegisteredBackends([localBackend]);
+    setActiveSelection({ backendId: localBackend.id });
+    localAxios.post.mockResolvedValue({
+      data: pluginSpecAutomation,
+      status: 201,
+    });
+  });
+
+  afterEach(() => {
+    setActiveSelection(null);
+    setRegisteredBackends([]);
+    vi.clearAllMocks();
+  });
+
+  it("creates an automation from the plugin spec on the local backend", async () => {
+    const { automation, created } =
+      await AutomationService.createPluginSpecAutomation(pluginSpecRequest);
+
+    expect(localAxios.post).toHaveBeenCalledWith(
+      "/api/automation/v1/plugin-spec",
+      pluginSpecRequest,
+    );
+    expect(automation.id).toBe("plugin-spec-automation");
+    expect(created).toBe(true);
+  });
+
+  it("reports created=false when the service returns an existing automation (HTTP 200)", async () => {
+    localAxios.post.mockResolvedValueOnce({
+      data: pluginSpecAutomation,
+      status: 200,
+    });
+
+    const { automation, created } =
+      await AutomationService.createPluginSpecAutomation(pluginSpecRequest);
+
+    expect(automation.id).toBe("plugin-spec-automation");
+    expect(created).toBe(false);
+  });
+
+  it("routes cloud creates through the cloud proxy", async () => {
+    setRegisteredBackends([cloudBackend]);
+    setActiveSelection({ backendId: cloudBackend.id });
+    callCloudProxy.mockResolvedValueOnce(pluginSpecAutomation);
+
+    const { automation, created } =
+      await AutomationService.createPluginSpecAutomation(pluginSpecRequest);
+
+    expect(callCloudProxy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        backend: cloudBackend,
+        method: "POST",
+        path: "/api/automation/v1/plugin-spec",
+        body: pluginSpecRequest,
+      }),
+    );
+    expect(localAxios.post).not.toHaveBeenCalled();
+    expect(automation.id).toBe("plugin-spec-automation");
+    expect(created).toBe(true);
+  });
+});
+
+describe("AutomationService git sync", () => {
+  beforeEach(() => {
+    setRegisteredBackends([localBackend]);
+    setActiveSelection({ backendId: localBackend.id });
+  });
+
+  afterEach(() => {
+    setActiveSelection(null);
+    setRegisteredBackends([]);
+    vi.clearAllMocks();
+  });
+
+  it("fetches status from the local automation backend", async () => {
+    localAxios.get.mockResolvedValueOnce({ data: gitSyncStatus });
+
+    await expect(AutomationService.getGitSyncStatus()).resolves.toEqual(
+      gitSyncStatus,
+    );
+
+    expect(localAxios.get).toHaveBeenCalledWith(
+      "/api/automation/v1/git-sync/status",
+    );
+  });
+
+  it("fetches status through the cloud proxy", async () => {
+    setRegisteredBackends([cloudBackend]);
+    setActiveSelection({ backendId: cloudBackend.id, orgId: "org-1" });
+    callCloudProxy.mockResolvedValueOnce(gitSyncStatus);
+
+    await expect(AutomationService.getGitSyncStatus()).resolves.toEqual(
+      gitSyncStatus,
+    );
+
+    expect(callCloudProxy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        backend: cloudBackend,
+        method: "GET",
+        path: "/api/automation/v1/git-sync/status",
+        headers: expect.objectContaining({
+          "X-OpenHands-Client": "agent_canvas",
+        }),
+      }),
+    );
+  });
+
+  it("sends a partial config update", async () => {
+    localAxios.put.mockResolvedValueOnce({ data: gitSyncStatus });
+
+    await expect(
+      AutomationService.updateGitSyncConfig({ branch: "develop" }),
+    ).resolves.toEqual(gitSyncStatus);
+
+    expect(localAxios.put).toHaveBeenCalledWith(
+      "/api/automation/v1/git-sync/config",
+      { branch: "develop" },
+    );
+  });
+
+  it("sends a null override through the cloud proxy", async () => {
+    setRegisteredBackends([cloudBackend]);
+    setActiveSelection({ backendId: cloudBackend.id, orgId: "org-1" });
+    callCloudProxy.mockResolvedValueOnce(gitSyncStatus);
+
+    await AutomationService.updateGitSyncConfig({ token: null });
+
+    expect(callCloudProxy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        backend: cloudBackend,
+        method: "PUT",
+        path: "/api/automation/v1/git-sync/config",
+        body: { token: null },
+        headers: expect.objectContaining({
+          "X-OpenHands-Client": "agent_canvas",
+        }),
+      }),
+    );
+  });
+
+  it("checks a candidate configuration through the cloud proxy", async () => {
+    setRegisteredBackends([cloudBackend]);
+    setActiveSelection({ backendId: cloudBackend.id, orgId: "org-1" });
+    const check = { ok: true, branch_exists: true, detail: null };
+    callCloudProxy.mockResolvedValueOnce(check);
+
+    await expect(
+      AutomationService.checkGitSyncConfig({ branch: "develop" }),
+    ).resolves.toEqual(check);
+
+    expect(callCloudProxy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        backend: cloudBackend,
+        method: "POST",
+        path: "/api/automation/v1/git-sync/check",
+        body: { branch: "develop" },
+        headers: expect.objectContaining({
+          "X-OpenHands-Client": "agent_canvas",
+        }),
+      }),
+    );
+  });
+
+  it("triggers a sync cycle", async () => {
+    localAxios.post.mockResolvedValueOnce({ data: { triggered: true } });
+
+    await expect(AutomationService.triggerGitSync()).resolves.toEqual({
+      triggered: true,
+    });
+
+    expect(localAxios.post).toHaveBeenCalledWith(
+      "/api/automation/v1/git-sync/sync",
+    );
+  });
+});
+
+describe("AutomationService.pluginSpecPreflight", () => {
+  const preflightResponse = {
+    manifest: {
+      name: "recipe",
+      description: "A recipe automation",
+      config_schema: {
+        type: "object",
+        properties: { repo: { type: "string" } },
+      },
+      runtime: { agent_profile: { required: true } },
+    },
+    resolved_ref: "main",
+    suggested_trigger: { type: "cron", schedule: "0 9 * * *", timezone: "UTC" },
+  };
+
+  beforeEach(() => {
+    setRegisteredBackends([localBackend]);
+    setActiveSelection({ backendId: localBackend.id });
+    localAxios.get.mockResolvedValue({ data: preflightResponse });
+  });
+
+  afterEach(() => {
+    setActiveSelection(null);
+    setRegisteredBackends([]);
+    vi.clearAllMocks();
+  });
+
+  it("preflights the plugin spec on the local backend", async () => {
+    const result = await AutomationService.pluginSpecPreflight({
+      source: "github:org/recipe",
+      ref: "main",
+      repo_path: "plugins/recipe",
+    });
+
+    expect(localAxios.get).toHaveBeenCalledWith(
+      "/api/automation/v1/plugin-spec/preflight?source=github%3Aorg%2Frecipe&ref=main&repo_path=plugins%2Frecipe",
+    );
+    expect(result.manifest.name).toBe("recipe");
+    expect(result.suggested_trigger?.schedule).toBe("0 9 * * *");
+  });
+
+  it("omits absent query params", async () => {
+    await AutomationService.pluginSpecPreflight({
+      source: "github:org/recipe",
+    });
+
+    expect(localAxios.get).toHaveBeenCalledWith(
+      "/api/automation/v1/plugin-spec/preflight?source=github%3Aorg%2Frecipe",
+    );
+  });
+
+  it("routes cloud preflights through the cloud proxy", async () => {
+    setRegisteredBackends([cloudBackend]);
+    setActiveSelection({ backendId: cloudBackend.id });
+    callCloudProxy.mockResolvedValueOnce(preflightResponse);
+
+    const result = await AutomationService.pluginSpecPreflight({
+      source: "github:org/recipe",
+    });
+
+    expect(callCloudProxy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        backend: cloudBackend,
+        method: "GET",
+        path: "/api/automation/v1/plugin-spec/preflight?source=github%3Aorg%2Frecipe",
+      }),
+    );
+    expect(localAxios.get).not.toHaveBeenCalled();
+    expect(result.manifest.name).toBe("recipe");
+  });
+});
+
+describe("AutomationService factories", () => {
+  const factory = {
+    id: "factory-1",
+    name: "Core SDLC",
+    automation_count: 3,
+    created_at: "2026-11-01T00:00:00Z",
+    updated_at: "2026-11-01T00:00:00Z",
+  };
+
+  beforeEach(() => {
+    setRegisteredBackends([localBackend]);
+    setActiveSelection({ backendId: localBackend.id });
+  });
+
+  afterEach(() => {
+    setActiveSelection(null);
+    setRegisteredBackends([]);
+    vi.clearAllMocks();
+  });
+
+  it("lists factories from the local automation backend", async () => {
+    localAxios.get.mockResolvedValueOnce({
+      data: { factories: [factory], total: 1 },
+    });
+
+    await expect(AutomationService.listFactories()).resolves.toEqual({
+      factories: [factory],
+      total: 1,
+    });
+
+    expect(localAxios.get).toHaveBeenCalledWith(
+      "/api/automation/v1/factories",
+      {
+        params: { limit: 100, offset: 0 },
+      },
+    );
+  });
+
+  it("lists factories through the cloud proxy", async () => {
+    setRegisteredBackends([cloudBackend]);
+    setActiveSelection({ backendId: cloudBackend.id, orgId: "org-1" });
+    callCloudProxy.mockResolvedValueOnce({ factories: [factory], total: 1 });
+
+    await AutomationService.listFactories();
+
+    expect(callCloudProxy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        method: "GET",
+        path: "/api/automation/v1/factories?limit=100&offset=0",
+      }),
+    );
+  });
+
+  it("gets one factory by id", async () => {
+    localAxios.get.mockResolvedValueOnce({ data: factory });
+
+    await expect(AutomationService.getFactory("factory-1")).resolves.toEqual(
+      factory,
+    );
+
+    expect(localAxios.get).toHaveBeenCalledWith(
+      "/api/automation/v1/factories/factory-1",
+    );
+  });
+
+  it("creates a factory from a name", async () => {
+    localAxios.post.mockResolvedValueOnce({ data: factory });
+
+    await expect(AutomationService.createFactory("Core SDLC")).resolves.toEqual(
+      factory,
+    );
+
+    expect(localAxios.post).toHaveBeenCalledWith(
+      "/api/automation/v1/factories",
+      { name: "Core SDLC" },
+    );
+  });
+
+  it("renames a factory", async () => {
+    localAxios.patch.mockResolvedValueOnce({ data: factory });
+
+    await AutomationService.renameFactory("factory-1", "Renamed");
+
+    expect(localAxios.patch).toHaveBeenCalledWith(
+      "/api/automation/v1/factories/factory-1",
+      { name: "Renamed" },
+    );
+  });
+
+  it("deletes a factory", async () => {
+    localAxios.delete.mockResolvedValueOnce({ data: undefined });
+
+    await AutomationService.deleteFactory("factory-1");
+
+    expect(localAxios.delete).toHaveBeenCalledWith(
+      "/api/automation/v1/factories/factory-1",
+    );
+  });
+
+  it("takes an automation out of its factory with a null factory_id", async () => {
+    localAxios.patch.mockResolvedValueOnce({ data: { id: "a-1" } });
+
+    await AutomationService.updateAutomation("a-1", { factory_id: null });
+
+    expect(localAxios.patch).toHaveBeenCalledWith("/api/automation/v1/a-1", {
+      factory_id: null,
+    });
+  });
+
+  it("scopes the automation list to a factory", async () => {
+    localAxios.get.mockResolvedValueOnce({
+      data: { automations: [], total: 0 },
+    });
+
+    await AutomationService.listAutomations({ factoryId: "factory-1" });
+
+    expect(localAxios.get).toHaveBeenCalledWith(
+      "/api/automation/v1",
+      expect.objectContaining({
+        params: expect.objectContaining({ factory_id: "factory-1" }),
+      }),
+    );
+  });
+
+  it.each([
+    [["automationDrafts", "factories"], true],
+    [["automationDrafts"], false],
+    [undefined, false],
+  ])("reads factory support from capabilities %j", (features, expected) => {
+    const capabilities = features ? { features } : undefined;
+
+    expect(
+      AutomationService.supportsFactories(
+        capabilities as Parameters<
+          typeof AutomationService.supportsFactories
+        >[0],
+      ),
+    ).toBe(expected);
+  });
+});
+
+describe("AutomationService key-value store reads", () => {
+  const entry = {
+    key: "state/last run",
+    value: { cursor: 3 },
+    version: 2,
+    created_at: "2026-07-10T00:00:00Z",
+    updated_at: "2026-07-11T00:00:00Z",
+  };
+
+  beforeEach(() => {
+    setRegisteredBackends([localBackend]);
+    setActiveSelection({ backendId: localBackend.id });
+  });
+
+  afterEach(() => {
+    setActiveSelection(null);
+    setRegisteredBackends([]);
+    vi.clearAllMocks();
+  });
+
+  it("lists the keys of an automation on a local backend", async () => {
+    const page = { keys: ["a"], count: 1, total: 1, limit: 50, offset: 0 };
+    localAxios.get.mockResolvedValueOnce({ data: page });
+
+    await expect(
+      AutomationService.listKvKeys("auto-1", { limit: 50 }),
+    ).resolves.toEqual(page);
+
+    expect(localAxios.get).toHaveBeenCalledWith("/api/automation/v1/kv", {
+      params: { automation_id: "auto-1", limit: 50, offset: 0 },
+    });
+  });
+
+  it("reads one entry with its metadata, encoding the key", async () => {
+    localAxios.get.mockResolvedValueOnce({ data: entry });
+
+    await expect(
+      AutomationService.getKvEntry("auto-1", entry.key),
+    ).resolves.toEqual(entry);
+
+    expect(localAxios.get).toHaveBeenCalledWith(
+      "/api/automation/v1/kv/state%2Flast%20run",
+      { params: { automation_id: "auto-1", meta: true } },
+    );
+  });
+
+  it("overwrites existing keys in one version-checked batch", async () => {
+    localAxios.post.mockResolvedValueOnce({
+      data: { version: 4, results: [] },
+    });
+
+    await AutomationService.setKvEntries(
+      "auto-1",
+      [
+        { key: "a", value: { n: 1 } },
+        { key: "b", value: "x" },
+      ],
+      3,
+    );
+
+    expect(localAxios.post).toHaveBeenCalledWith(
+      "/api/automation/v1/kv/batch",
+      {
+        if_version: 3,
+        operations: [
+          { op: "set", key: "a", value: { n: 1 }, xx: true },
+          { op: "set", key: "b", value: "x", xx: true },
+        ],
+      },
+      { params: { automation_id: "auto-1" } },
+    );
+  });
+
+  it("writes the batch through the cloud proxy on a cloud backend", async () => {
+    setRegisteredBackends([cloudBackend]);
+    setActiveSelection({ backendId: cloudBackend.id });
+    callCloudProxy.mockResolvedValueOnce({ version: 2, results: [] });
+
+    await AutomationService.setKvEntries("auto-1", [{ key: "a", value: 1 }], 1);
+
+    expect(callCloudProxy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        backend: cloudBackend,
+        method: "POST",
+        path: "/api/automation/v1/kv/batch?automation_id=auto-1",
+        body: {
+          if_version: 1,
+          operations: [{ op: "set", key: "a", value: 1, xx: true }],
+        },
+      }),
+    );
+    expect(localAxios.post).not.toHaveBeenCalled();
+  });
+
+  it("reads the store through the cloud proxy on a cloud backend", async () => {
+    setRegisteredBackends([cloudBackend]);
+    setActiveSelection({ backendId: cloudBackend.id });
+    callCloudProxy.mockResolvedValueOnce(entry);
+
+    await AutomationService.getKvEntry("auto-1", "k");
+
+    expect(callCloudProxy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        backend: cloudBackend,
+        method: "GET",
+        path: "/api/automation/v1/kv/k?automation_id=auto-1&meta=true",
+      }),
+    );
+    expect(localAxios.get).not.toHaveBeenCalled();
+  });
+});

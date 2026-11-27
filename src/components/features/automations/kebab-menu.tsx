@@ -1,0 +1,146 @@
+import { useState, useEffect, useLayoutEffect, useRef } from "react";
+import { useTranslation } from "react-i18next";
+import KebabVerticalIcon from "#/icons/kebab-vertical.svg?react";
+import { ContextMenuListItem } from "#/components/features/context-menu/context-menu-list-item";
+import { I18nKey } from "#/i18n/declaration";
+import { ContextMenu } from "#/ui/context-menu";
+import { cn } from "#/utils/utils";
+import { automationIconActionButtonClassName } from "./automation-action-button-classes";
+import { KebabMenuItemContent } from "./kebab-menu-item-content";
+import { AppearancePortal } from "#/components/shared/appearance-portal";
+
+export interface KebabMenuItem {
+  label: string;
+  icon: React.ReactNode;
+  onClick: () => void;
+  disabled?: boolean;
+}
+
+interface KebabMenuProps {
+  items: KebabMenuItem[];
+  triggerClassName?: string;
+}
+
+export function KebabMenu({ items, triggerClassName }: KebabMenuProps) {
+  const { t } = useTranslation("openhands");
+  const [open, setOpen] = useState(false);
+  const [portalStyle, setPortalStyle] = useState<React.CSSProperties>();
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLUListElement>(null);
+
+  useLayoutEffect(() => {
+    if (!open || !triggerRef.current) return undefined;
+
+    const updatePosition = () => {
+      const rect = triggerRef.current?.getBoundingClientRect();
+      if (!rect) return;
+
+      const gap = 4;
+      // The real height is only measurable once the portal has painted; the
+      // first pass falls back to an items-derived estimate (~36px per row).
+      const measured = menuRef.current?.getBoundingClientRect().height ?? 0;
+      const menuHeight = measured || items.length * 36;
+      const overflowsBelow =
+        rect.bottom + gap + menuHeight > window.innerHeight;
+
+      setPortalStyle({
+        position: "fixed",
+        zIndex: 9999,
+        // Flip above the trigger when the menu would clip at the viewport
+        // bottom. Bottom-anchoring keeps it hugging the trigger at any height.
+        ...(overflowsBelow
+          ? { bottom: window.innerHeight - rect.top + gap }
+          : { top: rect.bottom + gap }),
+        right: window.innerWidth - rect.right,
+      });
+    };
+
+    updatePosition();
+    const frame = window.requestAnimationFrame(updatePosition);
+    window.addEventListener("resize", updatePosition);
+    window.addEventListener("scroll", updatePosition, true);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      window.removeEventListener("resize", updatePosition);
+      window.removeEventListener("scroll", updatePosition, true);
+    };
+  }, [open, items.length]);
+
+  useEffect(() => {
+    if (!open) return undefined;
+
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (
+        triggerRef.current?.contains(target) ||
+        menuRef.current?.contains(target)
+      ) {
+        return;
+      }
+      setOpen(false);
+    };
+
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setOpen(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+    document.addEventListener("keydown", handleEscape);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("keydown", handleEscape);
+    };
+  }, [open]);
+
+  const menu =
+    open && portalStyle ? (
+      <ContextMenu
+        ref={menuRef}
+        theme="popover"
+        className="automation-actions-menu-width"
+      >
+        {items.map((item) => (
+          <li key={item.label}>
+            <ContextMenuListItem
+              onClick={(event) => {
+                event.stopPropagation();
+                item.onClick();
+                setOpen(false);
+              }}
+              isDisabled={item.disabled}
+              className="group"
+            >
+              <KebabMenuItemContent icon={item.icon} label={item.label} />
+            </ContextMenuListItem>
+          </li>
+        ))}
+      </ContextMenu>
+    ) : null;
+
+  return (
+    <>
+      <button
+        ref={triggerRef}
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          setOpen((current) => !current);
+        }}
+        className={cn(automationIconActionButtonClassName, triggerClassName)}
+        aria-label={t(I18nKey.AUTOMATIONS$ACTIONS_MENU)}
+        aria-expanded={open}
+        aria-haspopup="menu"
+      >
+        <KebabVerticalIcon className="size-4" />
+      </button>
+
+      {open && portalStyle && typeof document !== "undefined" ? (
+        <AppearancePortal>
+          <div style={portalStyle}>{menu}</div>
+        </AppearancePortal>
+      ) : null}
+    </>
+  );
+}

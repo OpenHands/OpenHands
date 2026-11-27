@@ -1,0 +1,269 @@
+import { usePendingTaskAttachmentsStore } from "#/stores/pending-task-attachments-store";
+import { restoreStartupAttachmentDraft } from "#/utils/restore-startup-attachment-draft";
+import { CONVERSATION_LAUNCH_PREFIX } from "#/stores/conversation-launch-store";
+import { ConversationLaunchView } from "#/components/features/chat/conversation-launch-view";
+import React from "react";
+import { useNavigate, useLocation } from "react-router";
+import { useTranslation } from "react-i18next";
+
+import { useConversationId } from "#/hooks/use-conversation-id";
+import { useConversationPanelRoute } from "#/hooks/use-conversation-panel-route";
+import { useConversationStore } from "#/stores/conversation-store";
+import { useAgentStore } from "#/stores/agent-store";
+import { useConversationStateStore } from "#/stores/conversation-state-store";
+import { useActiveBackendContext } from "#/contexts/active-backend-context";
+import {
+  clearLastConversationId,
+  setLastConversationId,
+} from "#/api/backend-registry/last-conversation-store";
+import { readBackendSelectionFromUrl } from "#/api/backend-registry/url-selection";
+import { AgentState } from "#/types/agent-state";
+
+import { EventHandler } from "../wrapper/event-handler";
+
+import { useActiveConversation } from "#/hooks/query/use-active-conversation";
+import { useSharedConversation } from "#/hooks/query/use-shared-conversation";
+import { useTaskPollingController } from "#/hooks/query/use-task-polling";
+
+import { displayErrorToast } from "#/utils/custom-toast-handlers";
+import { useIsAuthed } from "#/hooks/query/use-is-authed";
+import { ConversationMain } from "#/components/features/conversation/conversation-main/conversation-main";
+import { ConversationMobilePanelPage } from "#/components/features/conversation/conversation-main/conversation-mobile-panel-page";
+import { ConversationOverviewDrawerProvider } from "#/components/features/conversation/conversation-overview-drawer-context";
+
+import { WebSocketProviderWrapper } from "#/contexts/websocket-provider-wrapper";
+import { useErrorMessageStore } from "#/stores/error-message-store";
+import { I18nKey } from "#/i18n/declaration";
+import { useCloudSandboxAutoResume } from "#/hooks/mutation/use-cloud-sandbox-auto-resume";
+
+function AppContent() {
+  const { t } = useTranslation("openhands");
+  const { conversationId } = useConversationId();
+  const showsMobilePanelPage = useConversationPanelRoute(conversationId);
+
+  const { isTask, taskStatus, taskDetail } = useTaskPollingController();
+
+  // The conversationId in the URL belongs to whichever backend was active
+  // when the route arrived at it, unless the URL pins its owner with
+  // `?backend=` (and `?org=`). If the user switches backends while this route is still
+  // mounted, the id is meaningless under the new backend — disable the
+  // active-conversation fetch (and its 404 toast) so we don't fire a request
+  // that the BackendSelector's redirect will immediately navigate away from
+  // anyway. A navigation that lands on a conversation of the new backend
+  // (switching DigitalOcean sessions goes straight to one) re-anchors the
+  // owner instead of staying blank until a remount. Mirrors the same guard
+  // in `routes/automation-detail.tsx`.
+  const { backends, active } = useActiveBackendContext();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const owner = React.useRef({
+    conversationId,
+    backendId: active.backend.id,
+    orgId: active.orgId,
+  });
+  const pinned = readBackendSelectionFromUrl(backends, location.search);
+  // A link without `?org=` pins only the backend.
+  const isPinnedToActive =
+    pinned?.backendId === active.backend.id &&
+    (pinned.orgId === null || pinned.orgId === active.orgId);
+  if (owner.current.conversationId !== conversationId || isPinnedToActive) {
+    owner.current = {
+      conversationId,
+      backendId: active.backend.id,
+      orgId: active.orgId,
+    };
+  }
+  const backendChanged =
+    owner.current.backendId !== active.backend.id ||
+    owner.current.orgId !== active.orgId;
+
+  const { data: conversation, isFetched, isSuccess } = useActiveConversation();
+  const { data: isAuthed } = useIsAuthed();
+  const { resetConversationState } = useConversationStore();
+  const resetConversationRuntimeState = useConversationStateStore(
+    (state) => state.reset,
+  );
+  const setCurrentAgentState = useAgentStore(
+    (state) => state.setCurrentAgentState,
+  );
+  const removeErrorMessage = useErrorMessageStore(
+    (state) => state.removeErrorMessage,
+  );
+
+  const recoverableDraft = usePendingTaskAttachmentsStore((state) =>
+    Object.values(state.byTaskId).find(
+      (payload) =>
+        payload.recoverInConversation &&
+        payload.conversationId === conversationId &&
+        (!payload.backendId ||
+          (payload.backendId === active.backend.id &&
+            payload.orgId === active.orgId)),
+    ),
+  );
+
+  const resetForConversation = React.useRef<string | null>(null);
+
+  // Per-conversation UI/runtime resets. The event store is cleared separately,
+  // inside ConversationWebSocketProvider, so the clear is ordered *before* the
+  // preloaded-history re-seed (see the note there) — clearing it here would run
+  // too late and wipe the freshly seeded history on a conversation switch.
+  React.useEffect(() => {
+    if (resetForConversation.current === conversationId) return;
+    resetForConversation.current = conversationId;
+    resetConversationState();
+    resetConversationRuntimeState();
+    setCurrentAgentState(AgentState.LOADING);
+    removeErrorMessage();
+  }, [
+    conversationId,
+    resetConversationState,
+    resetConversationRuntimeState,
+    setCurrentAgentState,
+    removeErrorMessage,
+  ]);
+
+  React.useEffect(() => {
+    if (recoverableDraft && !backendChanged) {
+      restoreStartupAttachmentDraft(conversationId);
+    }
+  }, [conversationId, recoverableDraft, backendChanged]);
+
+  React.useEffect(() => {
+    if (isTask && taskStatus === "ERROR") {
+      const resumedFrom = (location.state as Record<string, unknown> | null)
+        ?.resumedFromConversationId as string | undefined;
+      if (resumedFrom) {
+        displayErrorToast(
+          taskDetail || t(I18nKey.CONVERSATION$FAILED_TO_START_FROM_TASK),
+        );
+        navigate(`/conversations/${resumedFrom}`, { replace: true });
+      }
+    }
+  }, [isTask, taskStatus, taskDetail, t, navigate, location.state]);
+
+  // The BackendSelector is in the middle of redirecting us away from
+  // this route — don't toast/navigate based on a 404 that's just
+  // "this id doesn't exist on the new backend".
+  const ownerLookupMissed =
+    isSuccess && !!isAuthed && !backendChanged && !conversation;
+
+  // On cloud, a conversation the owner lookup cannot see may still be shared
+  // with this user: public, or created by an automation in one of their orgs.
+  // Probe the shared lookup before giving up and send them to the read-only
+  // view when it resolves. Local backends have no sharing, and start-task ids
+  // are not conversations.
+  const shouldProbeShared =
+    ownerLookupMissed &&
+    active.backend.kind === "cloud" &&
+    !!conversationId &&
+    !conversationId.startsWith("task-");
+  const { data: sharedConversation, isSuccess: isSharedProbeSuccessful } =
+    useSharedConversation(conversationId, {
+      enabled: shouldProbeShared,
+      showErrorToast: true,
+    });
+
+  // The miss is reported once per conversation id. The effect below also
+  // depends on `navigate` and `t`, whose identities can change after the
+  // toast and before the redirect lands (a lazy chunk or translation bundle
+  // finishing), and each re-run would otherwise toast the same miss again.
+  const reportedMissRef = React.useRef<string | null>(null);
+
+  React.useEffect(() => {
+    if (!ownerLookupMissed) {
+      reportedMissRef.current = null;
+      return;
+    }
+    if (shouldProbeShared) {
+      if (!isSharedProbeSuccessful) return;
+      if (sharedConversation) {
+        navigate(`/shared/conversations/${conversationId}`, { replace: true });
+        return;
+      }
+    }
+    if (reportedMissRef.current === conversationId) return;
+    reportedMissRef.current = conversationId ?? null;
+    // Clear the per-backend "last selected" slot so the next switch
+    // to this backend doesn't try to revisit a stale id.
+    clearLastConversationId(active.backend.id, active.orgId);
+    displayErrorToast(t(I18nKey.CONVERSATION$NOT_EXIST_OR_NO_PERMISSION));
+    navigate("/conversations");
+  }, [
+    ownerLookupMissed,
+    shouldProbeShared,
+    isSharedProbeSuccessful,
+    sharedConversation,
+    conversationId,
+    navigate,
+    t,
+    active.backend.id,
+    active.orgId,
+  ]);
+
+  // Remember the most recently selected conversation for the current
+  // (backend, org) so flipping back to this backend later restores the
+  // user to where they left off. Skip while a backend switch is in
+  // flight: the id in the URL is from the previous backend and would
+  // otherwise overwrite the new backend's memory.
+  React.useEffect(() => {
+    if (backendChanged) return;
+    if (!conversationId) return;
+    if (conversationId.startsWith("task-")) return;
+    setLastConversationId(active.backend.id, active.orgId, conversationId);
+  }, [conversationId, backendChanged, active.backend.id, active.orgId]);
+
+  useCloudSandboxAutoResume({
+    backendChanged,
+    backendKind: active.backend.kind,
+    conversation,
+    conversationId,
+    isFetched,
+  });
+
+  // A backend switch is in flight (BackendSelector flips the active backend
+  // and redirects to /conversations on the next tick). The conversationId in
+  // the URL belongs to the *previous* backend, so unmount the whole
+  // conversation subtree now — before any per-conversation query (history,
+  // metrics, sub-conversations, runtime info, …) re-fires against a backend
+  // the id is foreign to. Those foreign fetches fail response validation and
+  // surface "agent server returned data this UI does not understand". This is
+  // deterministic regardless of the navigate-vs-setActive render race: React
+  // re-renders this parent before its children, so returning null removes them
+  // before they can issue the request.
+  if (backendChanged) {
+    return null;
+  }
+
+  const content = (
+    <EventHandler>
+      <ConversationOverviewDrawerProvider>
+        <div data-testid="app-route" className="flex h-full min-h-0 flex-col">
+          {showsMobilePanelPage ? (
+            <ConversationMobilePanelPage
+              onNavigateBack={() =>
+                navigate(`/conversations/${conversationId}`)
+              }
+            />
+          ) : (
+            <ConversationMain />
+          )}
+        </div>
+      </ConversationOverviewDrawerProvider>
+    </EventHandler>
+  );
+
+  return (
+    <WebSocketProviderWrapper conversationId={conversationId}>
+      {content}
+    </WebSocketProviderWrapper>
+  );
+}
+
+export function ConversationView() {
+  const { conversationId } = useConversationId();
+  if (conversationId.startsWith(CONVERSATION_LAUNCH_PREFIX))
+    return <ConversationLaunchView launchId={conversationId} />;
+  return <AppContent />;
+}
+
+export default ConversationView;

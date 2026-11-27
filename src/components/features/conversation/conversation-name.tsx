@@ -1,0 +1,308 @@
+import { ConversationTitleText } from "./conversation-title-text";
+import { useConversationDisplayTitleState } from "#/hooks/use-conversation-display-title";
+import React from "react";
+import { useTranslation } from "react-i18next";
+import { useActiveConversation } from "#/hooks/query/use-active-conversation";
+import { useUpdateConversation } from "#/hooks/mutation/use-update-conversation";
+import { useConversationId } from "#/hooks/use-conversation-id";
+import { useConversationNameContextMenu } from "#/hooks/use-conversation-name-context-menu";
+import { displaySuccessToast } from "#/utils/custom-toast-handlers";
+import { I18nKey } from "#/i18n/declaration";
+import { EllipsisButton } from "../conversation-panel/ellipsis-button";
+import { ConversationNameContextMenu } from "./conversation-name-context-menu";
+import { SystemMessageModal } from "../conversation-panel/system-message-modal";
+import { SkillsModal } from "../conversation-panel/skills-modal";
+import { HooksModal } from "../conversation-panel/hooks-modal";
+import { ConfirmDeleteModal } from "../conversation-panel/confirm-delete-modal";
+import { ConfirmStopModal } from "../conversation-panel/confirm-stop-modal";
+import { TranscriptExportModal } from "./transcript-export-modal";
+import { ProjectBadge } from "./project-badge";
+
+export function ConversationName() {
+  const { t } = useTranslation("openhands");
+  const { conversationId } = useConversationId();
+  const { data: conversation } = useActiveConversation();
+  const getTitle = useConversationDisplayTitleState();
+  const { title: displayTitle, pending: titlePending } = getTitle(
+    conversationId,
+    conversation?.title,
+  );
+  const { mutate: updateConversation } = useUpdateConversation();
+
+  const [titleMode, setTitleMode] = React.useState<"view" | "edit">("view");
+  const [contextMenuOpen, setContextMenuOpen] = React.useState(false);
+  const [transcriptExportModalVisible, setTranscriptExportModalVisible] =
+    React.useState(false);
+  const inputRef = React.useRef<HTMLInputElement>(null);
+  const ellipsisAnchorRef = React.useRef<HTMLButtonElement>(null);
+  const cancelTitleBlurRef = React.useRef(false);
+  const focusEllipsisAfterCancelRef = React.useRef(false);
+
+  // Use the custom hook for context menu handlers
+  const {
+    handleDelete,
+    handleStop,
+    handleDownloadConversation,
+    handleDisplayCost,
+    handleShowAgentTools,
+    handleShowSkills,
+    handleShowHooks,
+    handleTogglePublic,
+    handleCopyShareLink,
+    shareUrl,
+    handleConfirmDelete,
+    handleConfirmStop,
+    systemModalVisible,
+    setSystemModalVisible,
+    skillsModalVisible,
+    setSkillsModalVisible,
+    hooksModalVisible,
+    setHooksModalVisible,
+    confirmDeleteModalVisible,
+    setConfirmDeleteModalVisible,
+    confirmStopModalVisible,
+    setConfirmStopModalVisible,
+    systemMessage,
+    shouldShowStop,
+    shouldShowDownloadConversation,
+    shouldShowDisplayCost,
+    shouldShowAgentTools,
+    shouldShowSkills,
+    shouldShowHooks,
+  } = useConversationNameContextMenu({
+    conversationId,
+    executionStatus: conversation?.execution_status,
+    showOptions: true,
+    onContextMenuToggle: setContextMenuOpen,
+  });
+
+  const startEditingTitle = () => {
+    cancelTitleBlurRef.current = false;
+    focusEllipsisAfterCancelRef.current = false;
+    setTitleMode("edit");
+  };
+
+  const handleDoubleClick = () => {
+    startEditingTitle();
+  };
+
+  const handleBlur = () => {
+    if (cancelTitleBlurRef.current) {
+      cancelTitleBlurRef.current = false;
+      return;
+    }
+
+    if (inputRef.current?.value && conversationId) {
+      const trimmed = inputRef.current.value.trim();
+      if (trimmed !== displayTitle) {
+        updateConversation(
+          { conversationId, newTitle: trimmed },
+          {
+            onSuccess: () => {
+              displaySuccessToast(t(I18nKey.CONVERSATION$TITLE_UPDATED));
+            },
+          },
+        );
+      }
+    } else if (inputRef.current) {
+      // reset the value if it's empty
+      inputRef.current.value = displayTitle;
+    }
+
+    setTitleMode("view");
+  };
+
+  const handleKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
+    if (event.nativeEvent.isComposing || event.key !== "Escape") {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+    cancelTitleBlurRef.current = true;
+    focusEllipsisAfterCancelRef.current = true;
+    const input = event.currentTarget;
+    input.value = displayTitle;
+    setContextMenuOpen(false);
+    setTitleMode("view");
+  };
+
+  const handleKeyUp = (event: React.KeyboardEvent<HTMLInputElement>) => {
+    // Ignore Enter key during IME composition (e.g., Chinese, Japanese, Korean input)
+    if (event.nativeEvent.isComposing) {
+      return;
+    }
+    if (event.key === "Enter") {
+      event.currentTarget.blur();
+    }
+  };
+
+  const handleInputClick = (event: React.MouseEvent<HTMLInputElement>) => {
+    if (titleMode === "edit") {
+      event.preventDefault();
+      event.stopPropagation();
+    }
+  };
+
+  const handleEllipsisClick = (event: React.MouseEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setContextMenuOpen(!contextMenuOpen);
+  };
+
+  const handleRename = (event: React.MouseEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    startEditingTitle();
+    setContextMenuOpen(false);
+  };
+
+  const handleExportTranscript = (
+    event: React.MouseEvent<HTMLButtonElement>,
+  ) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setTranscriptExportModalVisible(true);
+    setContextMenuOpen(false);
+  };
+
+  React.useEffect(() => {
+    if (titleMode === "edit") {
+      inputRef.current?.focus();
+      return;
+    }
+
+    if (focusEllipsisAfterCancelRef.current) {
+      focusEllipsisAfterCancelRef.current = false;
+      ellipsisAnchorRef.current?.focus();
+    }
+  }, [titleMode]);
+
+  if (!conversation) {
+    return (
+      <div className="flex items-center gap-2 h-5.5 text-base font-normal text-left pl-0 lg:pl-1 min-w-0">
+        <div className="text-contrast leading-5 truncate" title={displayTitle}>
+          <ConversationTitleText title={displayTitle} pending={titlePending} />
+        </div>
+        <div aria-hidden className="w-6 shrink-0" />
+      </div>
+    );
+  }
+
+  return (
+    <>
+      <div
+        className="flex items-center gap-2 h-5.5 text-base font-normal text-left pl-0 lg:pl-1 min-w-0"
+        data-testid="conversation-name"
+      >
+        <ProjectBadge tags={conversation.tags} />
+        {titleMode === "edit" ? (
+          <input
+            ref={inputRef}
+            data-testid="conversation-name-input"
+            onClick={handleInputClick}
+            onBlur={handleBlur}
+            onKeyDown={handleKeyDown}
+            onKeyUp={handleKeyUp}
+            type="text"
+            defaultValue={displayTitle}
+            className="text-contrast leading-5 bg-transparent border-none outline-none text-base font-normal w-fit max-w-fit field-sizing-content"
+          />
+        ) : (
+          <div
+            className="text-contrast leading-5 truncate"
+            data-testid="conversation-name-title"
+            onDoubleClick={handleDoubleClick}
+            title={displayTitle}
+          >
+            <ConversationTitleText
+              title={displayTitle}
+              pending={titlePending}
+            />
+          </div>
+        )}
+
+        {titleMode !== "edit" && (
+          <div className="relative flex items-center shrink-0">
+            <EllipsisButton
+              ref={ellipsisAnchorRef}
+              onClick={handleEllipsisClick}
+              ariaLabel={t(I18nKey.COMMON$MORE_OPTIONS)}
+            />
+            {contextMenuOpen && (
+              <ConversationNameContextMenu
+                onClose={() => setContextMenuOpen(false)}
+                onRename={handleRename}
+                onDelete={handleDelete}
+                onStop={shouldShowStop ? handleStop : undefined}
+                onDisplayCost={
+                  shouldShowDisplayCost ? handleDisplayCost : undefined
+                }
+                onShowAgentTools={
+                  shouldShowAgentTools ? handleShowAgentTools : undefined
+                }
+                onShowSkills={shouldShowSkills ? handleShowSkills : undefined}
+                onShowHooks={shouldShowHooks ? handleShowHooks : undefined}
+                onTogglePublic={handleTogglePublic}
+                onCopyShareLink={handleCopyShareLink}
+                shareUrl={shareUrl}
+                onExportTranscript={handleExportTranscript}
+                onDownloadConversation={
+                  shouldShowDownloadConversation
+                    ? handleDownloadConversation
+                    : undefined
+                }
+                position="bottom"
+                anchorRef={ellipsisAnchorRef}
+              />
+            )}
+          </div>
+        )}
+      </div>
+
+      {transcriptExportModalVisible && conversationId && (
+        <TranscriptExportModal
+          conversationId={conversationId}
+          conversationUrl={conversation.conversation_url}
+          sessionApiKey={conversation.session_api_key}
+          conversationTitle={displayTitle}
+          model={conversation.llm_model}
+          onClose={() => setTranscriptExportModalVisible(false)}
+        />
+      )}
+
+      {/* System Message Modal */}
+      <SystemMessageModal
+        isOpen={systemModalVisible}
+        onClose={() => setSystemModalVisible(false)}
+        systemMessage={systemMessage || null}
+      />
+
+      {/* Skills Modal */}
+      {skillsModalVisible && (
+        <SkillsModal onClose={() => setSkillsModalVisible(false)} />
+      )}
+
+      {/* Hooks Modal */}
+      {hooksModalVisible && (
+        <HooksModal onClose={() => setHooksModalVisible(false)} />
+      )}
+
+      {/* Confirm Delete Modal */}
+      {confirmDeleteModalVisible && (
+        <ConfirmDeleteModal
+          onConfirm={handleConfirmDelete}
+          onCancel={() => setConfirmDeleteModalVisible(false)}
+          conversationTitle={conversation?.title || ""}
+        />
+      )}
+
+      {confirmStopModalVisible && (
+        <ConfirmStopModal
+          onConfirm={handleConfirmStop}
+          onCancel={() => setConfirmStopModalVisible(false)}
+        />
+      )}
+    </>
+  );
+}

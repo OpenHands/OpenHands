@@ -1,0 +1,187 @@
+import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { describe, expect, it, vi } from "vitest";
+import { DetailHeader } from "#/components/features/automations/detail/detail-header";
+import { I18nKey } from "#/i18n/declaration";
+import { automationListPath } from "#/manifests/automation-interface";
+import type { Automation } from "#/types/automation";
+
+const disabledAutomation: Automation = {
+  id: "auto-1",
+  name: "Daily digest",
+  prompt: "Summarize",
+  trigger: {
+    type: "cron",
+    schedule: "0 9 * * *",
+    schedule_human: "Daily at 09:00",
+  },
+  enabled: false,
+  created_at: "2026-01-01T00:00:00Z",
+  updated_at: "2026-01-01T00:00:00Z",
+};
+
+function renderHeader(
+  props: Partial<React.ComponentProps<typeof DetailHeader>> = {},
+) {
+  return render(
+    <DetailHeader
+      automation={disabledAutomation}
+      onToggle={vi.fn()}
+      onDelete={vi.fn()}
+      onExport={vi.fn()}
+      onDownloadTarball={vi.fn()}
+      {...props}
+    />,
+  );
+}
+
+describe("DetailHeader — status badge", () => {
+  it("labels draft automations as draft instead of inactive", () => {
+    renderHeader({
+      automation: { ...disabledAutomation, state: "DRAFT" },
+    });
+
+    expect(screen.getByTestId("active-status-badge-draft")).toHaveTextContent(
+      I18nKey.AUTOMATIONS$DETAIL$DRAFT,
+    );
+    expect(
+      screen.queryByTestId("active-status-badge-inactive"),
+    ).not.toBeInTheDocument();
+  });
+});
+
+describe("DetailHeader — back arrow", () => {
+  it("returns to the automations list", () => {
+    renderHeader();
+
+    expect(
+      screen.getByRole("link", { name: I18nKey.COMMON$BACK }),
+    ).toHaveAttribute(
+      "href",
+      expect.stringMatching(new RegExp(`${automationListPath()}$`)),
+    );
+  });
+});
+
+describe("DetailHeader — enabled toggle gating", () => {
+  it("hides the switch and Turn on when canToggle is false but keeps Delete", async () => {
+    // Arrange — a manager who did not create this disabled automation.
+    const user = userEvent.setup();
+    renderHeader({ canManage: true, canToggle: false });
+
+    // Act
+    await user.click(screen.getByLabelText(I18nKey.AUTOMATIONS$ACTIONS_MENU));
+
+    // Assert
+    expect(screen.queryByRole("switch")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: I18nKey.AUTOMATIONS$TURN_ON }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: I18nKey.AUTOMATIONS$DELETE }),
+    ).toBeInTheDocument();
+  });
+
+  it("follows canManage for the switch when canToggle is omitted", () => {
+    // Arrange / Act
+    renderHeader({ canManage: true });
+
+    // Assert
+    expect(
+      screen.getByRole("switch", { name: I18nKey.AUTOMATIONS$TURN_ON }),
+    ).toBeInTheDocument();
+  });
+});
+
+describe("DetailHeader — keep sandbox alive", () => {
+  const enabledAutomation: Automation = {
+    ...disabledAutomation,
+    enabled: true,
+  };
+
+  it.each([
+    { keepAlive: false, label: I18nKey.AUTOMATIONS$KEEP_SANDBOX_ALIVE },
+    { keepAlive: true, label: I18nKey.AUTOMATIONS$STOP_KEEPING_SANDBOX_ALIVE },
+  ])(
+    "lists $label between Turn off and Delete when keep_alive is $keepAlive",
+    async ({ keepAlive, label }) => {
+      // Arrange
+      const user = userEvent.setup();
+      const onToggleKeepAlive = vi.fn();
+      renderHeader({
+        automation: { ...enabledAutomation, keep_alive: keepAlive },
+        onToggleKeepAlive,
+      });
+      await user.click(screen.getByLabelText(I18nKey.AUTOMATIONS$ACTIONS_MENU));
+      const names = screen
+        .getAllByRole("button")
+        .map((button) => button.textContent);
+      expect(names.slice(names.indexOf(I18nKey.AUTOMATIONS$TURN_OFF))).toEqual([
+        I18nKey.AUTOMATIONS$TURN_OFF,
+        label,
+        I18nKey.AUTOMATIONS$DELETE,
+      ]);
+
+      // Act
+      await user.click(screen.getByRole("button", { name: label }));
+
+      // Assert
+      expect(onToggleKeepAlive).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it("disables the item while a keep_alive save is pending", async () => {
+    // Arrange
+    const user = userEvent.setup();
+    renderHeader({
+      automation: { ...enabledAutomation, keep_alive: false },
+      onToggleKeepAlive: vi.fn(),
+      isKeepAlivePending: true,
+    });
+
+    // Act
+    await user.click(screen.getByLabelText(I18nKey.AUTOMATIONS$ACTIONS_MENU));
+
+    // Assert
+    expect(
+      screen.getByRole("button", {
+        name: I18nKey.AUTOMATIONS$KEEP_SANDBOX_ALIVE,
+      }),
+    ).toBeDisabled();
+  });
+
+  it("leaves the item out when onToggleKeepAlive is omitted", async () => {
+    // Arrange
+    const user = userEvent.setup();
+    renderHeader({ automation: { ...enabledAutomation, keep_alive: false } });
+
+    // Act
+    await user.click(screen.getByLabelText(I18nKey.AUTOMATIONS$ACTIONS_MENU));
+
+    // Assert
+    expect(
+      screen.queryByRole("button", {
+        name: I18nKey.AUTOMATIONS$KEEP_SANDBOX_ALIVE,
+      }),
+    ).not.toBeInTheDocument();
+  });
+});
+
+describe("DetailHeader — edit gating", () => {
+  it("hides Edit when canEdit is false but keeps Delete", async () => {
+    // Arrange — a manager viewing a automation that runs as a person.
+    const user = userEvent.setup();
+    renderHeader({ canManage: true, canEdit: false, onEdit: vi.fn() });
+
+    // Act
+    await user.click(screen.getByLabelText(I18nKey.AUTOMATIONS$ACTIONS_MENU));
+
+    // Assert
+    expect(
+      screen.queryByRole("button", { name: I18nKey.AUTOMATIONS$EDIT }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: I18nKey.AUTOMATIONS$DELETE }),
+    ).toBeInTheDocument();
+  });
+});

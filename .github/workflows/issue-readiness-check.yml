@@ -1,0 +1,43 @@
+---
+name: Ready-for-dev Label Policy
+
+# The issue-triage automation and repository writers may grant ready-for-dev.
+# Labels from any other actor are removed.
+
+on:
+    issues:
+        types: [labeled]
+
+concurrency:
+    group: ready-for-dev-policy-${{ github.event.issue.number }}
+    cancel-in-progress: false
+
+jobs:
+    enforce-label-policy:
+        name: Enforce ready-for-dev label policy
+        if: >-
+            github.event.issue.state == 'open'
+            && github.event.issue.pull_request == null
+            && github.event.label.name == 'ready-for-dev'
+        runs-on: ubuntu-24.04
+        timeout-minutes: 5
+        permissions:
+            issues: write
+        steps:
+            - name: Check label actor
+              env:
+                  GH_TOKEN: ${{ github.token }}
+                  ACTOR: ${{ github.event.sender.login }}
+                  REPOSITORY: ${{ github.repository }}
+                  ISSUE_NUMBER: ${{ github.event.issue.number }}
+              run: |
+                  set -euo pipefail
+
+                  permission="$(gh api "repos/$REPOSITORY/collaborators/$ACTOR/permission" --jq .permission 2>/dev/null || true)"
+                  case "$permission" in
+                    write|maintain|admin)
+                      ;;
+                    *)
+                      gh issue edit "$ISSUE_NUMBER" --repo "$REPOSITORY" --remove-label ready-for-dev
+                      ;;
+                  esac

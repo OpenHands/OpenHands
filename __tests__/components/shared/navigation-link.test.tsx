@@ -1,0 +1,152 @@
+import { render, screen, fireEvent } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import {
+  NavigationProvider,
+  type NavigationContextValue,
+} from "#/context/navigation-context";
+import { NavigationLink } from "#/components/shared/navigation-link";
+
+function renderNavigationLink(
+  currentPath = "/",
+  overrides: Partial<NavigationContextValue> = {},
+  to = "/settings/mcp",
+) {
+  const value: NavigationContextValue = {
+    currentPath,
+    conversationId: null,
+    isNavigating: false,
+    navigate: vi.fn(),
+    ...overrides,
+  };
+
+  const result = render(
+    <NavigationProvider value={value}>
+      <NavigationLink to={to}>MCP</NavigationLink>
+    </NavigationProvider>,
+  );
+
+  return {
+    ...result,
+    navigate: value.navigate,
+  };
+}
+
+describe("NavigationLink", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it("prefixes the href with the Canvas base path", () => {
+    // A modified click and the browser's own context menu follow `href`
+    // directly, so it must resolve inside Canvas rather than against the
+    // origin root, which may serve a different app.
+    vi.stubEnv("VITE_BASE_PATH", "/canvas");
+
+    renderNavigationLink("/settings/mcp");
+
+    expect(screen.getByRole("link", { name: "MCP" })).toHaveAttribute(
+      "href",
+      "/canvas/settings/mcp",
+    );
+  });
+
+  it("keeps the base path and query string together on the href", () => {
+    vi.stubEnv("VITE_BASE_PATH", "/canvas");
+
+    renderNavigationLink(
+      "/conversations/abc",
+      {},
+      "/conversations/abc?backend=local-1",
+    );
+
+    expect(screen.getByRole("link", { name: "MCP" })).toHaveAttribute(
+      "href",
+      "/canvas/conversations/abc?backend=local-1",
+    );
+  });
+
+  it("keeps the base path in the href while still marking the link active", () => {
+    vi.stubEnv("VITE_BASE_PATH", "/canvas");
+
+    renderNavigationLink("/settings/mcp");
+
+    // Active state is computed from the router's base-path-stripped pathname
+    // (`/settings/mcp`), not the base-prefixed href.
+    expect(screen.getByRole("link", { name: "MCP" })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+  });
+
+  it("renders the destination href and active state from navigation context", () => {
+    renderNavigationLink("/settings/mcp");
+
+    expect(screen.getByRole("link", { name: "MCP" })).toHaveAttribute(
+      "href",
+      "/settings/mcp",
+    );
+    expect(screen.getByRole("link", { name: "MCP" })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+  });
+
+  it("uses the injected navigate callback on click", () => {
+    const { navigate } = renderNavigationLink();
+    const link = screen.getByRole("link", { name: "MCP" });
+
+    fireEvent.click(link);
+
+    expect(navigate).toHaveBeenCalledWith("/settings/mcp", {
+      replace: false,
+    });
+  });
+
+  it("stays active when the destination carries a query string", () => {
+    renderNavigationLink(
+      "/conversations/abc",
+      {},
+      "/conversations/abc?backend=local-1",
+    );
+
+    const link = screen.getByRole("link", { name: "MCP" });
+    expect(link).toHaveAttribute("href", "/conversations/abc?backend=local-1");
+    expect(link).toHaveAttribute("aria-current", "page");
+  });
+
+  it("does not mark a sibling path active because of a query string", () => {
+    renderNavigationLink(
+      "/conversations/other",
+      {},
+      "/conversations/abc?backend=local-1",
+    );
+
+    expect(screen.getByRole("link", { name: "MCP" })).not.toHaveAttribute(
+      "aria-current",
+    );
+  });
+
+  it("keeps a caller-supplied aria-current when the path does not match", () => {
+    // A section link (e.g. the sidebar Customize row) is current on routes
+    // other than its own redirecting destination.
+    render(
+      <NavigationProvider
+        value={{
+          currentPath: "/mcp",
+          conversationId: null,
+          isNavigating: false,
+          navigate: vi.fn(),
+        }}
+      >
+        <NavigationLink to="/customize" aria-current="page">
+          Customize
+        </NavigationLink>
+      </NavigationProvider>,
+    );
+
+    expect(screen.getByRole("link", { name: "Customize" })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+  });
+});

@@ -1,0 +1,219 @@
+import { DEFAULT_ENABLED_SKILL_NAMES } from "@openhands/extensions/skills";
+import { describe, expect, it } from "vitest";
+import type {
+  AgentProfile,
+  AgentProfileSaveInput,
+} from "#/api/agent-profiles-service/agent-profiles-service.api";
+import { mergeAgentProfileSaveInput } from "#/components/features/settings/agent-profiles/merge-agent-profile-save-input";
+
+// Mirrors the seeded `default` profile: fields the minimal editor does NOT
+// model (condenser, verification, suffix, mcp_server_refs, the disabled_skills
+// deny-list) carry non-default values so a wipe-to-defaults would be visible.
+// `disabled_skills` rides untyped (the pinned ts-client predates it) — the
+// merge must still round-trip it, so the fixture includes it via the cast.
+const storedOpenHands = {
+  schema_version: 1,
+  id: "11111111-1111-1111-1111-111111111111",
+  name: "default",
+  revision: 3,
+  agent_kind: "openhands",
+  llm_profile_ref: "old-llm",
+  agent: "CodeActAgent",
+  system_message_suffix: "Be terse.",
+  condenser: { kind: "NoOpCondenserSettings" },
+  verification: {
+    critic_enabled: true,
+    critic_mode: "finish_and_message",
+    enable_iterative_refinement: true,
+    critic_threshold: 0.8,
+    max_refinement_iterations: 5,
+    critic_server_url: null,
+    critic_model_name: null,
+  },
+  tools: [{ name: "terminal", params: {} }],
+  tool_concurrency_limit: 4,
+  mcp_server_refs: ["github"],
+  disabled_skills: ["deploy-checklist"],
+} as unknown as AgentProfile;
+
+const storedAcp = {
+  schema_version: 1,
+  id: "22222222-2222-2222-2222-222222222222",
+  name: "claude",
+  revision: 1,
+  agent_kind: "acp",
+  acp_server: "claude-code",
+  acp_model: "claude-opus-4-8",
+  acp_session_mode: "bypassPermissions",
+  acp_prompt_timeout: 900,
+  acp_command: null,
+  acp_args: null,
+  mcp_server_refs: ["linear"],
+} as unknown as AgentProfile;
+
+describe("mergeAgentProfileSaveInput", () => {
+  it("preserves unmodeled OpenHands fields under the edited ones", () => {
+    const edited = {
+      agent_kind: "openhands",
+      tools: [{ name: "grep", params: {} }],
+      llm_profile_ref: "new-llm",
+    } as unknown as AgentProfileSaveInput;
+
+    const merged = mergeAgentProfileSaveInput(storedOpenHands, edited);
+
+    // Edited fields win.
+    expect(merged).toMatchObject({
+      agent_kind: "openhands",
+      tools: [{ name: "grep", params: {} }],
+      llm_profile_ref: "new-llm",
+    });
+    // Fields the editor doesn't model survive the whole-profile overwrite.
+    expect(merged).toMatchObject({
+      condenser: { kind: "NoOpCondenserSettings" },
+      verification: { critic_enabled: true, critic_threshold: 0.8 },
+      system_message_suffix: "Be terse.",
+      mcp_server_refs: ["github"],
+      disabled_skills: ["deploy-checklist"],
+      tool_concurrency_limit: 4,
+    });
+  });
+
+  it("preserves unmodeled ACP fields under the edited ones", () => {
+    const edited: AgentProfileSaveInput = {
+      agent_kind: "acp",
+      acp_server: "claude-code",
+      acp_model: "claude-sonnet-5",
+      acp_command: null,
+      acp_args: null,
+    };
+
+    const merged = mergeAgentProfileSaveInput(storedAcp, edited);
+
+    expect(merged).toMatchObject({
+      agent_kind: "acp",
+      acp_model: "claude-sonnet-5",
+      acp_session_mode: "bypassPermissions",
+      acp_prompt_timeout: 900,
+      mcp_server_refs: ["linear"],
+    });
+  });
+
+  it("strips server-managed identity from the merge", () => {
+    const merged = mergeAgentProfileSaveInput(storedOpenHands, {
+      agent_kind: "openhands",
+      llm_profile_ref: "new-llm",
+    });
+
+    // The path name is authoritative and the server preserves the namesake's
+    // id / bumps revision itself; posting stale identity would only mislead.
+    expect(merged).not.toHaveProperty("id");
+    expect(merged).not.toHaveProperty("name");
+    expect(merged).not.toHaveProperty("revision");
+  });
+
+  it("sends a clean variant payload on an agent_kind switch", () => {
+    const edited: AgentProfileSaveInput = {
+      agent_kind: "acp",
+      acp_server: "codex",
+      acp_model: null,
+      acp_command: null,
+      acp_args: null,
+    };
+
+    // openhands → acp: carrying stored openhands fields over would produce a
+    // mongrel payload the server's extra="forbid" union rejects.
+    expect(mergeAgentProfileSaveInput(storedOpenHands, edited)).toEqual(edited);
+  });
+
+  it("starts a new OpenHands profile on the recommended catalog skills", () => {
+    const edited: AgentProfileSaveInput = {
+      agent_kind: "openhands",
+      llm_profile_ref: "default",
+    };
+
+    expect(mergeAgentProfileSaveInput(null, edited)).toEqual({
+      ...edited,
+      public_skills: [...DEFAULT_ENABLED_SKILL_NAMES],
+    });
+  });
+
+  it("gives a profile switched to OpenHands the recommended catalog skills", () => {
+    const storedAcp = {
+      id: "p-2",
+      name: "agent",
+      revision: 1,
+      agent_kind: "acp",
+      acp_server: "codex",
+    } as unknown as AgentProfile;
+
+    expect(
+      mergeAgentProfileSaveInput(storedAcp, {
+        agent_kind: "openhands",
+        llm_profile_ref: "default",
+      }),
+    ).toMatchObject({ public_skills: [...DEFAULT_ENABLED_SKILL_NAMES] });
+  });
+
+  it("keeps a stored or explicit skill selection", () => {
+    const stored = {
+      ...storedOpenHands,
+      public_skills: ["github"],
+    } as unknown as AgentProfile;
+
+    expect(
+      mergeAgentProfileSaveInput(stored, {
+        agent_kind: "openhands",
+        llm_profile_ref: "x",
+      }),
+    ).toMatchObject({ public_skills: ["github"] });
+    expect(
+      mergeAgentProfileSaveInput(null, {
+        agent_kind: "openhands",
+        llm_profile_ref: "x",
+        public_skills: [],
+      } as AgentProfileSaveInput),
+    ).toMatchObject({ public_skills: [] });
+  });
+});
+
+describe("mergeAgentProfileSaveInput tools", () => {
+  it("round-trips stored tools the draft leaves out", () => {
+    const stored = {
+      ...storedOpenHands,
+      tools: [{ name: "switch_llm", params: { x: 1 } }],
+    } as unknown as AgentProfile;
+    const edited = {
+      agent_kind: "openhands",
+      mcp_server_refs: null,
+      tool_concurrency_limit: 2,
+    } as AgentProfileSaveInput;
+
+    expect(mergeAgentProfileSaveInput(stored, edited)).toMatchObject({
+      tools: [{ name: "switch_llm", params: { x: 1 } }],
+      tool_concurrency_limit: 2,
+    });
+  });
+
+  it.each([[[{ name: "terminal", params: {} }]], [null]])(
+    "replaces the stored tools with the draft's %j",
+    (tools) => {
+      const stored = {
+        ...storedOpenHands,
+        tools: [
+          { name: "terminal", params: {} },
+          { name: "switch_llm", params: {} },
+        ],
+      } as unknown as AgentProfile;
+      const edited = {
+        agent_kind: "openhands",
+        mcp_server_refs: null,
+        tools,
+      } as unknown as AgentProfileSaveInput;
+
+      expect(mergeAgentProfileSaveInput(stored, edited)).toMatchObject({
+        tools,
+        system_message_suffix: "Be terse.",
+      });
+    },
+  );
+});

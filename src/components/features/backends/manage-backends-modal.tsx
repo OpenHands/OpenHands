@@ -1,0 +1,339 @@
+import React from "react";
+import { useTranslation } from "react-i18next";
+import { Plus } from "lucide-react";
+
+import { getLockedCloudHost } from "#/api/agent-server-config";
+import { type Backend } from "#/api/backend-registry/types";
+import { getMarsBridge } from "#/api/mars/mars-tunnel-backend";
+import { BrandButton } from "#/components/features/settings/brand-button";
+import { ConfirmationModal } from "#/components/shared/modals/confirmation-modal";
+import { ModalBackdrop } from "#/components/shared/modals/modal-backdrop";
+import {
+  MODAL_MAX_WIDTH_VIEWPORT,
+  modalWidthClassName,
+} from "#/components/shared/modals/modal-body";
+import { ModalCloseButton } from "#/components/shared/modals/modal-close-button";
+import { useActiveBackendContext } from "#/contexts/active-backend-context";
+import { useBackendsHealth } from "#/hooks/query/use-backends-health";
+import { useAllCloudOrganizations } from "#/hooks/query/use-cloud-organizations";
+import { useCloudCurrentUserId } from "#/hooks/query/use-cloud-current-user-id";
+import { I18nKey } from "#/i18n/declaration";
+import { cn } from "#/utils/utils";
+import { modalTitleLgClassName } from "#/utils/modal-classes";
+import { BackendFormModal } from "./backend-form-modal";
+import { BackendRow } from "./backend-row";
+import { DeviceFlowAuth } from "./device-flow-auth";
+import { ManagedAgentsView } from "./managed-agents/managed-agents-view";
+import { MarsBackendRemovalModal } from "./managed-agents/mars-backend-removal-modal";
+import { useBackendSwitchRedirect } from "./use-backend-switch-redirect";
+
+interface ManageBackendsModalProps {
+  onClose: () => void;
+  /**
+   * Recovery mode is used by the root unavailable-backend gate. There is no
+   * app shell behind the modal, so dismiss controls would be misleading.
+   */
+  recoveryMode?: boolean;
+  /** Open straight onto the DigitalOcean Managed Agents screen. */
+  initialView?: ManageBackendsView;
+}
+
+export type ManageBackendsView = "backends" | "managed-agents";
+
+interface PendingRemoval {
+  id: string;
+  name: string;
+  marsSessionId?: string;
+}
+
+/**
+ * Resolve the connected organization label for a backend row, mirroring the
+ * per-org labelling used by the backend selector. Cloud API keys are bound to
+ * a single org (legacy keys may expose several, joined here); local backends
+ * and unresolved/errored lookups yield no label.
+ */
+function resolveBackendOrgLabel(
+  backend: Backend,
+  cloudOrgs: ReturnType<typeof useAllCloudOrganizations>,
+  currentUserIds: ReturnType<typeof useCloudCurrentUserId>,
+  personalWorkspaceLabel: string,
+): string | undefined {
+  if (backend.kind !== "cloud") return undefined;
+  const entry = cloudOrgs[backend.id];
+  if (!entry || entry.orgs.length === 0) return undefined;
+  const userId = currentUserIds[backend.id]?.userId ?? null;
+  return entry.orgs
+    .map((org) =>
+      !!userId && userId === org.id ? personalWorkspaceLabel : org.name,
+    )
+    .join(", ");
+}
+
+export function ManageBackendsModal({
+  onClose,
+  recoveryMode = false,
+  initialView = "backends",
+}: ManageBackendsModalProps) {
+  const { t } = useTranslation("openhands");
+  const { backends, active, removeBackend, setActive, updateBackend } =
+    useActiveBackendContext();
+  const healthByBackendId = useBackendsHealth(backends, {
+    probeDisabledOnce: true,
+  });
+  const cloudOrgs = useAllCloudOrganizations();
+  const currentUserIds = useCloudCurrentUserId();
+  const personalWorkspaceLabel = t(I18nKey.BACKEND$PERSONAL_WORKSPACE);
+  const lockedCloudHost = getLockedCloudHost();
+  const isLockedToCloud = lockedCloudHost !== null;
+  // Cookie-auth (OHE-hosted) backends have no API key to refresh — re-auth is
+  // the main-app login, so the device-flow reconnect controls don't apply.
+  const isCookieAuthBackend = active.backend.authMode === "cookie";
+  const lockedCloudBackend =
+    isLockedToCloud && !isCookieAuthBackend && active.backend.kind === "cloud"
+      ? active.backend
+      : null;
+  const lockedCloudReconnectHost =
+    lockedCloudHost ?? lockedCloudBackend?.host ?? "";
+  const modalTitle =
+    isLockedToCloud && !isCookieAuthBackend
+      ? t(I18nKey.BACKEND$RECONNECT_CLOUD_TITLE)
+      : t(I18nKey.BACKEND$MANAGE_TITLE);
+  // The gate has no close control, so the description has to carry the reason
+  // and the heading an id for screen readers to read as the dialog's name.
+  // Locked-to-Cloud recovery reconnects an existing backend instead of adding
+  // one, so the reason has to name that action too.
+  const reconnectOnly =
+    recoveryMode && isLockedToCloud && lockedCloudBackend !== null;
+  const titleId = recoveryMode ? "manage-backends-title" : undefined;
+  const recoveryReasonId = recoveryMode
+    ? "manage-backends-recovery-reason"
+    : undefined;
+  const recoveryReason = reconnectOnly
+    ? t(I18nKey.BACKEND$RECOVERY_REASON_RECONNECT)
+    : t(I18nKey.BACKEND$RECOVERY_REASON);
+  const [pendingRemoval, setPendingRemoval] =
+    React.useState<PendingRemoval | null>(null);
+  const [editingBackend, setEditingBackend] = React.useState<Backend | null>(
+    null,
+  );
+  const [showAddForm, setShowAddForm] = React.useState(false);
+  // The tunnel lives in the Electron main process, so the browser and library
+  // builds have nothing to offer here.
+  const showManagedAgents = getMarsBridge() !== null && !isLockedToCloud;
+  const [view, setView] = React.useState<ManageBackendsView>(
+    showManagedAgents ? initialView : "backends",
+  );
+  const handleConfirmRemoval = () => {
+    if (!pendingRemoval) return;
+    removeBackend(pendingRemoval.id);
+    setPendingRemoval(null);
+  };
+
+  const redirectAfterSwitch = useBackendSwitchRedirect();
+
+  const handleSelectBackend = React.useCallback(
+    (backend: Backend) => {
+      if (active.backend.id !== backend.id || active.orgId !== null) {
+        // @spec BM-002 — Switching backends keeps the user on the same page
+        redirectAfterSwitch();
+        setActive(backend.id);
+      }
+      onClose();
+    },
+    [active.backend.id, active.orgId, onClose, redirectAfterSwitch, setActive],
+  );
+
+  const handleCloudLogin = React.useCallback(
+    (backend: Backend, apiKey: string) => {
+      updateBackend(backend.id, { apiKey });
+    },
+    [updateBackend],
+  );
+
+  const handleLockedCloudReconnect = React.useCallback(
+    (apiKey: string) => {
+      if (!lockedCloudBackend) return;
+      updateBackend(lockedCloudBackend.id, { apiKey });
+    },
+    [lockedCloudBackend, updateBackend],
+  );
+
+  // A modal stacked on top (removal confirmation, Add or Edit form) owns Escape
+  // and outside clicks; closing this modal under it would unmount it, losing a
+  // form draft or swallowing a refused destroy mid-stop.
+  const isClosable =
+    !recoveryMode &&
+    pendingRemoval === null &&
+    editingBackend === null &&
+    !showAddForm;
+
+  return (
+    <>
+      <ModalBackdrop
+        onClose={isClosable ? onClose : undefined}
+        closeOnEscape={isClosable}
+        closeOnBackdropClick={isClosable}
+        aria-label={modalTitle}
+        aria-describedby={recoveryReasonId}
+      >
+        <div
+          data-testid="manage-backends-modal"
+          className={cn(
+            "relative flex flex-col bg-surface border border-border rounded-xl",
+            modalWidthClassName(view === "managed-agents" ? "xl" : "lg"),
+            MODAL_MAX_WIDTH_VIEWPORT,
+            view === "managed-agents" ? "h-[80vh]" : "max-h-[70vh]",
+          )}
+        >
+          {recoveryMode ? null : (
+            <ModalCloseButton
+              onClose={onClose}
+              testId="close-manage-backends-modal"
+            />
+          )}
+          {view === "managed-agents" ? (
+            <ManagedAgentsView
+              onBack={() => setView("backends")}
+              onDone={onClose}
+            />
+          ) : (
+            <>
+              <div className={cn("p-5", !recoveryMode && "pr-12")}>
+                <h2 id={titleId} className={modalTitleLgClassName}>
+                  <span>{modalTitle}</span>
+                </h2>
+                {recoveryReasonId ? (
+                  <p
+                    id={recoveryReasonId}
+                    data-testid="manage-backends-recovery-reason"
+                    className="mt-2 text-sm text-text-secondary"
+                  >
+                    {recoveryReason}
+                  </p>
+                ) : null}
+              </div>
+
+              <div className="flex min-h-0 flex-1 flex-col px-5">
+                <div
+                  className="flex-1 overflow-auto rounded-md border border-border bg-surface-raised custom-scrollbar-always"
+                  data-testid="manage-backends-list"
+                >
+                  {backends.length === 0 ? (
+                    <p className="px-3 py-6 text-center text-sm text-text-secondary">
+                      {t(I18nKey.BACKEND$MANAGE_EMPTY)}
+                    </p>
+                  ) : (
+                    <ul className="divide-y divide-border">
+                      {backends.map((backend) => (
+                        <BackendRow
+                          key={backend.id}
+                          backend={backend}
+                          health={healthByBackendId[backend.id]}
+                          orgLabel={resolveBackendOrgLabel(
+                            backend,
+                            cloudOrgs,
+                            currentUserIds,
+                            personalWorkspaceLabel,
+                          )}
+                          onSelect={() => handleSelectBackend(backend)}
+                          onEdit={() => setEditingBackend(backend)}
+                          onRemove={() =>
+                            setPendingRemoval({
+                              id: backend.id,
+                              name: backend.name,
+                              marsSessionId: backend.marsSessionId,
+                            })
+                          }
+                          onLogin={
+                            backend.authMode === "cookie"
+                              ? undefined
+                              : (apiKey) => handleCloudLogin(backend, apiKey)
+                          }
+                        />
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-2 p-5">
+                {isLockedToCloud ? (
+                  lockedCloudBackend ? (
+                    <DeviceFlowAuth
+                      host={lockedCloudReconnectHost}
+                      onSuccess={handleLockedCloudReconnect}
+                      testIdRoot="manage-backends-reconnect-cloud"
+                      idleButtonLabel={t(I18nKey.BACKEND$RECONNECT_CLOUD)}
+                      className="w-full sm:w-auto"
+                      buttonClassName="w-full sm:w-auto"
+                      statusDisplay="modal"
+                    />
+                  ) : null
+                ) : (
+                  <BrandButton
+                    type="button"
+                    variant={recoveryMode ? "primary" : "secondary"}
+                    onClick={() => setShowAddForm(true)}
+                    testId="manage-backends-add"
+                    startContent={<Plus width={14} height={14} />}
+                  >
+                    {t(
+                      reconnectOnly
+                        ? I18nKey.BACKEND$RECONNECT_CLOUD
+                        : recoveryMode
+                          ? I18nKey.BACKEND$ADD_TO_CONTINUE
+                          : I18nKey.BACKEND$ADD,
+                    )}
+                  </BrandButton>
+                )}
+                {recoveryMode ? null : (
+                  <BrandButton
+                    type="button"
+                    variant="primary"
+                    onClick={onClose}
+                    testId="manage-backends-done"
+                  >
+                    {t(I18nKey.HOME$DONE)}
+                  </BrandButton>
+                )}
+              </div>
+            </>
+          )}
+        </div>
+      </ModalBackdrop>
+
+      {showAddForm ? (
+        <BackendFormModal
+          mode="add"
+          source="manage_backends_modal"
+          onClose={() => setShowAddForm(false)}
+        />
+      ) : null}
+
+      {editingBackend ? (
+        <BackendFormModal
+          mode="edit"
+          backend={editingBackend}
+          onClose={() => setEditingBackend(null)}
+        />
+      ) : null}
+
+      {pendingRemoval?.marsSessionId ? (
+        <MarsBackendRemovalModal
+          name={pendingRemoval.name}
+          sessionId={pendingRemoval.marsSessionId}
+          onRemove={handleConfirmRemoval}
+          onCancel={() => setPendingRemoval(null)}
+        />
+      ) : pendingRemoval ? (
+        <ConfirmationModal
+          text={t(I18nKey.BACKEND$REMOVE_CONFIRMATION, {
+            name: pendingRemoval.name,
+          })}
+          onConfirm={handleConfirmRemoval}
+          onCancel={() => setPendingRemoval(null)}
+        />
+      ) : null}
+    </>
+  );
+}

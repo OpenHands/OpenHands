@@ -1,0 +1,263 @@
+import { useTranslation } from "react-i18next";
+import {
+  useChatInputModelState,
+  type ChatInputModelState,
+} from "#/hooks/use-chat-input-model-state";
+import { useSwitchAcpModel } from "#/hooks/mutation/use-switch-acp-model";
+import { useSwitchAcpEffort } from "#/hooks/mutation/use-switch-acp-effort";
+import { ComboboxCaretInline } from "#/ui/combobox-caret";
+import SettingsGearIcon from "#/icons/settings-gear.svg?react";
+import CheckIcon from "#/icons/checkmark.svg?react";
+import { useClickOutsideElement } from "#/hooks/use-click-outside-element";
+import { NavigationLink } from "#/components/shared/navigation-link";
+import { ContextMenu } from "#/ui/context-menu";
+import { ContextMenuListItem } from "#/components/features/context-menu/context-menu-list-item";
+import { Divider } from "#/ui/divider";
+import { Typography } from "#/ui/typography";
+import { I18nKey } from "#/i18n/declaration";
+import { cn } from "#/utils/utils";
+import { getLockedCloudHost } from "#/api/agent-server-config";
+import { chatInputPillButtonClassName } from "#/utils/form-control-classes";
+import React from "react";
+
+const MODEL_LABEL_MAX_CHARS = 10;
+// ACP surfaces show the provider's human label (e.g. "Claude Opus 4.7"),
+// which is longer than a raw model id, so the inline button gets a wider cap
+// before truncating. The full string still shows in the title + popover.
+const ACP_MODEL_LABEL_MAX_CHARS = 22;
+
+function truncateModelLabel(
+  model: string,
+  maxChars: number = MODEL_LABEL_MAX_CHARS,
+): string {
+  if (model.length <= maxChars) {
+    return model;
+  }
+  return `${model.slice(0, maxChars)}…`;
+}
+
+interface ChatInputModelMenuContentProps {
+  model: ChatInputModelState;
+  onClose: () => void;
+  dividerInset?: "menu";
+  settingsLinkClassName?: string;
+  settingsIconClassName?: string;
+}
+
+export function ChatInputModelMenuContent({
+  model,
+  onClose,
+  dividerInset,
+  settingsLinkClassName,
+  settingsIconClassName,
+}: ChatInputModelMenuContentProps) {
+  const { t } = useTranslation("openhands");
+  const switchAcpModel = useSwitchAcpModel();
+  const switchAcpEffort = useSwitchAcpEffort();
+  const hasModelRows = model.showAcpPicker || Boolean(model.displayModel);
+  // Locked-to-Cloud blocks the Canvas settings pages this links to (OHE-3457).
+  const showSettingsLink = getLockedCloudHost() === null;
+
+  const handleSelectAcpModel = (modelId: string | null) => {
+    if (modelId !== model.selectedModelId) {
+      // Neither the "Agent default" row (`null`) nor an ACP model pick sets a
+      // home route-at-start suppression flag: local ACP launches never carry
+      // the route-at-start suffix (`profileHasRouter` is OpenHands-only), so
+      // setting a flag here would only leak into a later OpenHands launch.
+      switchAcpModel.mutate({
+        conversationId: model.switchConversationId,
+        model: modelId,
+      });
+    }
+    onClose();
+  };
+
+  const effortOptions = [
+    ...(model.agentDefaultEffortLabel
+      ? [{ value: null, label: model.agentDefaultEffortLabel }]
+      : []),
+    ...model.effortChoices,
+  ];
+
+  const handleSelectAcpEffort = (effort: string | null) => {
+    if (effort !== model.selectedEffort) {
+      switchAcpEffort.mutate({
+        conversationId: model.switchConversationId,
+        effort,
+      });
+    }
+    onClose();
+  };
+
+  return (
+    <>
+      {model.showAcpPicker ? (
+        <>
+          {/* role="presentation" keeps this a valid <li> child of the
+              ContextMenu <ul> without exposing the section label as a
+              selectable menu item (the label text is still announced). */}
+          <li role="presentation" className="px-2 pt-1 pb-0.5">
+            <Typography.Text className="text-2xs font-medium text-text-dim uppercase tracking-wide leading-4">
+              {t(I18nKey.MODEL$AVAILABLE_MODELS)}
+            </Typography.Text>
+          </li>
+          {[
+            ...(model.agentDefaultLabel
+              ? [{ id: null, label: model.agentDefaultLabel }]
+              : []),
+            ...model.availableAcpModels,
+          ].map((option) => {
+            const isSelected = option.id === model.selectedModelId;
+            return (
+              <ContextMenuListItem
+                key={option.id ?? ""}
+                testId={`chat-input-acp-model-option-${option.id ?? "agent-default"}`}
+                onClick={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  handleSelectAcpModel(option.id);
+                }}
+                className={cn(
+                  "flex items-center gap-2",
+                  isSelected && "bg-interactive-hover",
+                )}
+              >
+                <span
+                  className="flex-1 truncate text-sm leading-5"
+                  title={option.label}
+                >
+                  {option.label}
+                </span>
+                {isSelected && (
+                  <CheckIcon
+                    width={14}
+                    height={14}
+                    className="shrink-0"
+                    aria-hidden
+                  />
+                )}
+              </ContextMenuListItem>
+            );
+          })}
+          {model.effortChoices.length > 0 && (
+            <li role="presentation" className="px-2 pt-2 pb-1">
+              <Typography.Text className="text-2xs font-medium text-text-dim uppercase tracking-wide leading-4">
+                {t(I18nKey.SCHEMA$LLM$REASONING_EFFORT$LABEL)}
+              </Typography.Text>
+              <div
+                role="group"
+                aria-label={t(I18nKey.SCHEMA$LLM$REASONING_EFFORT$LABEL)}
+                className="mt-1 flex flex-wrap gap-1"
+              >
+                {effortOptions.map((option) => (
+                  <button
+                    key={option.value ?? ""}
+                    type="button"
+                    data-testid={`chat-input-acp-effort-option-${option.value ?? "agent-default"}`}
+                    aria-pressed={option.value === model.selectedEffort}
+                    onClick={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      handleSelectAcpEffort(option.value);
+                    }}
+                    className={cn(
+                      "rounded-pill border border-border px-2 text-xs leading-5 text-foreground hover:bg-interactive-hover transition-colors",
+                      option.value === model.selectedEffort &&
+                        "bg-interactive-hover",
+                    )}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+            </li>
+          )}
+        </>
+      ) : model.displayModel ? (
+        <li className="text-sm">
+          <div className="p-2 leading-5 text-foreground break-all">
+            {model.displayModel}
+          </div>
+        </li>
+      ) : null}
+      {showSettingsLink && hasModelRows && <Divider inset={dividerInset} />}
+      {showSettingsLink && (
+        <li className="text-sm">
+          <NavigationLink
+            to={model.destinationPath}
+            onClick={onClose}
+            className={cn(
+              "flex h-7.5 items-center gap-2 rounded p-2 leading-5 text-foreground hover:bg-interactive-hover transition-colors",
+              settingsLinkClassName,
+            )}
+          >
+            <SettingsGearIcon
+              width={16}
+              height={16}
+              className={cn("shrink-0", settingsIconClassName)}
+              aria-hidden
+            />
+            <span>{model.destinationLabel}</span>
+          </NavigationLink>
+        </li>
+      )}
+    </>
+  );
+}
+
+export function ChatInputModel() {
+  const model = useChatInputModelState();
+  const [isPopoverOpen, setIsPopoverOpen] = React.useState(false);
+  const triggerRef = React.useRef<HTMLButtonElement>(null);
+  const popoverRef = useClickOutsideElement<HTMLUListElement>(
+    () => setIsPopoverOpen(false),
+    triggerRef,
+  );
+
+  if (!model.displayModel) {
+    return null;
+  }
+
+  const truncatedModelLabel = truncateModelLabel(
+    model.displayModel,
+    model.isAcpContext ? ACP_MODEL_LABEL_MAX_CHARS : MODEL_LABEL_MAX_CHARS,
+  );
+
+  return (
+    <div className="relative min-w-0">
+      <button
+        ref={triggerRef}
+        type="button"
+        className={chatInputPillButtonClassName}
+        title={model.displayModel}
+        data-testid="chat-input-llm-model"
+        aria-expanded={isPopoverOpen}
+        aria-haspopup="dialog"
+        onClick={(event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          setIsPopoverOpen((open) => !open);
+        }}
+      >
+        <span>{truncatedModelLabel}</span>
+        <ComboboxCaretInline isOpen={isPopoverOpen} />
+      </button>
+
+      {isPopoverOpen && (
+        <ContextMenu
+          ref={popoverRef}
+          testId="chat-input-llm-model-popover"
+          position="top"
+          alignment="left"
+          spacing="none"
+          className="z-60 mb-2 min-w-50 max-w-80 max-h-[60vh] overflow-y-auto"
+        >
+          <ChatInputModelMenuContent
+            model={model}
+            onClose={() => setIsPopoverOpen(false)}
+          />
+        </ContextMenu>
+      )}
+    </div>
+  );
+}

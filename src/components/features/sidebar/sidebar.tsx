@@ -1,0 +1,398 @@
+import React from "react";
+import { useTranslation } from "react-i18next";
+import {
+  SidebarRailBody,
+  type SidebarRailBodyProps,
+} from "./sidebar-rail-body";
+import { getErrorStatus, useSettings } from "#/hooks/query/use-settings";
+import { useConfig } from "#/hooks/query/use-config";
+import { displayErrorToast } from "#/utils/custom-toast-handlers";
+import { I18nKey } from "#/i18n/declaration";
+import { useNavigation } from "#/context/navigation-context";
+import { useActiveBackendContext } from "#/contexts/active-backend-context";
+import { cn } from "#/utils/utils";
+import { useSidebarMobileNav } from "./sidebar-mobile-nav-context";
+import { useSidebarStore } from "#/stores/sidebar-store";
+import { useClickOutsideElement } from "#/hooks/use-click-outside-element";
+import { useCloseOnEscape } from "#/hooks/use-close-on-escape";
+import { useModalFocus } from "#/components/shared/modals/use-modal-focus";
+import { useBackendsHealth } from "#/hooks/query/use-backends-health";
+import { useResizableDrawerWidth } from "#/hooks/use-resizable-drawer-width";
+import { ResizeHandle } from "#/components/ui/resize-handle";
+import {
+  SIDEBAR_DEFAULT_WIDTH_PX,
+  SIDEBAR_MAX_WIDTH_PX,
+  SIDEBAR_MIN_WIDTH_PX,
+  SIDEBAR_RESIZE_HANDLE_TEST_ID,
+  SIDEBAR_WIDTH_STORAGE_KEY,
+} from "./sidebar-layout";
+// The LLM settings modal is only mounted when the settings query 404s and
+// LLM settings aren't hidden — keep it out of the sidebar's eager graph.
+const SettingsModal = React.lazy(() =>
+  import("#/components/shared/modals/settings/settings-modal").then((m) => ({
+    default: m.SettingsModal,
+  })),
+);
+
+// Add/Manage backend modals are lifted into the sidebar (instead of living
+// inside BackendSelector) so they survive the collapsed popover unmounting
+// when the user moves the cursor out of the popover toward the modal.
+const AddBackendModal = React.lazy(() =>
+  import("#/components/features/backends/add-backend-modal").then((m) => ({
+    default: m.AddBackendModal,
+  })),
+);
+const ManageBackendsModal = React.lazy(() =>
+  import("#/components/features/backends/manage-backends-modal").then((m) => ({
+    default: m.ManageBackendsModal,
+  })),
+);
+
+const MOBILE_DRAWER_TRANSITION_MS = 250;
+const MOBILE_DRAWER_TRANSITION_STYLE = {
+  "--mobile-drawer-transition-duration": `${MOBILE_DRAWER_TRANSITION_MS}ms`,
+} as React.CSSProperties;
+
+type MobileSidebarDrawerRailBodyProps = Omit<
+  SidebarRailBodyProps,
+  "collapsed" | "showCollapseToggle" | "showMobileCloseButton" | "onCloseMobile"
+>;
+
+function MobileSidebarDrawer({
+  visible,
+  onClose,
+  railBodyProps,
+}: {
+  visible: boolean;
+  onClose: () => void;
+  railBodyProps: MobileSidebarDrawerRailBodyProps;
+}) {
+  const { t } = useTranslation("openhands");
+  const focus = useModalFocus<HTMLElement>({ elevated: false });
+  const handleKeyDown = React.useCallback(
+    (event: React.KeyboardEvent) => {
+      focus.onKeyDown(event);
+    },
+    [focus],
+  );
+
+  return (
+    // eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions -- role=dialog owns its keyboard focus trap while the mobile drawer is modal.
+    <aside
+      ref={focus.rootRef}
+      role="dialog"
+      aria-modal={visible}
+      aria-label={t(I18nKey.SIDEBAR$NAVIGATION_LABEL)}
+      data-testid="sidebar-mobile-drawer"
+      tabIndex={-1}
+      onFocus={focus.onFocus}
+      onKeyDown={handleKeyDown}
+      aria-hidden={!visible}
+      className={cn(
+        "fixed inset-y-0 left-0 z-50 flex min-h-0 w-[min(300px,85vw)] flex-col bg-canvas-base sidebar-text-scale",
+        "border-r border-border md:hidden mobile-sidebar-drawer-safe-area",
+        "transition-transform duration-(--mobile-drawer-transition-duration) ease-in-out motion-reduce:transition-none",
+        visible ? "translate-x-0" : "-translate-x-full",
+      )}
+      style={MOBILE_DRAWER_TRANSITION_STYLE}
+    >
+      <SidebarRailBody
+        collapsed={false}
+        showCollapseToggle={false}
+        showMobileCloseButton
+        onCloseMobile={onClose}
+        {...railBodyProps}
+      />
+    </aside>
+  );
+}
+
+export function Sidebar() {
+  const { t } = useTranslation("openhands");
+  const { currentPath } = useNavigation();
+  const { data: config } = useConfig();
+  const {
+    data: settings,
+    error: settingsError,
+    isError: settingsIsError,
+    isFetching: isFetchingSettings,
+  } = useSettings();
+  const { backends, active } = useActiveBackendContext();
+  const healthByBackendId = useBackendsHealth(backends);
+  const activeBackendHealth = healthByBackendId[active.backend.id];
+  const collapsed = useSidebarStore((state) => state.collapsed);
+  const setCollapsed = useSidebarStore((state) => state.setCollapsed);
+  const [settingsModalIsOpen, setSettingsModalIsOpen] = React.useState(false);
+  const [collapsedBackendPopoverOpen, setCollapsedBackendPopoverOpen] =
+    React.useState(false);
+  const collapsedBackendCloseTimer = React.useRef<ReturnType<
+    typeof setTimeout
+  > | null>(null);
+  // Lifted out of BackendSelector so opening these modals from the
+  // collapsed-sidebar popover doesn't lose state when the popover unmounts
+  // (cursor moving toward the modal triggers onMouseLeave -> close).
+  const [addBackendModalOpen, setAddBackendModalOpen] = React.useState(false);
+  const [manageBackendsModalOpen, setManageBackendsModalOpen] =
+    React.useState(false);
+  const [collapsedRailHovered, setCollapsedRailHovered] = React.useState(false);
+  const suppressCollapsedExpandRef = React.useRef(false);
+  const [, refreshCollapsedExpandGate] = React.useReducer((n) => n + 1, 0);
+  const {
+    isOpen: isMobileNavOpen,
+    close: closeMobileNav,
+    toggleButtonRef: mobileNavToggleRef,
+  } = useSidebarMobileNav();
+  const [mobileDrawerMounted, setMobileDrawerMounted] = React.useState(false);
+  const [mobileDrawerVisible, setMobileDrawerVisible] = React.useState(false);
+  const shouldReturnMobileNavFocusRef = React.useRef(false);
+  const closeMobileNavAndReturnFocus = React.useCallback(() => {
+    shouldReturnMobileNavFocusRef.current = true;
+    closeMobileNav();
+  }, [closeMobileNav]);
+  const collapsedBackendPopoverRef = useClickOutsideElement<HTMLDivElement>(
+    () => setCollapsedBackendPopoverOpen(false),
+  );
+  const settingsErrorStatus = getErrorStatus(settingsError);
+  const desktopSidebarRef = React.useRef<HTMLElement>(null);
+  const {
+    drawerWidth: sidebarWidth,
+    isDragging: isResizingSidebar,
+    handleMouseDown: handleSidebarResizeStart,
+  } = useResizableDrawerWidth({
+    containerRef: desktopSidebarRef,
+    defaultWidth: SIDEBAR_DEFAULT_WIDTH_PX,
+    minWidth: SIDEBAR_MIN_WIDTH_PX,
+    maxWidth: SIDEBAR_MAX_WIDTH_PX,
+    storageKey: SIDEBAR_WIDTH_STORAGE_KEY,
+    enabled: !collapsed,
+    edge: "left",
+  });
+
+  React.useEffect(() => {
+    closeMobileNav();
+  }, [currentPath, closeMobileNav]);
+
+  React.useEffect(() => {
+    if (isMobileNavOpen) {
+      setMobileDrawerMounted(true);
+      const frame = requestAnimationFrame(() => {
+        setMobileDrawerVisible(true);
+      });
+      return () => cancelAnimationFrame(frame);
+    }
+
+    setMobileDrawerVisible(false);
+    const timer = window.setTimeout(() => {
+      setMobileDrawerMounted(false);
+    }, MOBILE_DRAWER_TRANSITION_MS);
+    return () => window.clearTimeout(timer);
+  }, [isMobileNavOpen]);
+
+  React.useEffect(() => {
+    if (
+      isMobileNavOpen ||
+      mobileDrawerMounted ||
+      !shouldReturnMobileNavFocusRef.current
+    ) {
+      return undefined;
+    }
+
+    const frame = requestAnimationFrame(() => {
+      const opener =
+        mobileNavToggleRef.current ??
+        document.querySelector<HTMLElement>(
+          '[data-testid="sidebar-mobile-menu-toggle"]',
+        );
+      shouldReturnMobileNavFocusRef.current = false;
+      opener?.focus();
+    });
+
+    return () => cancelAnimationFrame(frame);
+  }, [isMobileNavOpen, mobileDrawerMounted, mobileNavToggleRef]);
+
+  // A menu or the command menu opened over the drawer takes Escape first.
+  useCloseOnEscape(isMobileNavOpen, closeMobileNavAndReturnFocus);
+
+  React.useEffect(() => {
+    if (currentPath === "/settings") {
+      setSettingsModalIsOpen(false);
+    } else if (
+      !isFetchingSettings &&
+      settingsIsError &&
+      settingsErrorStatus !== 404
+    ) {
+      // We don't show toast errors for settings in the global error handler
+      // because we have a special case for 404 errors
+      displayErrorToast(t(I18nKey.SETTINGS$FETCH_ERROR));
+    } else if (
+      settingsErrorStatus === 404 &&
+      !config?.feature_flags?.hide_llm_settings
+    ) {
+      setSettingsModalIsOpen(true);
+    }
+  }, [
+    currentPath,
+    isFetchingSettings,
+    settingsIsError,
+    settingsErrorStatus,
+    config?.feature_flags?.hide_llm_settings,
+    t,
+  ]);
+
+  const collapseToggleLabel = t(
+    collapsed ? I18nKey.SIDEBAR$EXPAND : I18nKey.SIDEBAR$COLLAPSE,
+  );
+  const handleCollapsedRailClick = React.useCallback(
+    (event: React.MouseEvent<HTMLElement>) => {
+      if (!collapsed) {
+        return;
+      }
+
+      const target = event.target;
+      if (!(target instanceof HTMLElement)) {
+        return;
+      }
+
+      // Keep existing behavior for explicit controls/links and only use
+      // this as a convenience hit-area for empty collapsed-rail space.
+      if (
+        target.closest(
+          "a,button,input,textarea,select,[role='button'],[role='link']",
+        )
+      ) {
+        return;
+      }
+
+      setCollapsed(false);
+    },
+    [collapsed, setCollapsed],
+  );
+  const handleCollapse = React.useCallback(() => {
+    setCollapsedRailHovered(false);
+    suppressCollapsedExpandRef.current = true;
+    refreshCollapsedExpandGate();
+    setCollapsed(true);
+    window.setTimeout(() => {
+      suppressCollapsedExpandRef.current = false;
+      refreshCollapsedExpandGate();
+    }, 250);
+  }, [setCollapsed]);
+  const showCollapsedExpandButton =
+    collapsed && collapsedRailHovered && !suppressCollapsedExpandRef.current;
+
+  const isExtensionsActive =
+    currentPath === "/customize" ||
+    currentPath.startsWith("/skills") ||
+    currentPath === "/plugins" ||
+    currentPath === "/apps" ||
+    currentPath === "/mcp";
+
+  const railBodyProps = {
+    collapseToggleLabel,
+    onCollapse: handleCollapse,
+    onExpand: () => setCollapsed(false),
+    showCollapsedExpandButton,
+    isExtensionsActive,
+    currentPath,
+    activeBackend: active.backend,
+    activeOrgId: active.orgId,
+    activeBackendHealth,
+    collapsedBackendPopoverOpen,
+    setCollapsedBackendPopoverOpen,
+    collapsedBackendPopoverRef,
+    collapsedBackendCloseTimer,
+    onOpenAddBackend: () => setAddBackendModalOpen(true),
+    onOpenManageBackends: () => setManageBackendsModalOpen(true),
+  };
+
+  return (
+    <>
+      {/* eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions -- the aside acts as a hit-area for the collapsed rail; nested controls handle their own keyboard interactions. */}
+      <aside
+        ref={desktopSidebarRef}
+        aria-label={t(I18nKey.SIDEBAR$NAVIGATION_LABEL)}
+        data-collapsed={collapsed ? "true" : "false"}
+        onClick={handleCollapsedRailClick}
+        onMouseEnter={() => {
+          if (collapsed) {
+            setCollapsedRailHovered(true);
+          }
+        }}
+        onMouseLeave={() => {
+          setCollapsedRailHovered(false);
+        }}
+        className={cn(
+          "max-md:hidden relative flex bg-canvas-base flex-col min-h-0 sidebar-text-scale",
+          !isResizingSidebar && "transition-sidebar-width duration-200",
+          "md:border-r md:border-border md:h-full",
+          collapsed
+            ? "md:w-15 md:min-w-15 md:px-2.5"
+            : "md:sidebar-expanded-width pb-2 md:pl-2.5 md:pr-0",
+          currentPath === "/" && "md:pb-3",
+        )}
+        style={
+          {
+            "--sidebar-width": `${sidebarWidth}px`,
+          } as React.CSSProperties
+        }
+      >
+        <SidebarRailBody
+          collapsed={collapsed}
+          showCollapseToggle
+          {...railBodyProps}
+        />
+        {collapsed ? null : (
+          <ResizeHandle
+            testId={SIDEBAR_RESIZE_HANDLE_TEST_ID}
+            className="absolute inset-y-0 -right-px"
+            onMouseDown={handleSidebarResizeStart}
+            isDragging={isResizingSidebar}
+          />
+        )}
+      </aside>
+
+      {mobileDrawerMounted ? (
+        <>
+          <div
+            className={cn(
+              "fixed inset-0 z-40 bg-black/50 md:hidden",
+              "transition-opacity duration-(--mobile-drawer-transition-duration) ease-in-out motion-reduce:transition-none",
+              mobileDrawerVisible
+                ? "opacity-100"
+                : "pointer-events-none opacity-0",
+            )}
+            style={MOBILE_DRAWER_TRANSITION_STYLE}
+            onClick={closeMobileNavAndReturnFocus}
+            aria-hidden={!mobileDrawerVisible}
+          />
+          <MobileSidebarDrawer
+            visible={mobileDrawerVisible}
+            onClose={closeMobileNavAndReturnFocus}
+            railBodyProps={railBodyProps}
+          />
+        </>
+      ) : null}
+
+      {settingsModalIsOpen && (
+        <React.Suspense fallback={null}>
+          <SettingsModal
+            settings={settings}
+            onClose={() => setSettingsModalIsOpen(false)}
+          />
+        </React.Suspense>
+      )}
+      {addBackendModalOpen && (
+        <React.Suspense fallback={null}>
+          <AddBackendModal onClose={() => setAddBackendModalOpen(false)} />
+        </React.Suspense>
+      )}
+      {manageBackendsModalOpen && (
+        <React.Suspense fallback={null}>
+          <ManageBackendsModal
+            onClose={() => setManageBackendsModalOpen(false)}
+          />
+        </React.Suspense>
+      )}
+    </>
+  );
+}

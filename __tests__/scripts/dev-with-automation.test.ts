@@ -1,0 +1,1975 @@
+// @vitest-environment node
+// These tests load `scripts/dev-with-automation.mjs` and `scripts/dev-safe.mjs`,
+// which construct file:// URLs relative to their own location via
+// `new URL("../tools", import.meta.url)`. jsdom's URL constructor ignores
+// file:// base URLs (it falls back to its document base, e.g.
+// http://localhost:3000/), breaking that resolution; the Node environment
+// has the standard WHATWG URL behavior that honors the file:// base.
+import net from "node:net";
+import { spawn, spawnSync } from "node:child_process";
+import { once } from "node:events";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
+import { homedir, tmpdir } from "node:os";
+import path from "node:path";
+import { setTimeout as delay } from "node:timers/promises";
+import { fileURLToPath, pathToFileURL } from "node:url";
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import { server as mswServer } from "#/mocks/node";
+import {
+  buildAgentServerAutomationEnv,
+  buildAutomationCommand,
+  buildAutomationCorsOrigins,
+  buildAutomationLogArgs,
+  buildAutomationTelemetryEnv,
+  buildAutomationRuntimeServicesInfo,
+  buildConfig,
+  buildRouteArgs,
+  buildViteBackendEnv,
+  buildViteFrontendEnv,
+  getAgentServerBaseUrl,
+  getFrontendBackend,
+  getLocalServiceRoutes,
+  getRejectPrefixes,
+  resolveAutomationKvSecret,
+  setServiceLogListener,
+  spawnService,
+  superviseService,
+  validateLocalAutomationPath,
+  DEFAULT_AUTOMATION_REPO,
+  DEFAULT_AUTOMATION_PACKAGE,
+  DEFAULT_AUTOMATION_VERSION,
+  buildMarsWebEnv,
+} from "../../scripts/dev-with-automation.mjs";
+import {
+  buildAgentServerEnv,
+  buildBackendLogEnv,
+  buildSafeDevConfig,
+  resetPersistedSessionApiKeyCache,
+  uvicornLogLevel,
+} from "../../scripts/dev-safe.mjs";
+import { createRouter } from "../../scripts/proxy-utils.mjs";
+
+beforeAll(() => mswServer.close());
+afterAll(() => mswServer.listen({ onUnhandledFrame: "bypass" }));
+
+const repoRoot = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "../..",
+);
+
+type RuntimeServicesInfo = {
+  services: Record<string, { url_from_agent: string }>;
+};
+
+describe("buildAutomationRuntimeServicesInfo", () => {
+  const config = {
+    mode: "agent-canvas",
+    agentServerPort: 18000,
+    ingressPort: 8000,
+    vitePort: 3001,
+    autoBackendPort: 18001,
+    launchFrontend: true,
+    launchAutomation: true,
+  };
+
+  it("advertises host services through the Docker host gateway", () => {
+    const info = buildAutomationRuntimeServicesInfo(config, {
+      OH_CONVERSATION_RUNTIME: "docker",
+    }) as RuntimeServicesInfo;
+    expect(info.services.agent_server.url_from_agent).toBe(
+      "http://localhost:18000",
+    );
+    expect(info.services.ingress.url_from_agent).toBe(
+      "http://host.docker.internal:8000",
+    );
+    expect(info.services.automation.url_from_agent).toBe(
+      "http://host.docker.internal:8000",
+    );
+  });
+
+  it("keeps host services on localhost for local conversations", () => {
+    const info = buildAutomationRuntimeServicesInfo(
+      config,
+      {},
+    ) as RuntimeServicesInfo;
+    expect(info.services.ingress.url_from_agent).toBe("http://localhost:8000");
+    expect(info.services.automation.url_from_agent).toBe(
+      "http://localhost:18001",
+    );
+  });
+});
+
+describe("buildAutomationCommand", () => {
+  it("uses released PyPI version by default", () => {
+    const cmd = buildAutomationCommand({});
+
+    expect(cmd.command).toBe("uvx");
+    expect(cmd.args).toContain("--from");
+    expect(cmd.args).toContain(
+      `${DEFAULT_AUTOMATION_PACKAGE}==${DEFAULT_AUTOMATION_VERSION}`,
+    );
+    expect(cmd.args).toContain("uvicorn");
+    expect(cmd.args).toContain("openhands.automation.app:app");
+    expect(cmd.source).toBe(`PyPI (${DEFAULT_AUTOMATION_VERSION}, default)`);
+  });
+
+  it("requests the shared Python range for uvx in every source mode", () => {
+    // See buildUvxPythonArgs in dev-safe.mjs and #18654.
+    const variants = [
+      {},
+      { OH_AUTOMATION_VERSION: "1.0.0" },
+      { OH_AUTOMATION_GIT_REF: "main" },
+    ];
+    for (const env of variants) {
+      const { command, args } = buildAutomationCommand(env);
+      expect(command).toBe("uvx");
+      expect(args.slice(0, 2)).toEqual(["--python", ">=3.12,<3.15"]);
+    }
+  });
+
+  it("leaves the interpreter choice to uv when UV_PYTHON is set", () => {
+    const { args } = buildAutomationCommand({ UV_PYTHON: "3.13" });
+    expect(args).not.toContain("--python");
+  });
+
+  it("uses custom git ref from OH_AUTOMATION_GIT_REF", () => {
+    const cmd = buildAutomationCommand({
+      OH_AUTOMATION_GIT_REF: "feat/my-feature",
+    });
+
+    expect(cmd.command).toBe("uvx");
+    expect(cmd.args).toContain("--from");
+    expect(cmd.args).toContain(
+      `git+${DEFAULT_AUTOMATION_REPO}@feat/my-feature`,
+    );
+    expect(cmd.source).toBe("git (feat/my-feature)");
+  });
+
+  it("uses custom repo with git ref", () => {
+    const cmd = buildAutomationCommand({
+      OH_AUTOMATION_REPO: "https://github.com/MyOrg/my-automation",
+      OH_AUTOMATION_GIT_REF: "main",
+    });
+
+    expect(cmd.command).toBe("uvx");
+    expect(cmd.args).toContain(
+      "git+https://github.com/MyOrg/my-automation@main",
+    );
+  });
+
+  it("uses both custom repo and ref together", () => {
+    const cmd = buildAutomationCommand({
+      OH_AUTOMATION_REPO: "https://github.com/MyOrg/my-automation",
+      OH_AUTOMATION_GIT_REF: "v1.0.0",
+    });
+
+    expect(cmd.command).toBe("uvx");
+    expect(cmd.args).toContain(
+      "git+https://github.com/MyOrg/my-automation@v1.0.0",
+    );
+    expect(cmd.source).toBe("git (v1.0.0)");
+  });
+
+  it("supports commit SHA as git ref", () => {
+    const cmd = buildAutomationCommand({
+      OH_AUTOMATION_GIT_REF: "abc123def456",
+    });
+
+    expect(cmd.command).toBe("uvx");
+    expect(cmd.args).toContain(`git+${DEFAULT_AUTOMATION_REPO}@abc123def456`);
+    expect(cmd.source).toBe("git (abc123def456)");
+  });
+
+  it("uses specific PyPI version when OH_AUTOMATION_VERSION is set", () => {
+    const cmd = buildAutomationCommand({
+      OH_AUTOMATION_VERSION: "1.0.0",
+    });
+
+    expect(cmd.command).toBe("uvx");
+    expect(cmd.args).toContain(`${DEFAULT_AUTOMATION_PACKAGE}==1.0.0`);
+    expect(cmd.source).toBe("PyPI (1.0.0)");
+  });
+
+  it("git ref takes precedence over version", () => {
+    const cmd = buildAutomationCommand({
+      OH_AUTOMATION_GIT_REF: "main",
+      OH_AUTOMATION_VERSION: "1.0.0",
+    });
+
+    expect(cmd.command).toBe("uvx");
+    expect(cmd.args).toContain(`git+${DEFAULT_AUTOMATION_REPO}@main`);
+    expect(cmd.args).not.toContain(`${DEFAULT_AUTOMATION_PACKAGE}==1.0.0`);
+    expect(cmd.source).toBe("git (main)");
+  });
+
+  it("runs a local checkout in place, ahead of the other env vars", () => {
+    const cmd = buildAutomationCommand({
+      OH_AUTOMATION_LOCAL_PATH: "/checkouts/automation",
+      OH_AUTOMATION_GIT_REF: "main",
+      OH_AUTOMATION_VERSION: "1.0.0",
+    });
+
+    expect(cmd.command).toBe("uv");
+    expect(cmd.args).toEqual([
+      "run",
+      "--project",
+      "/checkouts/automation",
+      "uvicorn",
+      "openhands.automation.app:app",
+    ]);
+    expect(cmd.source).toBe("local (/checkouts/automation)");
+  });
+});
+
+describe("validateLocalAutomationPath", () => {
+  const dirs: string[] = [];
+
+  afterEach(() => {
+    while (dirs.length > 0) {
+      const dir = dirs.pop();
+      if (dir) rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  function makeCheckout({ withProjectFile = true } = {}) {
+    const dir = mkdtempSync(path.join(tmpdir(), "automation-checkout-"));
+    dirs.push(dir);
+    if (withProjectFile) {
+      writeFileSync(path.join(dir, "pyproject.toml"), "[project]\n");
+    }
+    return dir;
+  }
+
+  it("accepts an absolute path to a Python project", () => {
+    expect(() => validateLocalAutomationPath(makeCheckout())).not.toThrow();
+  });
+
+  // Without these, `uv run --project <bad path>` just exits and the rest of
+  // the stack stays up, leaving the automations UI blaming the backend.
+  it("rejects a relative path", () => {
+    expect(() => validateLocalAutomationPath("../automation")).toThrow(
+      /absolute path/i,
+    );
+  });
+
+  it("rejects a path that does not exist", () => {
+    const dir = makeCheckout();
+    rmSync(dir, { recursive: true, force: true });
+
+    expect(() => validateLocalAutomationPath(dir)).toThrow(/does not exist/i);
+  });
+
+  it("rejects a directory that is not a Python project", () => {
+    expect(() =>
+      validateLocalAutomationPath(makeCheckout({ withProjectFile: false })),
+    ).toThrow(/pyproject\.toml/);
+  });
+});
+
+describe("buildAgentServerAutomationEnv", () => {
+  it("exposes the session API key as OPENHANDS_AUTOMATION_API_KEY for agent curl commands", () => {
+    expect(
+      buildAgentServerAutomationEnv({ sessionApiKey: "shared-session-key" }),
+    ).toEqual({
+      OPENHANDS_AUTOMATION_API_KEY: "shared-session-key",
+    });
+  });
+});
+
+describe("buildAutomationTelemetryEnv", () => {
+  it("provides the shared frontend PostHog key to automation by default", () => {
+    expect(buildAutomationTelemetryEnv({})).toEqual({
+      AUTOMATION_POSTHOG_API_KEY:
+        "phc_kBtz5nKmxVRRQ7HtPwr2QX9eMC5j65zE86QKocVNwb4U",
+      AUTOMATION_POSTHOG_HOST: "https://us.i.posthog.com",
+    });
+  });
+
+  it("prefers explicit automation telemetry settings", () => {
+    expect(
+      buildAutomationTelemetryEnv({
+        AUTOMATION_POSTHOG_API_KEY: "phc_auto",
+        AUTOMATION_POSTHOG_HOST: "https://auto.example",
+        VITE_POSTHOG_API_KEY: "phc_frontend",
+        VITE_POSTHOG_HOST: "https://frontend.example",
+      }),
+    ).toEqual({
+      AUTOMATION_POSTHOG_API_KEY: "phc_auto",
+      AUTOMATION_POSTHOG_HOST: "https://auto.example",
+    });
+  });
+
+  it("uses explicit frontend telemetry settings when automation settings are absent", () => {
+    expect(
+      buildAutomationTelemetryEnv({
+        VITE_POSTHOG_API_KEY: "phc_frontend",
+        VITE_POSTHOG_HOST: "https://frontend.example",
+      }),
+    ).toEqual({
+      AUTOMATION_POSTHOG_API_KEY: "phc_frontend",
+      AUTOMATION_POSTHOG_HOST: "https://frontend.example",
+    });
+  });
+
+  it("does not default automation telemetry when do-not-track is enabled", () => {
+    expect(buildAutomationTelemetryEnv({ VITE_DO_NOT_TRACK: "1" })).toEqual({});
+  });
+});
+
+describe("resolveAutomationKvSecret", () => {
+  let stateDir = "";
+
+  afterEach(() => {
+    if (stateDir) rmSync(stateDir, { recursive: true, force: true });
+  });
+
+  function freshStateDir(): string {
+    stateDir = mkdtempSync(path.join(tmpdir(), "kv-secret-"));
+    return stateDir;
+  }
+
+  it("keeps the first session key as the KV secret after the session key rotates", () => {
+    const dir = freshStateDir();
+
+    const first = resolveAutomationKvSecret(
+      { stateDir: dir, sessionApiKey: "session-key-a" },
+      {},
+    );
+    const afterRotation = resolveAutomationKvSecret(
+      { stateDir: dir, sessionApiKey: "session-key-b" },
+      {},
+    );
+
+    expect(first).toBe("session-key-a");
+    expect(afterRotation).toBe("session-key-a");
+  });
+
+  it("prefers an explicit AUTOMATION_KV_SECRET without pinning anything", () => {
+    const dir = freshStateDir();
+
+    const secret = resolveAutomationKvSecret(
+      { stateDir: dir, sessionApiKey: "session-key-a" },
+      { AUTOMATION_KV_SECRET: "explicit-secret" },
+    );
+
+    expect(secret).toBe("explicit-secret");
+    expect(readdirSync(dir)).toEqual([]);
+  });
+
+  it("stops instead of falling back to the session key when the pin is unreadable", () => {
+    const dir = freshStateDir();
+    mkdirSync(path.join(dir, "automation-kv-secret.txt"));
+
+    expect(() =>
+      resolveAutomationKvSecret(
+        { stateDir: dir, sessionApiKey: "session-key-a" },
+        {},
+      ),
+    ).toThrow(/not a regular file/);
+  });
+});
+
+describe("buildConfig", () => {
+  const servers: net.Server[] = [];
+  const keyDirs: string[] = [];
+
+  afterEach(() => {
+    for (const server of servers) {
+      server.close();
+    }
+    servers.length = 0;
+    while (keyDirs.length > 0) {
+      const dir = keyDirs.pop();
+      if (dir) rmSync(dir, { recursive: true, force: true });
+    }
+    resetPersistedSessionApiKeyCache();
+  });
+
+  /**
+   * Build an env that points persisted dev API key files at a fresh temp dir,
+   * so tests don't write to the user's real ~/.openhands/agent-canvas files.
+   *
+   * Also redirects all service ports to high port numbers so that buildConfig's
+   * assertPortsFree check passes even when a real dev stack is running on the
+   * default ports (18000, 18001, 3001, 8000).
+   */
+  function envWithIsolatedKeyPath(
+    extra: Record<string, string> = {},
+  ): Record<string, string> {
+    const dir = mkdtempSync(path.join(tmpdir(), "buildconfig-key-"));
+    keyDirs.push(dir);
+    return {
+      OH_SESSION_API_KEY_PATH: path.join(dir, "session-api-key.txt"),
+      // High ports that are almost certainly free, so assertPortsFree passes.
+      PORT: "19902",
+      OH_CANVAS_SAFE_BACKEND_PORT: "19900",
+      OH_CANVAS_SAFE_AUTOMATION_PORT: "19901",
+      OH_CANVAS_SAFE_VITE_PORT: "19903",
+      ...extra,
+    };
+  }
+
+  // Exercise the public launcher entry point through its existing embedder
+  // prerequisite callback. Stop before services start; no test-only exports.
+  function launchDirectoryProbe(env: Record<string, string>, args: string[]) {
+    const probeHome = path.dirname(env.OH_SESSION_API_KEY_PATH);
+    const script = `
+      import { main } from ${JSON.stringify(pathToFileURL(path.join(repoRoot, "scripts/dev-with-automation.mjs")).href)};
+      process.argv = [process.execPath, "directory-probe", ...${JSON.stringify(args)}];
+      try {
+        await main({
+          staticMode: true,
+          skipNpmCheck: true,
+          extraPrereqs(config) {
+            console.log("QA_DIRECTORY_PROBE=" + JSON.stringify({ stateDir: config.stateDir, tmuxTmpDir: config.tmuxTmpDir }));
+            throw new Error("qa-directory-probe-complete");
+          },
+        });
+      } catch (error) {
+        if (error.message !== "qa-directory-probe-complete") throw error;
+      }
+    `;
+    // Only command discovery is stubbed. No backend executes in this probe.
+    if (process.platform === "win32") {
+      writeFileSync(path.join(probeHome, "uvx.cmd"), "@exit /b 0\r\n");
+    } else {
+      writeFileSync(path.join(probeHome, "uvx"), "#!/bin/sh\nexit 0\n", {
+        mode: 0o700,
+      });
+    }
+    // An ambient TMUX_TMPDIR (e.g. npm test run inside tmux) would mask the
+    // default; only the case's own env may set it.
+    const { TMUX_TMPDIR: _ambientTmuxTmpDir, ...parentEnv } = process.env;
+    const result = spawnSync(
+      process.execPath,
+      ["--input-type=module", "-e", script],
+      {
+        env: {
+          ...parentEnv,
+          ...env,
+          HOME: probeHome,
+          PATH: `${probeHome}${path.delimiter}${process.env.PATH ?? ""}`,
+          OH_AGENT_SERVER_LOCAL_PATH: "",
+          OH_AUTOMATION_LOCAL_PATH: "",
+        },
+        encoding: "utf8",
+        timeout: 15_000,
+      },
+    );
+    expect(result.status, result.stderr).toBe(0);
+    const line = result.stdout
+      .split("\n")
+      .find((item) => item.startsWith("QA_DIRECTORY_PROBE="));
+    expect(line, result.stdout).toBeDefined();
+    return JSON.parse(line!.slice("QA_DIRECTORY_PROBE=".length));
+  }
+
+  it("builds default config with correct ports", async () => {
+    const config = await buildConfig({}, envWithIsolatedKeyPath());
+
+    // Ports should be allocated (either defaults if free, or alternatives)
+    expect(typeof config.ingressPort).toBe("number");
+    expect(config.ingressPort).toBeGreaterThan(0);
+    expect(typeof config.agentServerPort).toBe("number");
+    expect(config.agentServerPort).toBeGreaterThan(0);
+    expect(typeof config.autoBackendPort).toBe("number");
+    expect(config.autoBackendPort).toBeGreaterThan(0);
+    expect(typeof config.vitePort).toBe("number");
+    expect(config.vitePort).toBeGreaterThan(0);
+    expect(config.vscodePort).toBe(config.agentServerPort + 1000);
+
+    // All four main ports should be unique
+    const ports = new Set([
+      config.ingressPort,
+      config.agentServerPort,
+      config.autoBackendPort,
+      config.vitePort,
+    ]);
+    expect(ports.size).toBe(4);
+  });
+
+  it("creates separate default tmux directories before local backends start", async () => {
+    const configs = [];
+    for (let n = 0; n < 2; n += 1) {
+      const env = envWithIsolatedKeyPath();
+      env.OH_CANVAS_SAFE_STATE_DIR = path.join(
+        path.dirname(env.OH_SESSION_API_KEY_PATH),
+        "state",
+      );
+      const config = launchDirectoryProbe(env, ["--backend-only"]);
+      const expected = path.join(config.stateDir, "tmux");
+      expect(config.tmuxTmpDir).toBe(expected);
+      expect(existsSync(expected)).toBe(true);
+      configs.push(config);
+    }
+    expect(configs[0].tmuxTmpDir).not.toBe(configs[1].tmuxTmpDir);
+  });
+
+  it("creates and preserves an explicit socket-capable TMUX_TMPDIR", async () => {
+    const env = envWithIsolatedKeyPath();
+    env.OH_CANVAS_SAFE_STATE_DIR = path.join(
+      path.dirname(env.OH_SESSION_API_KEY_PATH),
+      "state",
+    );
+    env.TMUX_TMPDIR = path.join(
+      path.dirname(env.OH_SESSION_API_KEY_PATH),
+      "sockets",
+    );
+    const config = launchDirectoryProbe(env, ["--backend-only"]);
+    expect(config.tmuxTmpDir).toBe(env.TMUX_TMPDIR);
+    expect(existsSync(env.TMUX_TMPDIR)).toBe(true);
+    expect(existsSync(path.join(config.stateDir, "tmux"))).toBe(false);
+  });
+
+  it("does not create a local terminal directory in frontend-only mode", async () => {
+    const env = envWithIsolatedKeyPath();
+    env.OH_CANVAS_SAFE_STATE_DIR = path.join(
+      path.dirname(env.OH_SESSION_API_KEY_PATH),
+      "state",
+    );
+    const config = launchDirectoryProbe(env, ["--frontend-only"]);
+    expect(existsSync(path.join(config.stateDir, "tmux"))).toBe(false);
+  });
+
+  it("lets --automation-git-ref win over an exported OH_AUTOMATION_LOCAL_PATH", async () => {
+    // Otherwise someone with the checkout exported in their shell profile
+    // reproduces a bug against their own working tree while believing they
+    // are testing the ref they just passed.
+    const env = envWithIsolatedKeyPath({
+      OH_AUTOMATION_LOCAL_PATH: "/checkouts/automation",
+    });
+
+    await buildConfig({ automationGitRef: "abc123" }, env);
+
+    expect(env.OH_AUTOMATION_GIT_REF).toBe("abc123");
+    expect(env.OH_AUTOMATION_LOCAL_PATH).toBeUndefined();
+    expect(buildAutomationCommand(env).source).toBe("git (abc123)");
+  });
+
+  it("keeps a local checkout when no ref is passed", async () => {
+    const env = envWithIsolatedKeyPath({
+      OH_AUTOMATION_LOCAL_PATH: "/checkouts/automation",
+    });
+
+    await buildConfig({}, env);
+
+    expect(env.OH_AUTOMATION_LOCAL_PATH).toBe("/checkouts/automation");
+  });
+
+  it("respects preferred port from args when available", async () => {
+    // Use a high port unlikely to be busy
+    const preferredPort = 19500;
+    const config = await buildConfig(
+      { port: preferredPort },
+      envWithIsolatedKeyPath(),
+    );
+
+    expect(config.ingressPort).toBe(preferredPort);
+  });
+
+  it("throws when ingress port is busy", async () => {
+    const server = net.createServer();
+    const busyPort = await new Promise<number>((resolve, reject) => {
+      server.listen(0, "127.0.0.1", () => {
+        const address = server.address();
+        if (!address || typeof address === "string") {
+          reject(new Error("Expected a TCP server address"));
+          return;
+        }
+        servers.push(server);
+        resolve(address.port);
+      });
+      server.on("error", reject);
+    });
+
+    await expect(
+      buildConfig({ port: busyPort }, envWithIsolatedKeyPath()),
+    ).rejects.toThrow(new RegExp(`ingress.*port ${busyPort}`, "i"));
+  });
+
+  it("serves the frontend on a free port when the preferred one is taken", async () => {
+    const server = net.createServer();
+    const busyPort = await new Promise<number>((resolve, reject) => {
+      server.listen(0, "127.0.0.1", () => {
+        servers.push(server);
+        resolve((server.address() as net.AddressInfo).port);
+      });
+      server.on("error", reject);
+    });
+
+    const config = await buildConfig(
+      {},
+      envWithIsolatedKeyPath({ OH_CANVAS_SAFE_VITE_PORT: String(busyPort) }),
+    );
+
+    expect(config.vitePort).not.toBe(busyPort);
+    // Every consumer follows the resolved port.
+    expect(getFrontendBackend(config)).toBe(
+      `http://localhost:${config.vitePort}`,
+    );
+    expect(buildViteFrontendEnv(config).VITE_FRONTEND_PORT).toBe(
+      String(config.vitePort),
+    );
+    const info = buildAutomationRuntimeServicesInfo(
+      config,
+      {},
+    ) as RuntimeServicesInfo;
+    expect(info.services.frontend.url_from_agent).toBe(
+      `http://localhost:${config.vitePort}`,
+    );
+    expect(buildAutomationCorsOrigins(config)).toBe(
+      `http://localhost:19902,http://127.0.0.1:19902,` +
+        `http://localhost:${config.vitePort},http://127.0.0.1:${config.vitePort}`,
+    );
+  });
+
+  // Only the frontend falls back: the other services keep failing hard so a
+  // second agent-canvas instance is still detected (#16904).
+  it.each([
+    ["agent-server", "OH_CANVAS_SAFE_BACKEND_PORT"],
+    ["automation", "OH_CANVAS_SAFE_AUTOMATION_PORT"],
+  ])("still throws when the %s port is busy", async (service, envKey) => {
+    const server = net.createServer();
+    const busyPort = await new Promise<number>((resolve, reject) => {
+      server.listen(0, "127.0.0.1", () => {
+        servers.push(server);
+        resolve((server.address() as net.AddressInfo).port);
+      });
+      server.on("error", reject);
+    });
+
+    await expect(
+      buildConfig({}, envWithIsolatedKeyPath({ [envKey]: String(busyPort) })),
+    ).rejects.toThrow(new RegExp(`${service}.*port ${busyPort}`, "i"));
+  });
+
+  it.each([
+    ["ingress", "19902"],
+    ["agent-server", "19900"],
+    ["automation", "19901"],
+    ["vscode", "20900"],
+  ])("keeps the frontend off the %s port", async (_service, servicePort) => {
+    const config = await buildConfig(
+      {},
+      envWithIsolatedKeyPath({ OH_CANVAS_SAFE_VITE_PORT: servicePort }),
+    );
+
+    expect(config.vitePort).not.toBe(Number(servicePort));
+    expect(
+      new Set([
+        config.ingressPort,
+        config.agentServerPort,
+        config.autoBackendPort,
+        config.vscodePort,
+        config.vitePort,
+      ]).size,
+    ).toBe(5);
+  });
+
+  it("leaves the frontend port alone when no frontend is launched", async () => {
+    const server = net.createServer();
+    const busyPort = await new Promise<number>((resolve, reject) => {
+      server.listen(0, "127.0.0.1", () => {
+        servers.push(server);
+        resolve((server.address() as net.AddressInfo).port);
+      });
+      server.on("error", reject);
+    });
+
+    const config = await buildConfig(
+      { backendOnly: true },
+      envWithIsolatedKeyPath({ OH_CANVAS_SAFE_VITE_PORT: String(busyPort) }),
+    );
+
+    expect(config.launchFrontend).toBe(false);
+    expect(config.vitePort).toBe(busyPort);
+  });
+
+  it("allocates valid ports for all services", async () => {
+    const config = await buildConfig({}, envWithIsolatedKeyPath());
+
+    // All service ports should be valid
+    expect(config.agentServerPort).toBeGreaterThan(0);
+    expect(config.autoBackendPort).toBeGreaterThan(0);
+    expect(config.vitePort).toBeGreaterThan(0);
+    expect(config.vscodePort).toBeGreaterThan(0);
+
+    // All service ports should be different from each other
+    const servicePorts = [
+      config.agentServerPort,
+      config.autoBackendPort,
+      config.vitePort,
+      config.ingressPort,
+    ];
+    expect(new Set(servicePorts).size).toBe(servicePorts.length);
+  });
+
+  it("respects preferred PORT from env when available", async () => {
+    // Use a high port unlikely to be busy
+    const preferredPort = "19501";
+    const config = await buildConfig(
+      {},
+      envWithIsolatedKeyPath({ PORT: preferredPort }),
+    );
+
+    expect(config.ingressPort).toBe(19501);
+  });
+
+  it("args.port takes precedence over env.PORT", async () => {
+    // Use high ports unlikely to be busy
+    const config = await buildConfig(
+      { port: 19502 },
+      envWithIsolatedKeyPath({ PORT: "19599" }),
+    );
+
+    expect(config.ingressPort).toBe(19502);
+  });
+
+  it("applies automationGitRef from args to env", async () => {
+    const env = envWithIsolatedKeyPath();
+    await buildConfig({ automationGitRef: "my-branch" }, env);
+
+    expect(env.OH_AUTOMATION_GIT_REF).toBe("my-branch");
+  });
+
+  it("applies automationRepo from args to env", async () => {
+    const env = envWithIsolatedKeyPath();
+    await buildConfig({ automationRepo: "https://example.com/repo" }, env);
+
+    expect(env.OH_AUTOMATION_REPO).toBe("https://example.com/repo");
+  });
+
+  it("uses correct state directory path", async () => {
+    const config = await buildConfig({}, envWithIsolatedKeyPath());
+
+    expect(config.stateDir).toBe(
+      path.join(homedir(), ".openhands", "agent-canvas"),
+    );
+  });
+
+  it("passes verbose flag through", async () => {
+    const config = await buildConfig(
+      { verbose: true },
+      envWithIsolatedKeyPath(),
+    );
+
+    expect(config.verbose).toBe(true);
+  });
+
+  it("sessionApiKey is a 64-char hex string by default", async () => {
+    const config = await buildConfig({}, envWithIsolatedKeyPath());
+
+    expect(config.sessionApiKey).toMatch(/^[0-9a-f]{64}$/);
+  });
+
+  it("falls back to a freshly persisted session API key by default", async () => {
+    const config = await buildConfig({}, envWithIsolatedKeyPath());
+
+    // Default is a 64-char hex string (256-bit random key) read from /
+    // written to OH_SESSION_API_KEY_PATH.
+    expect(config.sessionApiKey).toMatch(/^[0-9a-f]{64}$/);
+  });
+
+  it("reuses the persisted session API key across calls (stable across restarts)", async () => {
+    const env = envWithIsolatedKeyPath();
+    const first = await buildConfig({}, env);
+
+    // Simulate a fresh process invocation (the file on disk should be
+    // what makes the key stable).
+    resetPersistedSessionApiKeyCache();
+
+    const second = await buildConfig({}, env);
+
+    expect(second.sessionApiKey).toBe(first.sessionApiKey);
+  });
+
+  it("reads sessionApiKey from LOCAL_BACKEND_API_KEY", async () => {
+    const config = await buildConfig(
+      {},
+      { ...envWithIsolatedKeyPath(), LOCAL_BACKEND_API_KEY: "my-api-key" },
+    );
+
+    expect(config.sessionApiKey).toBe("my-api-key");
+  });
+});
+
+describe("stack mode routing", () => {
+  const keyDirs: string[] = [];
+
+  afterEach(() => {
+    while (keyDirs.length > 0) {
+      const dir = keyDirs.pop();
+      if (dir) rmSync(dir, { recursive: true, force: true });
+    }
+    resetPersistedSessionApiKeyCache();
+  });
+
+  function envWithIsolatedKeyPath(
+    extra: Record<string, string> = {},
+  ): Record<string, string> {
+    const dir = mkdtempSync(path.join(tmpdir(), "stack-mode-key-"));
+    keyDirs.push(dir);
+    return {
+      OH_SESSION_API_KEY_PATH: path.join(dir, "session-api-key.txt"),
+      PORT: "19802",
+      OH_CANVAS_SAFE_BACKEND_PORT: "19800",
+      OH_CANVAS_SAFE_AUTOMATION_PORT: "19801",
+      OH_CANVAS_SAFE_VITE_PORT: "19803",
+      ...extra,
+    };
+  }
+
+  it("uses only a frontend default route in frontend-only mode", async () => {
+    const config = await buildConfig(
+      { frontendOnly: true },
+      envWithIsolatedKeyPath(),
+    );
+
+    expect(config.launchFrontend).toBe(true);
+    expect(config.launchAgentServer).toBe(false);
+    expect(config.launchAutomation).toBe(false);
+    expect(getLocalServiceRoutes(config)).toEqual([]);
+    expect(getFrontendBackend(config)).toBe(
+      `http://localhost:${config.vitePort}`,
+    );
+    expect(buildRouteArgs(getLocalServiceRoutes(config))).toEqual([]);
+  });
+
+  it("does not bake a host workspace path in frontend-only mode by default", async () => {
+    const config = await buildConfig(
+      { frontendOnly: true },
+      envWithIsolatedKeyPath(),
+    );
+
+    expect(config.viteWorkingDir).toBeUndefined();
+  });
+
+  it("honors explicit frontend-only VITE_WORKING_DIR values", async () => {
+    const config = await buildConfig(
+      { frontendOnly: true },
+      envWithIsolatedKeyPath({ VITE_WORKING_DIR: "workspace/project" }),
+    );
+
+    expect(config.viteWorkingDir).toBe("workspace/project");
+  });
+
+  it("bakes the host workspace path when this launcher starts the agent-server", async () => {
+    const config = await buildConfig({}, envWithIsolatedKeyPath());
+
+    expect(config.viteWorkingDir).toBe(
+      path.join(config.stateDir, "workspaces"),
+    );
+  });
+
+  it("points frontend-only Vite at a separately running backend by default", async () => {
+    const config = await buildConfig(
+      { frontendOnly: true },
+      envWithIsolatedKeyPath(),
+    );
+
+    expect(buildViteBackendEnv(config, {})).toEqual({
+      VITE_BACKEND_HOST: "127.0.0.1:8000",
+    });
+  });
+
+  it("keeps full-stack Vite pointed at this launcher's ingress", async () => {
+    const config = await buildConfig({}, envWithIsolatedKeyPath());
+
+    expect(buildViteBackendEnv(config, {})).toEqual({
+      VITE_BACKEND_HOST: `127.0.0.1:${config.ingressPort}`,
+    });
+  });
+
+  it("binds Vite to loopback and injects the key by default", async () => {
+    const config = await buildConfig({}, envWithIsolatedKeyPath());
+
+    expect(buildViteFrontendEnv(config)).toMatchObject({
+      VITE_BIND_HOST: "127.0.0.1",
+      VITE_SESSION_API_KEY: config.sessionApiKey,
+    });
+    expect(buildViteFrontendEnv(config)).not.toHaveProperty(
+      "VITE_AUTH_REQUIRED",
+    );
+  });
+
+  it("keeps the session key out of an off-loopback Vite origin", async () => {
+    const config = await buildConfig(
+      { host: "0.0.0.0" },
+      envWithIsolatedKeyPath(),
+    );
+
+    const viteEnv = buildViteFrontendEnv(config);
+    expect(viteEnv.VITE_BIND_HOST).toBe("0.0.0.0");
+    expect(viteEnv).not.toHaveProperty("VITE_SESSION_API_KEY");
+    expect(viteEnv.VITE_AUTH_REQUIRED).toBe("true");
+  });
+
+  it("honors the explicit LAN session-key opt-in for Vite", async () => {
+    const config = await buildConfig(
+      { host: "0.0.0.0", allowLanSessionKey: true },
+      envWithIsolatedKeyPath(),
+    );
+    const env = buildViteFrontendEnv(config);
+    expect(env.VITE_SESSION_API_KEY).toBe(config.sessionApiKey);
+    expect(env.VITE_AUTH_REQUIRED).toBeUndefined();
+  });
+
+  it("keeps public mode key-free even with the LAN opt-in", async () => {
+    const config = await buildConfig(
+      { host: "0.0.0.0", public: true, allowLanSessionKey: true },
+      envWithIsolatedKeyPath({ LOCAL_BACKEND_API_KEY: "public-test-key" }),
+    );
+    const env = buildViteFrontendEnv(config);
+    expect(env.VITE_SESSION_API_KEY).toBeUndefined();
+    expect(env.VITE_AUTH_REQUIRED).toBe("true");
+  });
+
+  it("makes the key-free ingress reachable to Docker conversations", async () => {
+    const config = await buildConfig(
+      {},
+      envWithIsolatedKeyPath({ OH_CONVERSATION_RUNTIME: "docker" }),
+    );
+
+    expect(config.bindHost).toBe("0.0.0.0");
+    expect(buildViteFrontendEnv(config)).not.toHaveProperty(
+      "VITE_SESSION_API_KEY",
+    );
+  });
+
+  it("honors an explicit loopback override in Docker conversation mode", async () => {
+    const config = await buildConfig(
+      {},
+      envWithIsolatedKeyPath({
+        OH_CONVERSATION_RUNTIME: "docker",
+        OH_BIND_HOST: "127.0.0.1",
+      }),
+    );
+
+    expect(config.bindHost).toBe("127.0.0.1");
+  });
+
+  it("keeps the session key out of public-mode Vite on loopback", async () => {
+    const config = await buildConfig(
+      { public: true },
+      envWithIsolatedKeyPath({ LOCAL_BACKEND_API_KEY: "public-key" }),
+    );
+
+    const viteEnv = buildViteFrontendEnv(config);
+    expect(viteEnv.VITE_BIND_HOST).toBe("127.0.0.1");
+    expect(viteEnv).not.toHaveProperty("VITE_SESSION_API_KEY");
+    expect(viteEnv.VITE_AUTH_REQUIRED).toBe("true");
+  });
+
+  it("allows frontend-only Vite to target an explicit backend URL", async () => {
+    const config = await buildConfig(
+      { frontendOnly: true },
+      envWithIsolatedKeyPath(),
+    );
+
+    expect(
+      buildViteBackendEnv(config, {
+        VITE_BACKEND_BASE_URL: "https://backend.example.test",
+      }),
+    ).toEqual({
+      VITE_BACKEND_HOST: "backend.example.test",
+      VITE_USE_TLS: "true",
+    });
+  });
+
+  it("respects an explicit VITE_USE_TLS override with VITE_BACKEND_BASE_URL", async () => {
+    const config = await buildConfig(
+      { frontendOnly: true },
+      envWithIsolatedKeyPath(),
+    );
+
+    expect(
+      buildViteBackendEnv(config, {
+        VITE_BACKEND_BASE_URL: "https://backend.example.test",
+        VITE_USE_TLS: "false",
+      }),
+    ).toEqual({
+      VITE_BACKEND_HOST: "backend.example.test",
+    });
+  });
+
+  it("does not set VITE_USE_TLS for http:// VITE_BACKEND_BASE_URL", async () => {
+    const config = await buildConfig(
+      { frontendOnly: true },
+      envWithIsolatedKeyPath(),
+    );
+
+    expect(
+      buildViteBackendEnv(config, {
+        VITE_BACKEND_BASE_URL: "http://backend.example.test",
+      }),
+    ).toEqual({
+      VITE_BACKEND_HOST: "backend.example.test",
+    });
+  });
+
+  it("routes only local services through IPv4 in backend-only mode", async () => {
+    const config = await buildConfig(
+      { backendOnly: true },
+      envWithIsolatedKeyPath(),
+    );
+
+    expect(config.launchFrontend).toBe(false);
+    expect(config.launchAgentServer).toBe(true);
+    expect(config.launchAutomation).toBe(true);
+    expect(getFrontendBackend(config)).toBeNull();
+
+    const routes = getLocalServiceRoutes(config);
+    expect(routes).toContainEqual([
+      "/api/automation",
+      `http://127.0.0.1:${config.autoBackendPort}`,
+    ]);
+    expect(routes).toContainEqual([
+      "/api",
+      `http://127.0.0.1:${config.agentServerPort}`,
+    ]);
+
+    const routeArgs = buildRouteArgs(routes);
+    expect(routeArgs).toContain(
+      `/api/automation=http://127.0.0.1:${config.autoBackendPort}`,
+    );
+    expect(routeArgs).toContain(
+      `/server_info=http://127.0.0.1:${config.agentServerPort}`,
+    );
+    expect(routeArgs).not.toContain("--default");
+  });
+
+  it("routes the editor base path to the vscode port in the stock config", async () => {
+    // The whole point of the base path is that a stock launcher — no
+    // INGRESS_ROUTES, no OH_VSCODE_BASE_PATH — already reaches the editor
+    // through the single ingress origin. Both the outer ingress and the
+    // static-server route list are built from getLocalServiceRoutes, so
+    // asserting it here covers both.
+    const config = await buildConfig({}, envWithIsolatedKeyPath());
+
+    expect(config.vscodeBasePath).toBe("/vscode");
+
+    const routes = getLocalServiceRoutes(config);
+    expect(routes).toContainEqual([
+      config.vscodeBasePath,
+      `http://127.0.0.1:${config.vscodePort}`,
+    ]);
+    expect(buildRouteArgs(routes)).toContain(
+      `/vscode=http://127.0.0.1:${config.vscodePort}`,
+    );
+    // The editor must not collide with the agent-server or automation ports;
+    // it is a separate process reached through the same origin.
+    expect(config.vscodePort).not.toBe(config.agentServerPort);
+    expect(config.vscodePort).not.toBe(config.autoBackendPort);
+  });
+
+  it("passes the agent-server a base path matching the ingress route", async () => {
+    // The advertised URL and the route that serves it come from two different
+    // places (agent-server's /api/vscode/url vs. the proxy route table). They
+    // only agree because both read the same config value — assert that rather
+    // than each side in isolation.
+    const config = await buildConfig({}, envWithIsolatedKeyPath());
+    const env = buildAgentServerEnv(
+      buildSafeDevConfig(process.cwd(), {
+        ...envWithIsolatedKeyPath(),
+        OH_CANVAS_SAFE_BACKEND_PORT: String(config.agentServerPort),
+        OH_CANVAS_SAFE_VSCODE_PORT: String(config.vscodePort),
+      }),
+      { vscodeBasePath: config.vscodeBasePath },
+    );
+
+    expect(env.OH_VSCODE_BASE_PATH).toBe(config.vscodeBasePath);
+    expect(env.OH_VSCODE_PORT).toBe(String(config.vscodePort));
+
+    const [, vscodeBackend] =
+      getLocalServiceRoutes(config).find(
+        ([prefix]) => prefix === env.OH_VSCODE_BASE_PATH,
+      ) ?? [];
+    expect(vscodeBackend).toBe(`http://127.0.0.1:${env.OH_VSCODE_PORT}`);
+  });
+
+  it("preserves the editor prefix rather than stripping it", async () => {
+    // openvscode-server is launched with --server-base-path, so it generates
+    // its HTTP and WebSocket URLs beneath the prefix and only answers there.
+    // A router that stripped the prefix would 404 every asset.
+    const config = await buildConfig({}, envWithIsolatedKeyPath());
+    const routes = Object.fromEntries(getLocalServiceRoutes(config));
+    const route = createRouter(routes);
+    const vscodeBackend = `http://127.0.0.1:${config.vscodePort}`;
+
+    expect(route("/vscode")).toBe(vscodeBackend);
+    expect(route("/vscode/")).toBe(vscodeBackend);
+    // Workbench assets and the WebSocket upgrade path both sit under the
+    // prefix; the proxy forwards req.url unchanged, so matching is all that
+    // is needed for the prefix to survive.
+    expect(route("/vscode/static/out/vs/workbench/workbench.web.main.js")).toBe(
+      vscodeBackend,
+    );
+    expect(route("/vscode/stable-abc/?tkn=k")).toBe(vscodeBackend);
+    // Longest-prefix matching must not let /vscode swallow /api or vice versa.
+    expect(route("/api/vscode/url")).toBe(
+      `http://127.0.0.1:${config.agentServerPort}`,
+    );
+  });
+
+  it("addresses the agent-server over IPv4 for readiness and secret seeding", async () => {
+    const config = await buildConfig({}, envWithIsolatedKeyPath());
+
+    // The launcher starts the agent-server with `--host 127.0.0.1`, so the
+    // readiness probe (`/server_info`), the secret-seeding request, and the
+    // automation backend's AUTOMATION_AGENT_SERVER_URL must all skip the
+    // `localhost` lookup that resolves to ::1 first on Windows.
+    expect(getAgentServerBaseUrl(config)).toBe(
+      `http://127.0.0.1:${config.agentServerPort}`,
+    );
+  });
+
+  it("rejects the editor prefix when no agent-server is launched", async () => {
+    // Without an agent-server there is no editor behind the prefix. Falling
+    // back to index.html would answer an editor request with the canvas shell.
+    const config = await buildConfig(
+      { frontendOnly: true },
+      envWithIsolatedKeyPath(),
+    );
+
+    expect(getLocalServiceRoutes(config)).toEqual([]);
+    expect(getRejectPrefixes(config)).toContain("/vscode");
+  });
+
+  it("rejects mutually exclusive partial-stack modes", async () => {
+    await expect(
+      buildConfig(
+        { frontendOnly: true, backendOnly: true },
+        envWithIsolatedKeyPath(),
+      ),
+    ).rejects.toThrow(/cannot be used together/);
+  });
+});
+
+describe("setServiceLogListener", () => {
+  afterEach(() => {
+    // Always clear the listener so it doesn't leak between tests.
+    setServiceLogListener(null);
+  });
+
+  it("forwards stdout, stderr, and exit lines to the listener", async () => {
+    const captured: Array<{ name: string; line: string; level: string }> = [];
+    setServiceLogListener((name: string, line: string, level: string) => {
+      captured.push({ name, line, level });
+    });
+
+    // Spawn a tiny inline script that writes to stdout, stderr, and exits
+    // non-zero so we exercise all three log paths. `process.execPath` is
+    // the same Node binary running the test so this is portable.
+    const proc = spawnService(
+      "log-listener-test",
+      process.execPath,
+      [
+        "-e",
+        // Use double-quoted JS to avoid shell quoting differences.
+        'process.stdout.write("hello-stdout\\n"); process.stderr.write("hello-stderr\\n"); process.exit(2);',
+      ],
+      {},
+    );
+
+    await once(proc, "exit");
+    // Give the stdout/stderr 'data' handlers and the exit handler a tick to
+    // run after the process has actually exited.
+    await delay(50);
+
+    const lines = captured.map((c) => `${c.level}:${c.line}`);
+    expect(lines).toContain("stdout:hello-stdout");
+    expect(lines).toContain("stderr:hello-stderr");
+    expect(lines).toContain("error:exited with code 2");
+
+    // Every captured line must be tagged with our service name.
+    expect(captured.every((c) => c.name === "log-listener-test")).toBe(true);
+  });
+
+  it("is a no-op once the listener is cleared", async () => {
+    const captured: string[] = [];
+    setServiceLogListener((_n: string, line: string) => captured.push(line));
+    setServiceLogListener(null);
+
+    const proc = spawnService(
+      "log-listener-clear-test",
+      process.execPath,
+      ["-e", 'process.stdout.write("should-not-be-seen\\n");'],
+      {},
+    );
+
+    await once(proc, "exit");
+    await delay(50);
+
+    expect(captured).toHaveLength(0);
+  });
+
+  it("ignores non-function values without throwing", () => {
+    // Passing anything that isn't a function (undefined, null, a string) must
+    // be safe — main() relies on this so it can always call
+    // setServiceLogListener(onServiceLog) regardless of whether the embedder
+    // supplied a callback.
+    expect(() => setServiceLogListener(undefined)).not.toThrow();
+    expect(() => setServiceLogListener(null)).not.toThrow();
+    expect(() => setServiceLogListener("not a function")).not.toThrow();
+  });
+
+  it("swallows errors thrown by the listener so a buggy embedder cannot kill the dev stack", async () => {
+    // A listener that throws on every call must not propagate; the stdout
+    // handler in spawnService is fire-and-forget. We can't easily observe
+    // an unhandled rejection from within Vitest, but if we can run a process
+    // to completion without the test failing, the catch is doing its job.
+    setServiceLogListener(() => {
+      throw new Error("buggy listener");
+    });
+
+    const proc = spawnService(
+      "log-listener-throws-test",
+      process.execPath,
+      ["-e", 'process.stdout.write("line\\n"); process.exit(0);'],
+      {},
+    );
+
+    const [code] = await once(proc, "exit");
+    expect(code).toBe(0);
+  });
+});
+
+describe("superviseService", () => {
+  const exitWith = (code: number) => ["-e", `process.exit(${code})`];
+  const stayUp = ["-e", "setInterval(() => {}, 1_000)"];
+
+  it("restarts a service that exits on its own", async () => {
+    // Arrange: the first run crashes, the replacement stays up.
+    const procs: ReturnType<typeof spawnService>[] = [];
+    const onFailure = vi.fn();
+
+    // Act
+    superviseService(
+      "supervise-restart-test",
+      (hooks: object) => {
+        const args = procs.length === 0 ? exitWith(7) : stayUp;
+        const proc = spawnService(
+          "supervise-restart-test",
+          process.execPath,
+          args,
+          hooks,
+        );
+        procs.push(proc);
+        return proc;
+      },
+      { onFailure, restartDelayMs: 0 },
+    );
+
+    // Assert
+    await vi.waitFor(() => expect(procs).toHaveLength(2));
+    await delay(200);
+    expect(procs).toHaveLength(2);
+    expect(procs[1].exitCode).toBeNull();
+    expect(onFailure).not.toHaveBeenCalled();
+    procs[1].kill();
+  });
+
+  it("stops the stack and reports once the service keeps exiting", async () => {
+    // Arrange
+    let starts = 0;
+    const failure = new Promise<Error>((resolve) => {
+      // Act
+      superviseService(
+        "supervise-give-up-test",
+        (hooks: object) => {
+          starts += 1;
+          return spawnService(
+            "supervise-give-up-test",
+            process.execPath,
+            exitWith(3),
+            hooks,
+          );
+        },
+        { onFailure: resolve, maxRestarts: 2, restartDelayMs: 0 },
+      );
+    });
+
+    // Assert
+    const error = await failure;
+    expect(starts).toBe(3);
+    expect(error.message).toContain(
+      "The supervise-give-up-test exited 3 times (last: 3)",
+    );
+  }, 15_000);
+});
+
+describe("dev-with-automation CLI", () => {
+  it.skipIf(process.platform === "win32")(
+    "cleans up detached services when the launcher receives SIGHUP",
+    async () => {
+      const moduleUrl = pathToFileURL(
+        path.join(repoRoot, "scripts", "dev-with-automation.mjs"),
+      ).href;
+      const fixtureSource = [
+        'import net from "node:net";',
+        "const server = net.createServer(() => {});",
+        'server.listen(0, "127.0.0.1", () => console.log("READY", process.pid, server.address().port));',
+      ].join("\n");
+      const supervisorSource = [
+        `import { spawnService } from ${JSON.stringify(moduleUrl)};`,
+        `const fixture = spawnService("fixture", process.execPath, ["--input-type=module", "--eval", ${JSON.stringify(fixtureSource)}]);`,
+        'console.log("SPAWNED", fixture.pid);',
+        "setInterval(() => {}, 1_000);",
+      ].join("\n");
+
+      const supervisor = spawn(
+        process.execPath,
+        ["--input-type=module", "--eval", supervisorSource],
+        {
+          cwd: repoRoot,
+          stdio: ["ignore", "pipe", "pipe"],
+        },
+      );
+      let output = "";
+      let fixturePid: number | undefined;
+      let fixturePort: number | undefined;
+      const capture = (chunk: Buffer) => {
+        output += chunk.toString();
+        const spawnedMatch = output.match(/SPAWNED (\d+)/);
+        const readyMatch = output.match(/READY \d+ (\d+)/);
+        if (spawnedMatch) fixturePid = Number(spawnedMatch[1]);
+        if (readyMatch) fixturePort = Number(readyMatch[1]);
+      };
+      supervisor.stdout.on("data", capture);
+      supervisor.stderr.on("data", capture);
+
+      try {
+        const readyDeadline = Date.now() + 5_000;
+        while (!fixturePort && Date.now() < readyDeadline) {
+          if (supervisor.exitCode !== null) break;
+          await delay(25);
+        }
+        expect(fixturePid, output).toBeDefined();
+        expect(fixturePort, output).toBeDefined();
+
+        supervisor.kill("SIGHUP");
+        const exitResult = await Promise.race([
+          once(supervisor, "exit").then(([code, signal]) => ({
+            code,
+            signal,
+            timedOut: false,
+          })),
+          delay(6_000).then(() => ({
+            code: null,
+            signal: null,
+            timedOut: true,
+          })),
+        ]);
+
+        expect(exitResult.timedOut).toBe(false);
+        expect(exitResult).toMatchObject({ code: 0, signal: null });
+
+        const releaseDeadline = Date.now() + 2_000;
+        let portIsOpen = true;
+        while (portIsOpen && Date.now() < releaseDeadline) {
+          portIsOpen = await new Promise<boolean>((resolve) => {
+            const socket = net.connect(fixturePort!, "127.0.0.1");
+            socket.setTimeout(250);
+            socket.once("connect", () => {
+              socket.destroy();
+              resolve(true);
+            });
+            socket.once("error", () => resolve(false));
+            socket.once("timeout", () => {
+              socket.destroy();
+              resolve(false);
+            });
+          });
+          if (portIsOpen) await delay(50);
+        }
+        expect(portIsOpen).toBe(false);
+      } finally {
+        if (supervisor.exitCode === null) supervisor.kill("SIGKILL");
+        if (fixturePid) {
+          try {
+            process.kill(-fixturePid, "SIGKILL");
+          } catch (error) {
+            if ((error as NodeJS.ErrnoException).code !== "ESRCH") throw error;
+          }
+        }
+      }
+    },
+    15_000,
+  );
+
+  // Runs the real `main()` with `--backend-only` and lets the caller decide
+  // what the automation backend does. `main()` starts it as
+  // `uv run --project <checkout> uvicorn ... --host 127.0.0.1 --port <port>`;
+  // the fake `uv` hands those arguments to `automationSource` (a Node ESM
+  // script). The agent-server is an in-process stub that answers every request,
+  // so the launcher reaches the automation wait without delay.
+  async function launchBackendOnly(automationSource: string) {
+    const moduleUrl = pathToFileURL(
+      path.join(repoRoot, "scripts", "dev-with-automation.mjs"),
+    ).href;
+    const dir = mkdtempSync(path.join(tmpdir(), "automation-startup-"));
+    const bin = path.join(dir, "bin");
+    const checkout = path.join(dir, "automation");
+    mkdirSync(bin);
+    mkdirSync(checkout);
+    writeFileSync(path.join(checkout, "pyproject.toml"), "");
+    const automationScript = path.join(dir, "automation.mjs");
+    writeFileSync(automationScript, automationSource);
+    // `uvx` only has to exist; the agent-server is stubbed below.
+    writeFileSync(path.join(bin, "uvx"), "#!/bin/sh\nexit 0\n", {
+      mode: 0o755,
+    });
+    writeFileSync(
+      path.join(bin, "uv"),
+      `#!/bin/sh\nexec ${JSON.stringify(process.execPath)} ${JSON.stringify(automationScript)} "$@"\n`,
+      { mode: 0o755 },
+    );
+    const ports: number[] = [];
+    for (let i = 0; i < 3; i += 1) {
+      const server = net.createServer();
+      await new Promise<void>((resolve) =>
+        server.listen(0, "127.0.0.1", resolve),
+      );
+      ports.push((server.address() as net.AddressInfo).port);
+      await new Promise((resolve) => server.close(resolve));
+    }
+    const [ingressPort, agentServerPort, automationPort] = ports;
+    const launcherScript = path.join(dir, "launch.mjs");
+    writeFileSync(
+      launcherScript,
+      [
+        'import http from "node:http";',
+        `import { main } from ${JSON.stringify(moduleUrl)};`,
+        "const startAgentServer = (config) =>",
+        '  http.createServer((_req, res) => res.end("{}")).listen(config.agentServerPort, "127.0.0.1");',
+        "main({ startAgentServer, agentServerReadyTimeoutMs: 10_000 })",
+        '  .then(() => console.log("LAUNCHED"))',
+        '  .catch((error) => { console.log("FAILED:", error.message); process.exit(1); });',
+      ].join("\n"),
+    );
+
+    const launcher = spawn(
+      process.execPath,
+      [launcherScript, "--backend-only", "--port", String(ingressPort)],
+      {
+        cwd: repoRoot,
+        env: {
+          ...process.env,
+          PATH: `${bin}${path.delimiter}${process.env.PATH ?? ""}`,
+          HOME: dir,
+          OH_CANVAS_SAFE_STATE_DIR: path.join(dir, "state"),
+          OH_CANVAS_SAFE_BACKEND_PORT: String(agentServerPort),
+          OH_CANVAS_SAFE_AUTOMATION_PORT: String(automationPort),
+          OH_AUTOMATION_LOCAL_PATH: checkout,
+        },
+        stdio: ["ignore", "pipe", "pipe"],
+      },
+    );
+    let output = "";
+    launcher.stdout.on("data", (chunk) => {
+      output += chunk.toString();
+    });
+    launcher.stderr.on("data", (chunk) => {
+      output += chunk.toString();
+    });
+    const exited = once(launcher, "exit").then(([code]) => code as number);
+
+    return {
+      ingressPort,
+      automationPort,
+      output: () => output,
+      exitCode: (timeoutMs: number) =>
+        Promise.race([exited, delay(timeoutMs).then(() => "timed out")]),
+      async waitForOutput(text: string, timeoutMs: number) {
+        const deadline = Date.now() + timeoutMs;
+        while (!output.includes(text) && Date.now() < deadline) {
+          if (launcher.exitCode !== null) break;
+          await delay(50);
+        }
+        return output.includes(text);
+      },
+      async stop() {
+        // SIGTERM lets the launcher's shutdown handler stop its detached
+        // services; that is also the cleanup when a regression leaves it up.
+        if (launcher.exitCode === null) {
+          launcher.kill("SIGTERM");
+          await Promise.race([exited, delay(6_000)]);
+          if (launcher.exitCode === null) launcher.kill("SIGKILL");
+        }
+        rmSync(dir, { recursive: true, force: true });
+      },
+    };
+  }
+
+  const isListening = (port: number) =>
+    new Promise<boolean>((resolve) => {
+      const socket = net.connect(port, "127.0.0.1");
+      socket.once("connect", () => {
+        socket.destroy();
+        resolve(true);
+      });
+      socket.once("error", () => resolve(false));
+    });
+
+  it.skipIf(process.platform === "win32")(
+    "stops the stack and exits 1 when the automation backend exits during startup",
+    async () => {
+      // Exits the way automation does when a database migration fails.
+      const stack = await launchBackendOnly(
+        'console.error("Failed to apply SQLite migrations");\nprocess.exit(3);\n',
+      );
+
+      try {
+        const exitCode = await stack.exitCode(25_000);
+
+        const output = stack.output();
+        expect(exitCode, output).toBe(1);
+        // The stack is announced without waiting for automation, then
+        // stopped once automation exits. "Ingress:" is the banner's first
+        // entry, printed in every launch mode.
+        const banner = output.indexOf("Ingress:");
+        const failure = output.indexOf(
+          "The automation backend exited during startup (code 3).",
+        );
+        expect(banner, output).toBeGreaterThan(-1);
+        expect(failure, output).toBeGreaterThan(banner);
+        expect(await isListening(stack.ingressPort)).toBe(false);
+      } finally {
+        await stack.stop();
+      }
+    },
+    30_000,
+  );
+
+  it.skipIf(process.platform === "win32")(
+    "announces the stack without waiting for the automation backend",
+    async () => {
+      // Listening but not ready yet: the first two health probes get 503, so
+      // "Ready" is only logged after the launcher has polled and waited.
+      const stack = await launchBackendOnly(
+        [
+          'import http from "node:http";',
+          'const port = Number(process.argv[process.argv.indexOf("--port") + 1]);',
+          "let probes = 0;",
+          "http",
+          "  .createServer((req, res) => {",
+          '    const healthy = req.url === "/api/automation/health" && ++probes > 2;',
+          "    res.writeHead(healthy ? 200 : 503).end(healthy ? '{\"status\":\"ok\"}' : '');",
+          "  })",
+          '  .listen(port, "127.0.0.1");',
+          "// Never outlive the test, even if the launcher is killed.",
+          "setTimeout(() => process.exit(0), 30_000);",
+        ].join("\n"),
+      );
+
+      try {
+        expect(
+          await stack.waitForOutput("LAUNCHED", 20_000),
+          stack.output(),
+        ).toBe(true);
+
+        const readyLine = `Ready at http://127.0.0.1:${stack.automationPort}/api/automation/health`;
+        expect(
+          await stack.waitForOutput(readyLine, 20_000),
+          stack.output(),
+        ).toBe(true);
+
+        const output = stack.output();
+        const ready = output.indexOf(readyLine);
+        expect(output.indexOf("Ingress:"), output).toBeGreaterThan(-1);
+        expect(output.indexOf("Ingress:"), output).toBeLessThan(ready);
+        // A healthy start keeps the stack up.
+        expect(await stack.exitCode(1_000)).toBe("timed out");
+        expect(await isListening(stack.ingressPort)).toBe(true);
+      } finally {
+        await stack.stop();
+      }
+    },
+    30_000,
+  );
+
+  it("shows help with --help flag", async () => {
+    const child = spawn(
+      process.execPath,
+      ["scripts/dev-with-automation.mjs", "--help"],
+      {
+        cwd: repoRoot,
+        stdio: ["ignore", "pipe", "pipe"],
+      },
+    );
+
+    let output = "";
+    child.stdout.on("data", (chunk) => {
+      output += chunk.toString();
+    });
+
+    const [code] = await once(child, "exit");
+
+    expect(code).toBe(0);
+    expect(output).toContain("Agent Canvas + Automation Development Stack");
+    expect(output).toContain("--port");
+    expect(output).toContain("--automation-ref");
+    expect(output).toContain("--automation-repo");
+    expect(output).toContain("--static");
+    expect(output).toContain("--dynamic");
+    expect(output).toContain("--frontend-only");
+    expect(output).toContain("--backend-only");
+    expect(output).toContain("OH_AUTOMATION_GIT_REF");
+    expect(output).toContain("OH_AGENT_SERVER_LOCAL_PATH");
+    expect(output).toContain("OPENHANDS_AUTOMATION_API_KEY");
+    expect(output).toContain("SECRETS:");
+  });
+
+  it("fails fast with a clear error when OH_AGENT_SERVER_LOCAL_PATH is invalid", async () => {
+    // Arrange: an absolute but empty directory — `validateLocalAgentServerPath`
+    // requires the four workspace subdirs (openhands-agent-server, openhands-sdk,
+    // openhands-tools, openhands-workspace) and must reject this.
+    const emptyDir = mkdtempSync(path.join(tmpdir(), "bad-sdk-"));
+
+    // Stub a no-op `uvx` on PATH so `checkPrerequisites` passes even on CI
+    // runners that don't have uv installed. The prerequisite check must
+    // succeed so the LOCAL_PATH validation guard (the actual subject of this
+    // test, which runs immediately after) is exercised.
+    const isWindows = process.platform === "win32";
+    const stubBinDir = mkdtempSync(path.join(tmpdir(), "stub-bin-"));
+    if (isWindows) {
+      writeFileSync(path.join(stubBinDir, "uvx.cmd"), "@exit /b 0\r\n");
+    } else {
+      writeFileSync(path.join(stubBinDir, "uvx"), "#!/bin/sh\nexit 0\n", {
+        mode: 0o755,
+      });
+    }
+
+    // Act: spawn `dev-with-automation.mjs` with that path set. Stubbed `uvx`
+    // is prepended to PATH so the prerequisite check passes; the validation
+    // guard must trip *after* those checks but *before* port allocation, so
+    // we can assert on both the error message and the absence of side effects.
+    const child = spawn(process.execPath, ["scripts/dev-with-automation.mjs"], {
+      cwd: repoRoot,
+      env: {
+        PATH: `${stubBinDir}${path.delimiter}${process.env.PATH ?? ""}`,
+        HOME: process.env.HOME ?? "",
+        OH_AGENT_SERVER_LOCAL_PATH: emptyDir,
+        // Windows needs these for `where.exe` to resolve the stub and npm
+        ...(isWindows
+          ? {
+              PATHEXT: process.env.PATHEXT ?? ".CMD;.EXE;.BAT;.COM",
+              SystemRoot: process.env.SystemRoot ?? "",
+              USERPROFILE: process.env.USERPROFILE ?? "",
+            }
+          : {}),
+      },
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+
+    let output = "";
+    child.stdout.on("data", (chunk) => {
+      output += chunk.toString();
+    });
+    child.stderr.on("data", (chunk) => {
+      output += chunk.toString();
+    });
+
+    const exitResult = await Promise.race([
+      once(child, "exit").then(([code, signal]) => ({
+        code,
+        signal,
+        timedOut: false,
+      })),
+      delay(10_000).then(() => ({ code: null, signal: null, timedOut: true })),
+    ]);
+
+    if (exitResult.timedOut) {
+      child.kill("SIGKILL");
+    }
+
+    try {
+      // Assert: process exits non-zero, surfaces the validator's error, and
+      // never reaches `buildConfig` (no `[ports] Allocating ports...` log).
+      expect(exitResult.timedOut).toBe(false);
+      expect(exitResult.code).toBe(1);
+      expect(output).toContain(
+        "OH_AGENT_SERVER_LOCAL_PATH is missing expected workspace package",
+      );
+      expect(output).not.toContain("Allocating ports");
+    } finally {
+      rmSync(emptyDir, { recursive: true, force: true });
+      rmSync(stubBinDir, { recursive: true, force: true });
+    }
+  });
+
+  it("exits promptly when uvx is missing", async () => {
+    const child = spawn(process.execPath, ["scripts/dev-with-automation.mjs"], {
+      cwd: repoRoot,
+      env: {
+        PATH: "",
+      },
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+
+    let output = "";
+    child.stdout.on("data", (chunk) => {
+      output += chunk.toString();
+    });
+    child.stderr.on("data", (chunk) => {
+      output += chunk.toString();
+    });
+
+    const exitResult = await Promise.race([
+      once(child, "exit").then(([code, signal]) => ({
+        code,
+        signal,
+        timedOut: false,
+      })),
+      delay(4_000).then(() => ({ code: null, signal: null, timedOut: true })),
+    ]);
+
+    if (exitResult.timedOut) {
+      child.kill("SIGKILL");
+    }
+
+    expect(exitResult.timedOut).toBe(false);
+    expect(exitResult.code).toBe(1);
+    expect(output).toContain("uvx");
+  });
+});
+
+describe("backend logging defaults", () => {
+  // Minimal SafeDevConfig for buildAgentServerEnv; only the fields it reads
+  // matter, but it accesses them directly rather than via optional chaining.
+  const baseConfig = () => ({
+    cwd: process.cwd(),
+    backendPort: 18000,
+    vscodePort: 18001,
+    vscodeBasePath: "/vscode",
+    stateDir: "/tmp/state",
+    tmuxTmpDir: "/tmp/tmux",
+    conversationsPath: "/tmp/conversations",
+    workspacesPath: "/tmp/workspaces",
+    bashEventsDir: "/tmp/bash-events",
+    backendBaseUrl: "http://127.0.0.1:18000",
+    backendHost: "127.0.0.1",
+    workingDir: process.cwd(),
+    secretKey: "secret",
+    sessionApiKey: "session",
+    canvasToolsDir: "/tmp/tools",
+    extensionsDir: null,
+  });
+
+  it("quiets the automation service by default", () => {
+    const env = buildBackendLogEnv({ automation: true, env: {} });
+
+    expect(env.LOG_LEVEL).toBe("WARNING");
+    expect(env.AUTOMATION_LOG_LEVEL).toBe("WARNING");
+  });
+
+  it("leaves AUTOMATION_LOG_LEVEL unset for the agent-server", () => {
+    // The agent-server does not read AUTOMATION_LOG_LEVEL; setting it there
+    // would suggest it has an effect it does not.
+    const env = buildBackendLogEnv({ env: {} });
+
+    expect(env.LOG_LEVEL).toBe("WARNING");
+    expect(env).not.toHaveProperty("AUTOMATION_LOG_LEVEL");
+  });
+
+  it("honors an explicit LOG_LEVEL from the caller's environment", () => {
+    const env = buildBackendLogEnv({
+      automation: true,
+      env: { LOG_LEVEL: "INFO" },
+    });
+
+    expect(env.LOG_LEVEL).toBe("INFO");
+    expect(env.AUTOMATION_LOG_LEVEL).toBe("INFO");
+  });
+
+  it("lets AUTOMATION_LOG_LEVEL diverge from LOG_LEVEL", () => {
+    const env = buildBackendLogEnv({
+      automation: true,
+      env: { LOG_LEVEL: "ERROR", AUTOMATION_LOG_LEVEL: "DEBUG" },
+    });
+
+    expect(env.LOG_LEVEL).toBe("ERROR");
+    expect(env.AUTOMATION_LOG_LEVEL).toBe("DEBUG");
+  });
+
+  it("raises both services to DEBUG under --verbose, overriding the environment", () => {
+    const env = buildBackendLogEnv({
+      verbose: true,
+      automation: true,
+      env: { LOG_LEVEL: "ERROR" },
+    });
+
+    expect(env.LOG_LEVEL).toBe("DEBUG");
+    expect(env.AUTOMATION_LOG_LEVEL).toBe("DEBUG");
+  });
+
+  it("passes the same level to uvicorn as to the automation service", () => {
+    const args = buildAutomationLogArgs({ autoBackendPort: 18001 }, {});
+
+    expect(args).toEqual([
+      "--host",
+      "127.0.0.1",
+      "--port",
+      "18001",
+      "--log-level",
+      "warning",
+    ]);
+  });
+
+  it("passes debug to uvicorn under --verbose", () => {
+    const args = buildAutomationLogArgs(
+      { autoBackendPort: 18001, verbose: true },
+      {},
+    );
+
+    expect(args.at(-1)).toBe("debug");
+  });
+
+  // Uvicorn validates --log-level with a click.Choice and exits 2 on anything
+  // outside its set, which takes the whole dev stack down. The app accepts
+  // more than Uvicorn does, so an explicit override must be narrowed rather
+  // than forwarded verbatim.
+  describe("narrows the Uvicorn --log-level to a value Uvicorn accepts", () => {
+    const UVICORN_ACCEPTS = [
+      "critical",
+      "error",
+      "warning",
+      "info",
+      "debug",
+      "trace",
+    ];
+
+    it("keeps every level Uvicorn already accepts", () => {
+      for (const level of UVICORN_ACCEPTS) {
+        expect(uvicornLogLevel(level)).toBe(level);
+        expect(uvicornLogLevel(level.toUpperCase())).toBe(level);
+      }
+    });
+
+    it("maps the Python aliases Uvicorn rejects", () => {
+      expect(uvicornLogLevel("WARN")).toBe("warning");
+      expect(uvicornLogLevel("warn")).toBe("warning");
+      expect(uvicornLogLevel("FATAL")).toBe("critical");
+      expect(uvicornLogLevel("fatal")).toBe("critical");
+    });
+
+    it("maps numeric levels onto the nearest Uvicorn name", () => {
+      expect(uvicornLogLevel("50")).toBe("critical");
+      expect(uvicornLogLevel("40")).toBe("error");
+      expect(uvicornLogLevel("30")).toBe("warning");
+      expect(uvicornLogLevel("20")).toBe("info");
+      expect(uvicornLogLevel("10")).toBe("debug");
+      expect(uvicornLogLevel("5")).toBe("trace");
+    });
+
+    it("falls back to Uvicorn's own default for unrepresentable values", () => {
+      // `NOTSET` means "inherit", not "most verbose", and Uvicorn has no
+      // equivalent; the pre-PR launchers passed no --log-level at all, which
+      // left Uvicorn at `info`.
+      expect(uvicornLogLevel("NOTSET")).toBe("info");
+      expect(uvicornLogLevel("0")).toBe("info");
+      expect(uvicornLogLevel("")).toBe("info");
+      expect(uvicornLogLevel(undefined)).toBe("info");
+      expect(uvicornLogLevel("verbose")).toBe("info");
+    });
+
+    it("never returns a value outside Uvicorn's accepted set", () => {
+      const inputs = [
+        "WARN",
+        "FATAL",
+        "NOTSET",
+        "30",
+        "0",
+        "",
+        "bogus",
+        "999999999999999999999",
+        "  30  ",
+        "warning",
+      ];
+      for (const input of inputs) {
+        expect(UVICORN_ACCEPTS).toContain(uvicornLogLevel(input));
+      }
+    });
+
+    it("narrows an explicit LOG_LEVEL alias in the built args", () => {
+      // The regression: `LOG_LEVEL=WARN npm run dev` aborted Uvicorn.
+      const args = buildAutomationLogArgs(
+        { autoBackendPort: 18001 },
+        { LOG_LEVEL: "WARN" },
+      );
+
+      expect(args.at(-1)).toBe("warning");
+    });
+
+    it("leaves the app's LOG_LEVEL env untouched for an alias", () => {
+      // The app reads LOG_LEVEL through Python's logging module, which does
+      // accept WARN — only the Uvicorn argument is narrowed.
+      const env = buildBackendLogEnv({
+        automation: true,
+        env: { LOG_LEVEL: "WARN" },
+      });
+
+      expect(env.LOG_LEVEL).toBe("WARN");
+      expect(env.AUTOMATION_LOG_LEVEL).toBe("WARN");
+    });
+  });
+
+  it("gives the agent-server the quiet default without an opt-out needed", () => {
+    const env = buildAgentServerEnv(baseConfig(), { env: {} });
+
+    expect(env.LOG_LEVEL).toBe("WARNING");
+  });
+
+  it("raises the agent-server to DEBUG under --verbose", () => {
+    const env = buildAgentServerEnv(baseConfig(), { env: {}, verbose: true });
+
+    expect(env.LOG_LEVEL).toBe("DEBUG");
+  });
+});
+
+describe("buildMarsWebEnv", () => {
+  it("puts the bridge on the ingress behind the session key, off the static child", () => {
+    const config = { sessionApiKey: "stack-key", marsWebBridge: true } as never;
+    expect(buildMarsWebEnv("ingress", config)).toEqual({
+      MARS_WEB_KEY: "stack-key",
+    });
+    expect(buildMarsWebEnv("static", config)).toEqual({ MARS_WEB: "0" });
+  });
+
+  it("tells the ingress bridge where to keep sign-ins and how to encrypt them", () => {
+    const config = {
+      sessionApiKey: "stack-key",
+      marsWebBridge: true,
+      stateDir: "/home/me/.openhands/agent-canvas",
+      secretKey: "settings-key",
+    } as never;
+    expect(buildMarsWebEnv("ingress", config)).toEqual({
+      MARS_WEB_KEY: "stack-key",
+      MARS_STATE_DIR: "/home/me/.openhands/agent-canvas",
+      OH_SECRET_KEY: "settings-key",
+    });
+    expect(buildMarsWebEnv("static", config)).toEqual({ MARS_WEB: "0" });
+  });
+
+  it("mounts nothing without a session key", () => {
+    expect(
+      buildMarsWebEnv("ingress", { marsWebBridge: true } as never),
+    ).toEqual({ MARS_WEB: "0" });
+  });
+
+  it("mounts nothing under Electron (marsWebBridge: false), even with a key", () => {
+    expect(
+      buildMarsWebEnv("ingress", {
+        sessionApiKey: "k",
+        marsWebBridge: false,
+      } as never),
+    ).toEqual({ MARS_WEB: "0" });
+  });
+});

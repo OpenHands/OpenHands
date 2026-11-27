@@ -1,0 +1,886 @@
+/**
+ * Electron Main Process — Agent Canvas Desktop
+ *
+ * Starts the full Agent Canvas stack (agent-server + automation via uvx,
+ * static frontend, ingress proxy), then opens a native BrowserWindow once
+ * the ingress is ready. Shows a loading screen while backends start.
+ *
+ * Path layout (electron-builder uses directories.app: 'electron'):
+ *
+ *   Packaged (macOS example):
+ *     Contents/Resources/app/     ← __dirname (main.mjs lives here)
+ *       main.mjs
+ *       loading.html
+ *       scripts/                  ← copied from repo scripts/
+ *       config/                   ← copied from repo config/
+ *       build/                    ← static frontend
+ *     Contents/Resources/bin-<arch>/  ← process.resourcesPath/bin-<arch>
+ *       uv  uvx                        ← bundled via extraResources
+ *     Contents/Resources/bin/          ← legacy flat dir (single-arch builds)
+ *
+ *   Bundled runtimes (uv `bin`, Node `node`) prefer the arch-tagged dir
+ *   matching process.arch — under a universal binary that's the executing
+ *   slice (arm64 on Apple Silicon, x64 on Intel/Rosetta) — and fall back
+ *   to the legacy flat dir (see lib/bundled-runtime-dir.mjs).
+ *
+ *   Dev (npm run desktop  →  electron electron):
+ *     electron/main.mjs           ← __dirname = <repo>/electron/
+ *     scripts/ config/ build/     ← one level up: <repo>/
+ *     system uvx from PATH
+ *
+ * When packaged, scripts/config/build are siblings of main.mjs so
+ * projectRoot === __dirname. In dev they are one level up.
+ *
+ * The dev command points electron at the electron/ DIRECTORY, not at
+ * main.mjs directly. Electron's default_app only reads name/productName/
+ * version out of <arg>/package.json, so passing the file makes it look for
+ * electron/main.mjs/package.json, miss, and leave app.name at the host
+ * bundle's default — "Electron" in the menu bar and userData path.
+ */
+
+import {
+  app,
+  BrowserWindow,
+  clipboard,
+  dialog,
+  ipcMain,
+  nativeImage,
+  nativeTheme,
+  safeStorage,
+  shell,
+} from "electron";
+import { chmodSync, existsSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
+import { spawnSync } from "node:child_process";
+
+import { isExternalBrowsableUrl, isLoopbackAppUrl } from "./lib/window-url-policy.mjs";
+import { resolveBundledRuntimeDir } from "./lib/bundled-runtime-dir.mjs";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
+// ── Path resolution ───────────────────────────────────────────────────────────
+// Packaged (directories.app: 'electron'): scripts/config/build are SIBLINGS of
+// main.mjs inside Resources/app/, so projectRoot === __dirname.
+// Dev (electron electron): those directories are one level UP in the
+// repo root, so projectRoot === join(__dirname, '..').
+// Both branches key off __dirname (always <repo>/electron in dev), not
+// app.getAppPath(), so the entry-point form doesn't affect them.
+
+const projectRoot = app.isPackaged ? __dirname : join(__dirname, "..");
+const buildDir = join(projectRoot, "build");
+const scriptsDir = join(projectRoot, "scripts");
+
+// OpenHands raised-hands app icon, used as the BrowserWindow.icon option.
+// Windows gets the multi-size icon.ico (16→256, small sizes as classic BMP
+// entries — the Windows shell needs those); Linux uses the 1024×1024 PNG
+// for its taskbar. On macOS the dock icon comes from the .app bundle's
+// icon.icns, so this path is unused there. Both files live next to main.mjs
+// in dev and are copied into Resources/app/build-resources/ via the
+// `files:` array. Regenerate with `npm run generate-icons`.
+const appIconPath = join(
+  __dirname,
+  "build-resources",
+  process.platform === "win32" ? "icon.ico" : "icon.png",
+);
+
+// electron-builder's NSIS shortcuts are stamped with AppUserModelId
+// ${APP_ID} (WinShell::SetLnkAUMI in installer.nsh). Declare the same id so
+// running/pinned taskbar entries group with the shortcut and inherit its
+// icon. Must match appId in electron-builder.config.mjs, and must be set
+// before any BrowserWindow is created.
+if (process.platform === "win32") {
+  app.setAppUserModelId("dev.openhands.agent-canvas");
+}
+
+// ── Bundled uv ────────────────────────────────────────────────────────────────
+
+/**
+ * Inject the bundled uv binary into PATH so that uvx calls inside
+ * dev-with-automation.mjs resolve to our bundled binary.
+ * No-op in dev mode (falls back to system uv).
+ */
+function injectBundledUv() {
+  if (!app.isPackaged) return;
+
+  const isWin = process.platform === "win32";
+  const uvName = isWin ? "uv.exe" : "uv";
+  const uvxName = isWin ? "uvx.exe" : "uvx";
+  const binDir = resolveBundledRuntimeDir(process.resourcesPath, "bin");
+  if (!binDir) {
+    console.warn(
+      "[desktop] Bundled uv not found — looked in",
+      join(process.resourcesPath, `bin-${process.arch}`),
+      "and",
+      join(process.resourcesPath, "bin"),
+    );
+    return;
+  }
+  const uvPath = join(binDir, uvName);
+
+  // We only probe for `uv` here — `uv` and `uvx` ship together in the
+  // bundle (`download-uv.mjs` writes both), so if `uv` is present we
+  // assume `uvx` is too. `uvxAvailable()` is called separately by
+  // start-up code to confirm the resolved binary actually runs.
+  if (!existsSync(uvPath)) {
+    console.warn("[desktop] Bundled uv not found at", uvPath);
+    return;
+  }
+
+  // electron-builder copies files without preserving the +x bit on Unix.
+  if (!isWin) {
+    try {
+      chmodSync(uvPath, 0o755);
+      const uvxPath = join(binDir, uvxName);
+      if (existsSync(uvxPath)) chmodSync(uvxPath, 0o755);
+    } catch {}
+  }
+
+  const sep = isWin ? ";" : ":";
+  process.env.PATH = `${binDir}${sep}${process.env.PATH ?? ""}`;
+  console.log("[desktop] Injected bundled uv from", binDir);
+}
+
+/**
+ * Verify uvx is reachable (either bundled or system).
+ * Returns true/false — callers show a dialog on false.
+ */
+function uvxAvailable() {
+  const cmd = process.platform === "win32" ? "uvx.exe" : "uvx";
+  const r = spawnSync(cmd, ["--version"], { stdio: "pipe" });
+  return r.status === 0;
+}
+
+/**
+ * Inject the bundled Node.js distribution into PATH so subsequent spawns
+ * can find `node`, `npm`, and `npx`.
+ *
+ * When the app runs as a packaged .app on macOS, the system PATH is minimal
+ * (/usr/bin:/bin only) — Homebrew, nvm, asdf etc. installs of Node are
+ * invisible. Two breakages flow from that:
+ *
+ *   1. The dev-with-automation.mjs stack spawns `node scripts/ingress.mjs`
+ *      and `node scripts/static-server.mjs`; if `node` is not found those
+ *      processes fail silently and port 8000 never responds.
+ *   2. Most stdio MCP marketplace entries (Slack, GitHub, Figma, etc.)
+ *      use `command: "npx"`. When the agent-server tries to spawn one the
+ *      missing `npx` makes the spawn fail with ENOENT; the SDK reports it
+ *      as an `error_kind: "connection"` MCP test failure, surfaced in the
+ *      install modal as "Could not reach the server".
+ *
+ * We tried bridging via Electron-as-Node (ELECTRON_RUN_AS_NODE=1) wrappers
+ * first. That fixed the ENOENT but introduced a new failure: stdio MCP
+ * servers spawned through the wrapper exited with "McpError: Connection
+ * closed" before the JSON-RPC handshake completed. Electron-as-Node is
+ * fine for our networking helper scripts but its stdin/stdout semantics
+ * differ enough from a vanilla `node` binary that stdio JSON-RPC servers
+ * are not reliable under it. The robust fix is to ship a real Node.js
+ * runtime as an extraResource (see scripts/download-node.mjs and the
+ * `resources/node/` entry in electron-builder.config.mjs) and just put
+ * its bin dir on PATH.
+ *
+ * No-op in dev mode (`npm run desktop`): the user's terminal PATH already
+ * has Node tooling and `app.isPackaged` is false. If the bundled dir is
+ * somehow missing (e.g. the download step was skipped during packaging),
+ * we log a loud warning and leave PATH untouched so the failure mode is
+ * obvious in the console rather than confusing downstream.
+ */
+function injectBundledNode() {
+  if (!app.isPackaged) return;
+
+  const isWin = process.platform === "win32";
+  const nodeRoot = resolveBundledRuntimeDir(process.resourcesPath, "node");
+  if (!nodeRoot) {
+    console.warn(
+      "[desktop] Bundled Node.js not found — looked in " +
+        `${join(process.resourcesPath, `node-${process.arch}`)} and ` +
+        `${join(process.resourcesPath, "node")} — backend scripts and stdio ` +
+        "MCP servers will fail. Run `npm run download-node` and rebuild.",
+    );
+    return;
+  }
+  // POSIX Node distributions put binaries in bin/; Windows zips put node.exe
+  // and the npm.cmd / npx.cmd wrappers at the distribution root.
+  const binDir = isWin ? nodeRoot : join(nodeRoot, "bin");
+  const nodeExe = isWin ? join(nodeRoot, "node.exe") : join(binDir, "node");
+
+  if (!existsSync(nodeExe)) {
+    console.warn(
+      `[desktop] Bundled Node.js not found at ${nodeExe} — backend ` +
+        "scripts and stdio MCP servers will fail. Run `npm run download-node` " +
+        "and rebuild.",
+    );
+    return;
+  }
+
+  // node.exe alone is not enough. npm / npx are wrapper scripts that exec
+  // npm's JS entry points out of the distribution's own node_modules, and
+  // that directory is the one piece electron-builder drops on Windows (see
+  // restoreBundledNodeNpm in electron-builder.config.mjs). Since we PREPEND
+  // this dir to PATH, a half-copied bundle doesn't just fail to help — it
+  // shadows the user's working npm with shims that die on MODULE_NOT_FOUND.
+  // Warn loudly, but still inject: `node` itself works and the backend
+  // launcher scripts need it.
+  const npmCli = isWin
+    ? join(nodeRoot, "node_modules", "npm", "bin", "npm-cli.js")
+    : join(nodeRoot, "lib", "node_modules", "npm", "bin", "npm-cli.js");
+  if (!existsSync(npmCli)) {
+    console.warn(
+      `[desktop] Bundled npm is incomplete — ${npmCli} is missing. ` +
+        "`npx`-launched subprocesses (stdio MCP servers, ACP servers) will " +
+        "fail with MODULE_NOT_FOUND, and this bundle shadows any npm already " +
+        "on PATH. Rebuild with `npm run download-node`.",
+    );
+  }
+
+  // electron-builder doesn't always preserve the +x bit on POSIX. node, npm,
+  // and npx need to be executable for shell PATH lookup to consider them.
+  if (!isWin) {
+    const required = ["node", "npm", "npx"];
+    for (const name of required) {
+      const p = join(binDir, name);
+      try {
+        if (existsSync(p)) chmodSync(p, 0o755);
+      } catch {
+        // best-effort: a stale read-only mount or test fixture is fine to skip
+      }
+    }
+  }
+
+  const sep = isWin ? ";" : ":";
+  process.env.PATH = `${binDir}${sep}${process.env.PATH ?? ""}`;
+  console.log("[desktop] Injected bundled Node from", binDir);
+}
+
+// ── Readiness polling ─────────────────────────────────────────────────────────
+
+/**
+ * Wait until `url` responds at all (status < 500). Used to confirm the
+ * ingress proxy is bound — not a guarantee that the agent-server behind it
+ * is ready. Use {@link waitForAgentServer} for that.
+ */
+async function waitForUrl(url, timeoutMs = 120_000, intervalMs = 600) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    try {
+      const res = await fetch(url, { signal: AbortSignal.timeout(2000) });
+      if (res.status < 500) return;
+    } catch {}
+    await new Promise((r) => setTimeout(r, intervalMs));
+  }
+  throw new Error(
+    `Timed out waiting for ${url} to become ready (${timeoutMs / 1000}s).`,
+  );
+}
+
+/**
+ * Wait until `url` returns HTTP 200 — meaning the agent-server itself is
+ * serving requests, not just that the ingress proxy is up.
+ *
+ * On first launch, `uvx` has to download a Python toolchain and install
+ * `openhands-agent-server` and its workspace deps from PyPI, which can
+ * easily take a few minutes on a slow network. We poll the route end-to-end
+ * (through ingress on port 8000, so a missing or restarted ingress is also
+ * caught) instead of just probing the static-server fallback that
+ * `waitForUrl` would accept.
+ */
+async function waitForAgentServer(
+  url = "http://localhost:8000/server_info",
+  timeoutMs = 10 * 60_000,
+  intervalMs = 1_000,
+) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    try {
+      const res = await fetch(url, { signal: AbortSignal.timeout(2000) });
+      // Only 200 is success here. 502 from ingress means the upstream agent
+      // server isn't bound yet; 401 means auth is required and the bundled
+      // key didn't reach us — we still treat that as "the agent server is
+      // up", because the proxy got a real HTTP response from it.
+      if (res.status === 200 || res.status === 401) return;
+    } catch {
+      // Transient network / DNS / timeout — keep polling until the deadline.
+    }
+    await new Promise((r) => setTimeout(r, intervalMs));
+  }
+  throw new Error(
+    `Agent server at ${url} never came up (${Math.round(timeoutMs / 1000)}s). ` +
+      "Check the terminal log for errors from uvx / the agent-server process.",
+  );
+}
+
+// ── Windows ───────────────────────────────────────────────────────────────────
+
+let loadingWin = null;
+let mainWin = null;
+/** MARS session bridge (port-forward tunnels, MARSOHS-1429) — created in app.whenReady(). */
+let marsTunnelBridge = null;
+
+// Collapsed splash size — loading.html's .container height must match. The
+// expanded height reveals the startup-log console below it ("Show details").
+const LOADING_WIN_WIDTH = 460;
+const LOADING_WIN_HEIGHT = 360;
+const LOADING_WIN_EXPANDED_HEIGHT = 560;
+
+/**
+ * Grow or shrink the loading window to reveal/hide the startup-log console.
+ * Keeps the top edge fixed so the splash content doesn't jump. Invoked from
+ * the renderer ("Show details" toggle) and from showStartupFailure().
+ */
+function setLoadingWindowExpanded(expanded) {
+  if (!loadingWin || loadingWin.isDestroyed()) return;
+  const bounds = loadingWin.getBounds();
+  const height = expanded ? LOADING_WIN_EXPANDED_HEIGHT : LOADING_WIN_HEIGHT;
+  if (bounds.height === height) return;
+  // macOS ignores programmatic resizes of resizable:false windows on some
+  // Electron versions — lift the flag around the change.
+  loadingWin.setResizable(true);
+  loadingWin.setBounds({ ...bounds, height }, true);
+  loadingWin.setResizable(false);
+}
+
+function createLoadingWindow() {
+  bootLogReady = false;
+  loadingWin = new BrowserWindow({
+    width: LOADING_WIN_WIDTH,
+    // Tall enough to fit the streaming status line + the "first launch can
+    // take a few minutes" hint without scrollbars.
+    height: LOADING_WIN_HEIGHT,
+    resizable: false,
+    frame: false,
+    center: true,
+    show: false,
+    // Pre-paint window color; must match --oh-background in loading.html.
+    backgroundColor: "#0b0e14",
+    icon: appIconPath,
+    webPreferences: {
+      nodeIntegration: false,
+      contextIsolation: true,
+      // Bridges the startup-log console over IPC (see preload.cjs).
+      preload: join(__dirname, "preload.cjs"),
+    },
+  });
+
+  // The renderer can only receive IPC once the page has loaded — replay the
+  // lines buffered until now, then stream live batches (see appendBootLog).
+  loadingWin.webContents.on("did-finish-load", () => {
+    if (!loadingWin || loadingWin.isDestroyed()) return;
+    clearTimeout(bootLogFlushTimer);
+    bootLogFlushTimer = null;
+    bootLogPending = [];
+    if (bootLog.length) {
+      loadingWin.webContents.send("boot-log:batch", bootLog.slice());
+    }
+    bootLogReady = true;
+    if (fatalSummary) {
+      loadingWin.webContents.send("boot-log:fatal", fatalSummary);
+    }
+  });
+
+  loadingWin.loadFile(join(__dirname, "loading.html"));
+  loadingWin.once("ready-to-show", () => loadingWin?.show());
+}
+
+function createMainWindow() {
+  mainWin = new BrowserWindow({
+    width: 1440,
+    height: 900,
+    minWidth: 800,
+    minHeight: 600,
+    show: false,
+    // App-shell background (--oh-background in src/index.css) — avoids white
+    // flashes during the show → maximize repaint after the splash closes.
+    backgroundColor: "#0b0e14",
+    // hiddenInset hides the native title bar but keeps the traffic lights
+    // floating over the app shell; the renderer reserves a drag band for them.
+    titleBarStyle: process.platform === "darwin" ? "hiddenInset" : "default",
+    icon: appIconPath,
+    webPreferences: {
+      nodeIntegration: false,
+      contextIsolation: true,
+      // Desktop-shell state and the MARS tunnel bridge (see preload-main.cjs).
+      preload: join(__dirname, "preload-main.cjs"),
+    },
+  });
+
+  // The renderer drops its reserved traffic-light band in fullscreen, where
+  // macOS hides the buttons. Only transitions are pushed; the preload reads the
+  // current state over "window:full-screen:get" on every page load.
+  const sendFullScreenState = () => {
+    if (!mainWin || mainWin.isDestroyed()) return;
+    mainWin.webContents.send("window:full-screen", mainWin.isFullScreen());
+  };
+  mainWin.on("enter-full-screen", sendFullScreenState);
+  mainWin.on("leave-full-screen", sendFullScreenState);
+
+  mainWin.loadURL("http://localhost:8000");
+
+  mainWin.once("ready-to-show", () => {
+    loadingWin?.destroy();
+    loadingWin = null;
+    mainWin?.show();
+    mainWin?.maximize();
+  });
+
+  // Route window.open() calls appropriately.
+  mainWin.webContents.setWindowOpenHandler(({ url }) => {
+    // The "Login with OpenHands Cloud" device-flow opens about:blank immediately
+    // on the user's click (to beat popup blockers), then navigates the popup to
+    // the OAuth verification URL once it has one.  We must allow about:blank
+    // through so window.open() returns a non-null WindowProxy; the did-create-window
+    // handler below redirects the popup to the system browser when it navigates.
+    if (url === "about:blank") {
+      return {
+        action: "allow",
+        overrideBrowserWindowOptions: { width: 800, height: 700 },
+      };
+    }
+    // All other URLs open directly in the system browser. The loopback test
+    // goes through URL parsing: prefix matching would also accept
+    // attacker-controlled hosts like http://localhost.evil.com (or
+    // http://localhost@evil.com) and render them in a chromeless native
+    // window. Schemes outside the openExternal allowlist are denied
+    // outright — shell.openExternal would forward them to OS protocol
+    // handlers.
+    if (isLoopbackAppUrl(url)) {
+      return { action: "allow" };
+    }
+    if (isExternalBrowsableUrl(url)) {
+      shell.openExternal(url);
+    }
+    return { action: "deny" };
+  });
+
+  // When the renderer opens a popup (the about:blank above), watch for its
+  // first navigation away from about:blank.  That navigation will be to the
+  // OAuth verification URL — open it in the system browser and close the
+  // now-unneeded Electron popup.
+  mainWin.webContents.on("did-create-window", (popupWin) => {
+    popupWin.webContents.on("will-navigate", (_event, url) => {
+      if (url !== "about:blank" && !isLoopbackAppUrl(url)) {
+        _event.preventDefault();
+        if (isExternalBrowsableUrl(url)) {
+          shell.openExternal(url);
+        }
+        popupWin.close();
+      }
+    });
+  });
+
+  mainWin.on("closed", () => {
+    mainWin = null;
+  });
+}
+
+// ── Startup log buffer ────────────────────────────────────────────────────────
+//
+// Every service log line (all services, all levels, sanitized) is kept in a
+// bounded buffer and streamed to the loading window's console in batches over
+// IPC (see preload.cjs + loading.html). The buffer is the single source of
+// truth: it is replayed once the page loads (lines emitted earlier would
+// otherwise be lost) and it backs the "Copy logs" action. In a packaged app
+// this console is the only log surface — stdout/stderr go to /dev/null when
+// launched from Finder, and the winston file logger is a no-op there (see
+// `.agents/skills/desktop-electron/references/guide.md` on dependency stripping).
+
+const BOOT_LOG_MAX_LINES = 2000;
+const BOOT_LOG_FLUSH_MS = 200;
+
+const bootLog = []; // {name, line, level}[] — level: stdout|stderr|info|warn|error
+let bootLogPending = [];
+let bootLogFlushTimer = null;
+let bootLogReady = false; // true once loading.html has loaded and can receive
+let fatalSummary = null;
+
+// SGR color codes AND cursor-control CSI sequences (uv/uvicorn can emit
+// either when they mis-detect a TTY).
+const ANSI_CSI_RE = /\x1b\[[0-9;?]*[ -/]*[@-~]/g;
+
+/**
+ * Strip ANSI escapes and reduce carriage-return progress redraws (e.g. uv
+ * download bars arrive as one chunk of "\r"-separated frames) to the final
+ * frame — what a real terminal would have settled on.
+ */
+function sanitizeLogLine(line) {
+  const frames = String(line ?? "")
+    .replace(ANSI_CSI_RE, "")
+    .split("\r")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  return frames.length ? frames[frames.length - 1] : "";
+}
+
+function appendBootLog(name, line, level) {
+  const entry = { name, line, level };
+  bootLog.push(entry);
+  if (bootLog.length > BOOT_LOG_MAX_LINES) {
+    bootLog.splice(0, bootLog.length - BOOT_LOG_MAX_LINES);
+  }
+  bootLogPending.push(entry);
+  if (!bootLogFlushTimer) {
+    bootLogFlushTimer = setTimeout(flushBootLog, BOOT_LOG_FLUSH_MS);
+  }
+}
+
+function flushBootLog() {
+  clearTimeout(bootLogFlushTimer);
+  bootLogFlushTimer = null;
+  if (!bootLogPending.length) return;
+  const batch = bootLogPending;
+  bootLogPending = [];
+  // Not ready / window gone: drop the batch — the entries stay in bootLog,
+  // which did-finish-load replays wholesale.
+  if (bootLogReady && loadingWin && !loadingWin.isDestroyed()) {
+    loadingWin.webContents.send("boot-log:batch", batch);
+  }
+}
+
+/**
+ * Switch the splash into its failure state: expand the console and show the
+ * error summary with Copy logs / Quit actions, keeping the window open so the
+ * user can actually read why startup failed. Returns false when the loading
+ * window is gone (caller falls back to a native dialog).
+ */
+function showStartupFailure(summary) {
+  if (!loadingWin || loadingWin.isDestroyed()) return false;
+  fatalSummary = summary;
+  setLoadingWindowExpanded(true);
+  if (bootLogReady) {
+    flushBootLog();
+    loadingWin.webContents.send("boot-log:fatal", summary);
+  }
+  // If the page hasn't loaded yet, did-finish-load replays the buffer and
+  // then delivers fatalSummary.
+  return true;
+}
+
+// IPC surface for the loading window (see preload.cjs). Guarded to that
+// window's webContents so the main app window can never reach these.
+function isLoadingWinEvent(event) {
+  return (
+    loadingWin !== null &&
+    !loadingWin.isDestroyed() &&
+    event.sender === loadingWin.webContents
+  );
+}
+
+ipcMain.handle("boot-log:set-expanded", (event, expanded) => {
+  if (!isLoadingWinEvent(event)) return;
+  setLoadingWindowExpanded(Boolean(expanded));
+});
+
+ipcMain.handle("boot-log:copy", (event) => {
+  if (!isLoadingWinEvent(event)) return 0;
+  clipboard.writeText(bootLog.map((e) => `[${e.name}] ${e.line}`).join("\n"));
+  return bootLog.length;
+});
+
+// The frameless splash has no close control; the failure state shows a Quit
+// button instead.
+ipcMain.handle("boot-log:quit", (event) => {
+  if (!isLoadingWinEvent(event)) return;
+  app.quit();
+});
+
+// Synchronous so the preload has the state before the first render; a
+// renderer that starts with "not fullscreen" paints the band and then drops it.
+ipcMain.on("window:full-screen:get", (event) => {
+  const win = BrowserWindow.fromWebContents(event.sender);
+  event.returnValue = win !== null && !win.isDestroyed() && win.isFullScreen();
+});
+
+// ── Backend stack ─────────────────────────────────────────────────────────────
+
+/**
+ * Update the status line on the loading window, if it's still alive.
+ *
+ * The loading screen exposes a global `window.__setLoadingStatus(line)`
+ * function (see loading.html) that swaps the status text. We call it via
+ * `executeJavaScript` so no preload script / IPC plumbing is needed.
+ *
+ * Best-effort: any failure (window destroyed, JS not loaded yet, etc.) is
+ * swallowed — this is purely a UX nicety and must never crash the launcher.
+ */
+function setLoadingStatus(line) {
+  if (!loadingWin || loadingWin.isDestroyed()) return;
+  // Limit to a single line, max ~120 chars, to keep the splash readable.
+  const oneLine = String(line ?? "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 120);
+  if (!oneLine) return;
+  const safe = JSON.stringify(oneLine);
+  loadingWin.webContents
+    .executeJavaScript(
+      `window.__setLoadingStatus && window.__setLoadingStatus(${safe});`,
+      true,
+    )
+    .catch(() => {});
+}
+
+/**
+ * Phase marker: headline + a line in the startup-log console, so the log
+ * records which stage a failed boot died in.
+ */
+function setBootPhase(message) {
+  appendBootLog("desktop", message, "info");
+  setLoadingStatus(message);
+}
+
+/**
+ * Last few `level: "error"` service log lines (spawn failures, non-zero
+ * exits). Appended to the startup-failure dialog: a packaged app launched
+ * from Finder has stdout/stderr wired to /dev/null, so without this a
+ * crashed ingress/static-server surfaces only as an opaque "timed out
+ * waiting for http://localhost:8000" message.
+ */
+const recentServiceErrors = [];
+
+/**
+ * Forward dev-stack service log lines to (a) the loading screen and (b) the
+ * terminal log. The terminal already receives them via `logService`; we add
+ * a tee here so the user can see what's happening on first launch when uvx
+ * is downloading Python + agent-server.
+ */
+function handleServiceLog(name, line, level) {
+  if (!line) return;
+  const clean = sanitizeLogLine(line);
+  if (!clean) return;
+  // Full-fidelity stream: every service and level goes to the console buffer.
+  // The one-line headline below stays filtered to the interesting services.
+  appendBootLog(name, clean, level);
+  if (name === "agent-server" || name === "automation") {
+    setLoadingStatus(`${name}: ${clean}`);
+  }
+  // Mirror errors to a `[desktop]` terminal line so dev runs stay grep-friendly.
+  if (level === "error") {
+    console.error(`[desktop] [${name}] ${clean}`);
+    // Errors from ANY service (including ingress/static, which the headline
+    // filter above skips) are worth showing — a dead ingress is exactly the
+    // case where the user would otherwise stare at a silent 120 s timeout.
+    setLoadingStatus(`${name}: ${clean}`);
+    recentServiceErrors.push(`${name}: ${clean}`);
+    if (recentServiceErrors.length > 5) recentServiceErrors.shift();
+  }
+}
+
+async function startStack() {
+  const entryUrl = pathToFileURL(
+    join(scriptsDir, "dev-with-automation.mjs"),
+  ).href;
+  const { main } = await import(entryUrl);
+
+  // main() starts agent-server + automation backend + static server + ingress.
+  //   skipNpmCheck: npm is not needed at runtime in static mode.
+  //   agentServerReadyTimeoutMs: dev defaults to 60 s (warm uvx cache); a
+  //     packaged binary on a fresh machine can spend several minutes inside
+  //     uvx the first time, downloading Python + installing openhands-
+  //     agent-server from PyPI. 10 minutes is generous but bounded.
+  //   onServiceLog: stream uvx/agent-server output to the loading window so
+  //     the user sees progress instead of an indefinite spinner.
+  const result = await main({
+    bannerTitle: "OpenHands Agent Canvas",
+    staticMode: true,
+    staticDir: buildDir,
+    mode: "agent-canvas",
+    isPublic: false,
+    // The preload provides window.marsBridge; the stack's ingress must not
+    // host a second, separate one.
+    marsWebBridge: false,
+    skipNpmCheck: true,
+    agentServerReadyTimeoutMs: 10 * 60_000,
+    onServiceLog: handleServiceLog,
+    // main() announces the stack without waiting for the automation backend.
+    // If that backend exits during startup, or the ingress/static server
+    // keeps exiting, the services are already stopped when this runs.
+    onStackFailure: failStartup,
+  });
+
+  // main() returns { config, agentServerReady } — treat a timeout as a fatal
+  // startup error so the splash shows a clear dialog instead of dropping the
+  // user into a half-booted UI that will only emit "Request timeout" popups.
+  if (result?.agentServerReady === false) {
+    throw new Error(
+      "The agent server did not finish starting in time. " +
+        "On first launch this can take several minutes while uvx downloads " +
+        "Python and the OpenHands agent-server from PyPI. " +
+        "Check your internet connection and try again.",
+    );
+  }
+}
+
+let startupFailed = false;
+
+/**
+ * Show why startup failed on the splash, keeping the full startup log
+ * readable and copyable. The automation backend can fail after the main
+ * window has opened, so the splash is reopened in its place when needed.
+ */
+function failStartup(err) {
+  if (startupFailed) return;
+  startupFailed = true;
+  const summary =
+    err.message +
+    " Ensure ports 8000, 18000, and 18001 are free, then try again.";
+  // Record the failure in the terminal and the startup-log buffer so it
+  // shows (and copies) as the final console line.
+  console.error("[desktop] Startup failed:", err);
+  appendBootLog("desktop", summary, "error");
+  if (mainWin && !mainWin.isDestroyed()) {
+    // Open the splash before closing the main window so window-all-closed
+    // does not quit the app.
+    if (!loadingWin || loadingWin.isDestroyed()) createLoadingWindow();
+    mainWin.destroy();
+  }
+  // Keep the splash open in its failure state so the full startup log can
+  // be read and copied; the app quits via the splash's Quit button (or
+  // Cmd+Q / closing the window).
+  if (showStartupFailure(summary)) return;
+  // Loading window already gone — fall back to the old dialog-and-quit.
+  const errorTail = recentServiceErrors.length
+    ? `\n\nRecent service errors:\n${recentServiceErrors.join("\n")}`
+    : "";
+  dialog.showErrorBox(
+    "OpenHands Agent Canvas failed to start",
+    summary + errorTail,
+  );
+  app.quit();
+}
+
+// ── App lifecycle ─────────────────────────────────────────────────────────────
+
+app.whenReady().then(async () => {
+  nativeTheme.themeSource = "dark";
+
+  // Set the dock icon explicitly on macOS so `npm run desktop` shows the
+  // OpenHands logo instead of the default Electron logo. In a packaged
+  // build the .app bundle's icon.icns already provides this, but
+  // app.dock.setIcon() is a cheap idempotent override that also fixes
+  // the dev workflow.
+  if (process.platform === "darwin" && app.dock && existsSync(appIconPath)) {
+    app.dock.setIcon(nativeImage.createFromPath(appIconPath));
+  }
+
+  injectBundledUv();
+  injectBundledNode();
+
+  // Registered before the window loads so the renderer's first paint can
+  // already reach the bridge (MARSOHS-1429). Independent of the agent-server
+  // stack below — MARS sessions don't need the bundled backend to be up.
+  const { createMarsTunnelBridge } = await import(
+    pathToFileURL(join(scriptsDir, "mars-tunnel-bridge.mjs")).href
+  );
+  marsTunnelBridge = createMarsTunnelBridge({
+    userDataPath: app.getPath("userData"),
+    safeStorage,
+    openExternal: (url) => shell.openExternal(url),
+  });
+  marsTunnelBridge.registerIpc(ipcMain);
+
+  if (!uvxAvailable()) {
+    dialog.showErrorBox(
+      "Missing prerequisite: uv",
+      app.isPackaged
+        ? "The bundled uv binary could not be found. Please reinstall OpenHands Agent Canvas."
+        : "uv (uvx) is not installed.\n\nInstall it from https://docs.astral.sh/uv/ then restart.",
+    );
+    app.quit();
+    return;
+  }
+
+  createLoadingWindow();
+
+  try {
+    setBootPhase("Starting backend services…");
+    await startStack();
+
+    // Stage 1: ingress proxy is bound (anything < 500 on /).
+    setBootPhase("Waiting for proxy…");
+    await waitForUrl("http://localhost:8000");
+
+    // Stage 2: the agent-server behind the proxy is actually serving
+    // requests. `startStack()` already waited for this internally, but we
+    // re-probe end-to-end here so that if the user closes the splash race
+    // window between processes binding, we still open the main window with
+    // a live backend. Cheap (a single 200 response) when everything is up.
+    setBootPhase("Connecting to agent server…");
+    await waitForAgentServer("http://localhost:8000/server_info", 60_000);
+
+    if (startupFailed) return;
+    setBootPhase("Ready.");
+    createMainWindow();
+  } catch (err) {
+    failStartup(err);
+  }
+});
+
+// ── Graceful shutdown ─────────────────────────────────────────────────────────
+//
+// dev-with-automation.mjs spawns the backend processes with detached:true so
+// they form their own OS process groups and survive the parent's death by
+// default. We must explicitly kill them when the app quits.
+//
+// createShutdownHookRegistry (dev-process-utils.mjs) already registered a
+// SIGTERM handler that iterates every tracked process, calls signalProcessTree
+// on its group, waits for exit, then calls process.exit(0). We just need to
+// fire that handler before Electron lets the process die.
+//
+// Flow:
+//   user closes window / Cmd+Q
+//     → window-all-closed → app.quit()
+//     → before-quit fires (first time)  → we preventDefault + send SIGTERM
+//     → SIGTERM handler kills all children, calls process.exit(0)
+//     → before-quit fires again (cleanupStarted=true) → we return, Electron exits
+//
+// Windows has no real POSIX signals: process.kill(pid, "SIGTERM") would
+// terminate this process WITHOUT running the "SIGTERM" listener, skipping
+// cleanup and orphaning the children on ports 8000/18000/18001 (the next
+// launch then fails at startup). process.emit("SIGTERM") runs the same
+// registered handler in-process instead.
+
+let cleanupStarted = false;
+
+app.on("before-quit", (event) => {
+  if (cleanupStarted) return; // SIGTERM cleanup already running — allow exit
+
+  cleanupStarted = true;
+  event.preventDefault();
+
+  // MARS connections are in-process state (tunnel listeners to close; no OS
+  // subprocess to signal and wait on), so this
+  // doesn't need the SIGTERM-based cleanup path below — just tear them down
+  // directly. Best-effort: quitting must not hang on it.
+  void marsTunnelBridge?.dispose().catch((err) => {
+    console.warn("[desktop] Failed to close MARS connections:", err);
+  });
+
+  console.log("[desktop] Stopping backend services…");
+  if (process.platform === "win32") {
+    // Run the cleanup handler in-process (see header note). emit() returns
+    // false when no listener is registered — the stack never started, so
+    // there is nothing to clean up and we can exit immediately.
+    if (!process.emit("SIGTERM")) app.exit(0);
+  } else {
+    process.kill(process.pid, "SIGTERM");
+  }
+
+  // Safety net: if the SIGTERM handler doesn't finish within 6 s, force-quit.
+  const t = setTimeout(() => {
+    console.warn("[desktop] Cleanup timed out — forcing exit");
+    app.exit(0);
+  }, 6000);
+  if (t.unref) t.unref();
+});
+
+app.on("window-all-closed", () => {
+  app.quit();
+});
+
+// macOS: clicking the dock icon when no window is open re-launches the app.
+app.on("activate", () => {
+  if (BrowserWindow.getAllWindows().length === 0) {
+    // The backend is already running — just open a new renderer window.
+    if (mainWin === null) createMainWindow();
+  }
+});

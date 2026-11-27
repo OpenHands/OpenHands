@@ -1,0 +1,891 @@
+import { SettingsClient } from "@openhands/typescript-client/clients";
+import type {
+  MCPConfigPatch,
+  MCPServer,
+  MCPServerPatch,
+} from "@openhands/typescript-client";
+import { DEFAULT_SETTINGS } from "#/services/settings";
+import { Settings, SettingsSchema, SettingsValue } from "#/types/settings";
+import {
+  applyMcpServerPatch,
+  getSdkMcpServerMap,
+  stringRecord,
+} from "#/utils/mcp-config";
+import type { SkillEnablement } from "#/utils/skill-enablement";
+import { getActiveBackend } from "../backend-registry/active-store";
+import {
+  fetchCloudConversationSettingsSchema,
+  fetchCloudSettings,
+  fetchCloudSettingsSchema,
+  saveCloudSettings,
+} from "../cloud/settings-service.api";
+import {
+  getAgentServerClientOptions,
+  type AgentServerClientOptions,
+} from "../agent-server-client-options";
+import { withRetry } from "../with-retry";
+
+/**
+ * Fields the agent-server stores under `misc_settings.app_preferences` (see
+ * SDK `openhands.sdk.settings.AppPreferences`). Mirrored here as a flat
+ * partial of Settings so the rest of the frontend can keep treating them as
+ * top-level keys (`settings.language`, `settings.disabled_skills`, …).
+ */
+export const APP_PREFERENCE_FIELDS = [
+  "language",
+  "user_consents_to_analytics",
+  "enable_sound_notifications",
+  "git_user_name",
+  "git_user_email",
+  "title_llm_profile",
+  "disabled_skills",
+  "enabled_skills",
+  "run_router_at_conversation_start",
+  "workspace_file_discovery",
+  "home_pinned_automations",
+  "default_profile_migrated",
+] as const;
+
+export type AppPreferenceField = (typeof APP_PREFERENCE_FIELDS)[number];
+
+export type AppPreferences = Partial<Pick<Settings, AppPreferenceField>>;
+
+/**
+ * Container for frontend-owned settings the agent doesn't interpret.
+ * Mirrors the SDK `MiscSettings` model introduced in agent-server 1.27.
+ *
+ * Single nested category today (`app_preferences`). Adding a future
+ * category (e.g. `ui_preferences`) is a non-breaking change for the wire
+ * shape — it just adds another optional sibling here.
+ */
+export interface MiscSettings {
+  app_preferences?: AppPreferences;
+}
+
+/**
+ * Response from GET /api/settings
+ * Mirrors the SettingsResponse model in the agent server.
+ */
+export interface SettingsApiResponse {
+  agent_settings: Record<string, SettingsValue>;
+  conversation_settings: Record<string, SettingsValue>;
+  llm_api_key_is_set: boolean;
+  /**
+   * Frontend-owned settings the agent does not interpret (currently just
+   * `app_preferences`). Added in agent-server 1.27; earlier servers omit
+   * the field entirely, in which case the frontend falls back to defaults.
+   */
+  misc_settings?: MiscSettings;
+}
+
+/**
+ * Request payload for PATCH /api/settings.
+ *
+ * `misc_settings_diff` is deep-merged into the persisted `misc_settings`
+ * block, matching the semantics of `agent_settings_diff` /
+ * `conversation_settings_diff`. A partial diff like
+ * `{ app_preferences: { language: "fr" } }` updates only `language` and
+ * leaves every other `app_preferences` field alone. Lists
+ * (`disabled_skills`, `enabled_skills`) are replaced wholesale rather than
+ * merged.
+ */
+export interface SettingsUpdateRequest {
+  agent_settings_diff?: Record<string, SettingsValue>;
+  conversation_settings_diff?: Record<string, SettingsValue>;
+  misc_settings_diff?: MiscSettings;
+  // Permit additional keys so this stays assignable to the underlying
+  // typescript-client SDK type, which uses `[key: string]: unknown` for
+  // forward compatibility.
+  [key: string]: unknown;
+}
+
+const APP_PREFERENCE_FIELD_SET: ReadonlySet<string> = new Set(
+  APP_PREFERENCE_FIELDS,
+);
+
+const isAppPreferenceField = (key: string): key is AppPreferenceField =>
+  APP_PREFERENCE_FIELD_SET.has(key);
+
+/**
+ * Split known app-preference keys out of a save payload so callers can
+ * route them through `misc_settings_diff.app_preferences` (local) or as
+ * flat top-level keys (cloud), while the remaining fields flow into the
+ * `agent_settings_diff` / `conversation_settings_diff` branches.
+ */
+const extractAppPreferences = (
+  input: Record<string, unknown>,
+): { extracted: AppPreferences; rest: Record<string, unknown> } => {
+  const extracted: AppPreferences = {};
+  const rest: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(input)) {
+    if (isAppPreferenceField(key)) {
+      (extracted as Record<string, unknown>)[key] = value;
+    } else {
+      rest[key] = value;
+    }
+  }
+  return { extracted, rest };
+};
+
+/**
+ * Secret exposure mode for X-Expose-Secrets header.
+ *
+ * - undefined: Returns redacted secrets ("**********")
+ * - "encrypted": Returns cipher-encrypted values (safe for frontend to round-trip)
+ * - "plaintext": Returns raw secret values (backend use only!)
+ */
+export type ExposeSecretsMode = "encrypted" | "plaintext" | undefined;
+
+const deepClone = <T>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
+
+const mergeRecords = (
+  base: Record<string, SettingsValue> | null | undefined,
+  next: Record<string, SettingsValue> | null | undefined,
+) => ({ ...(base ?? {}), ...(next ?? {}) });
+
+const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+
+type SettingsExposureMode = "redacted" | "encrypted";
+
+interface SettingsCacheEntry {
+  backendId: string;
+  connectionRevision: number;
+  exposureMode: SettingsExposureMode;
+  response: SettingsApiResponse;
+  fetchedAt: number;
+}
+
+/**
+ * Local settings are owned by a specific backend connection and exposure
+ * mode. Keeping that identity in the cache prevents one backend (or its
+ * encrypted conversation payload) from being reused for another.
+ */
+const settingsCache = new Map<string, SettingsCacheEntry>();
+
+const getSettingsCacheKey = (
+  backendId: string,
+  connectionRevision: number,
+  exposureMode: SettingsExposureMode,
+) => JSON.stringify([backendId, connectionRevision, exposureMode]);
+
+const readCachedSettings = (
+  backendId: string,
+  connectionRevision: number,
+  exposureMode: SettingsExposureMode,
+): SettingsApiResponse | null => {
+  const key = getSettingsCacheKey(backendId, connectionRevision, exposureMode);
+  const entry = settingsCache.get(key);
+  if (!entry) return null;
+
+  if (Date.now() - entry.fetchedAt >= CACHE_TTL_MS) {
+    settingsCache.delete(key);
+    return null;
+  }
+
+  return entry.response;
+};
+
+const cacheSettings = (
+  backendId: string,
+  connectionRevision: number,
+  exposureMode: SettingsExposureMode,
+  response: SettingsApiResponse,
+) => {
+  // A connection revision replaces every cached representation for the prior
+  // connection, so repeated host/API-key edits do not retain old revisions.
+  settingsCache.forEach((entry, key) => {
+    if (
+      entry.backendId === backendId &&
+      entry.connectionRevision !== connectionRevision
+    ) {
+      settingsCache.delete(key);
+    }
+  });
+
+  settingsCache.set(
+    getSettingsCacheKey(backendId, connectionRevision, exposureMode),
+    {
+      backendId,
+      connectionRevision,
+      exposureMode,
+      response,
+      fetchedAt: Date.now(),
+    },
+  );
+};
+
+const clearCache = () => {
+  settingsCache.clear();
+};
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  !!value && typeof value === "object" && !Array.isArray(value);
+
+/**
+ * Raw name-keyed MCP server map from a cloud `GET /api/v1/settings` response,
+ * exactly as returned (secrets redacted to "**********"). The cloud nests the
+ * catalog under `agent_settings.mcp_config`; a flat `mcp_config` is accepted
+ * as a fallback. Deliberately not `parseMcpConfig`: untouched servers are
+ * resent verbatim so the cloud's by-key secret restore matches them.
+ */
+const readCloudMcpCatalog = (stored: unknown): Record<string, unknown> => {
+  if (!isRecord(stored)) return {};
+  const agentSettings = isRecord(stored.agent_settings)
+    ? stored.agent_settings
+    : undefined;
+  return (
+    getSdkMcpServerMap(agentSettings?.mcp_config ?? stored.mcp_config) ?? {}
+  );
+};
+
+const basicAuthHeader = (username: string, password: string): string => {
+  const token = btoa(`${username}:${password}`);
+  return `Basic ${token}`;
+};
+
+export const headersFromMcpAuth = (
+  auth: Record<string, unknown>,
+): Record<string, string> | null => {
+  switch (auth.strategy) {
+    case "none":
+      return {};
+    case "api_key": {
+      if (typeof auth.value !== "string" || !auth.value) return null;
+      const header =
+        typeof auth.header_name === "string" && auth.header_name
+          ? auth.header_name
+          : "Authorization";
+      const value =
+        header === "Authorization" ? `Bearer ${auth.value}` : auth.value;
+      return { [header]: value };
+    }
+    case "bearer":
+      if (typeof auth.value !== "string" || !auth.value) return null;
+      return { Authorization: `Bearer ${auth.value}` };
+    case "basic":
+      if (
+        typeof auth.username !== "string" ||
+        typeof auth.password !== "string"
+      ) {
+        return null;
+      }
+      return { Authorization: basicAuthHeader(auth.username, auth.password) };
+    case "header":
+      return stringRecord(auth.headers) ?? {};
+    case "oauth2": {
+      const tokens = isRecord(auth.state) ? auth.state.tokens : undefined;
+      if (!isRecord(tokens) || typeof tokens.access_token !== "string") {
+        return null;
+      }
+      return { Authorization: `Bearer ${tokens.access_token}` };
+    }
+    default:
+      return null;
+  }
+};
+
+/**
+ * Convert SDK `auth` credentials to the cloud's header-only storage shape.
+ *
+ * An `oauth2` credential is the exception and is sent as-is: the app server
+ * stores its token state under `auth.state` (restoring redacted parts by
+ * key) and the sandbox refreshes the access token from it. Flattening it to
+ * a bearer header drops the refresh token, so the server stops working once
+ * the access token expires. A header the old flattening stored is tombstoned
+ * like any other header the credential no longer produces.
+ *
+ * Only the entries in `value` are converted. The cloud `POST /api/v1/settings`
+ * applies an `mcp_config` map WITHOUT a `null` entry as a full-catalog
+ * replacement and only a map WITH a `null` entry (delete / rename) as a
+ * sparse merge — see `buildCloudMcpConfigPayload`. A credential change must
+ * also tombstone the headers the previous credential produced — otherwise
+ * stale secrets survive a strategy switch (e.g. an api_key's custom header
+ * after moving to bearer). Stored headers that the new credential still
+ * produces (via the patch's carried `headers` or the converted auth) are left
+ * untouched; any other stored header is cleared with a `null` tombstone. On
+ * the replace path the caller resolves those tombstones client-side (the
+ * cloud rejects `null` header values there); on the sparse path they are sent
+ * as-is. `storedServers` is the already-read cloud catalog; when omitted it is
+ * read lazily, and only if the patch carries a credential.
+ */
+const cloudCompatibleMcpConfig = async (
+  value: unknown,
+  storedServers?: Record<string, unknown>,
+): Promise<unknown> => {
+  if (!isRecord(value)) return value;
+
+  const hasWrapper = isRecord(value.mcpServers);
+  const serverMap: Record<string, unknown> = hasWrapper
+    ? (value.mcpServers as Record<string, unknown>)
+    : value;
+
+  const needsStoredCredential =
+    storedServers === undefined &&
+    Object.values(serverMap).some(
+      (server) =>
+        isRecord(server) && isRecord(server.auth) && server.auth !== null,
+    ) &&
+    getActiveBackend().backend.kind === "cloud";
+
+  const storedHeadersByServer = new Map<string, Record<string, string>>();
+  const collectStoredHeaders = (servers: Record<string, unknown>) => {
+    for (const [name, server] of Object.entries(servers)) {
+      if (isRecord(server)) {
+        const headers = stringRecord(server.headers);
+        if (headers) storedHeadersByServer.set(name, headers);
+      }
+    }
+  };
+  if (storedServers) {
+    collectStoredHeaders(storedServers);
+  } else if (needsStoredCredential) {
+    try {
+      collectStoredHeaders(readCloudMcpCatalog(await fetchCloudSettings()));
+    } catch {
+      // Tombstone enrichment on the sparse path only: fall back to the
+      // patch-only conversion; a transient fetch failure must not block
+      // saving the user's explicit edits.
+    }
+  }
+
+  const converted = Object.fromEntries(
+    Object.entries(serverMap).map(([name, server]) => {
+      if (!isRecord(server)) return [name, server];
+      if (server.auth === null) {
+        const nextServer: Record<string, unknown> = {
+          ...server,
+          headers: null,
+        };
+        delete nextServer.auth;
+        return [name, nextServer];
+      }
+      if (!isRecord(server.auth)) return [name, server];
+
+      const keepsAuth = server.auth.strategy === "oauth2";
+      const authHeaders: Record<string, string> | null = keepsAuth
+        ? {}
+        : headersFromMcpAuth(server.auth);
+      if (authHeaders === null) return [name, server];
+
+      const nextServer = { ...server };
+      const existingHeaders = stringRecord(server.headers) ?? {};
+      const mergedHeaders: Record<string, string | null> = {
+        ...existingHeaders,
+        ...authHeaders,
+      };
+
+      const storedHeaders = storedHeadersByServer.get(name);
+      if (storedHeaders) {
+        for (const key of Object.keys(storedHeaders)) {
+          if (!(key in mergedHeaders)) mergedHeaders[key] = null;
+        }
+      }
+
+      if (!keepsAuth) delete nextServer.auth;
+      if (Object.keys(mergedHeaders).length > 0) {
+        nextServer.headers = mergedHeaders;
+      } else {
+        delete nextServer.headers;
+      }
+      return [name, nextServer];
+    }),
+  );
+
+  return hasWrapper ? { ...value, mcpServers: converted } : converted;
+};
+
+/**
+ * Build the `mcp_config` value for a cloud `POST /api/v1/settings`.
+ *
+ * The cloud applies a map WITHOUT a `null` entry as a full-catalog
+ * replacement (the bundled settings UI resends the whole catalog) and only a
+ * map WITH a `null` entry (delete / rename) as a sparse merge. Sending a
+ * sparse add/update as-is therefore erases every other stored server
+ * (OHE-3248). For add/update, resend the whole stored catalog: untouched
+ * siblings verbatim from the redacted GET (the cloud restores "**********"
+ * secrets by key), patched entries merged onto their stored entry
+ * client-side. Redacted values are never used as input for the patched entry.
+ */
+const buildCloudMcpConfigPayload = async (
+  patch: MCPConfigPatch,
+): Promise<unknown> => {
+  const hasDeletion = Object.values(patch).some((server) => server === null);
+  if (hasDeletion) return cloudCompatibleMcpConfig(patch);
+
+  // A failed read must fail the mutation: the only fallback is the sparse
+  // payload, which the cloud would apply as "replace the catalog with this
+  // one server".
+  const catalog = readCloudMcpCatalog(
+    await withRetry(() => fetchCloudSettings()),
+  );
+  const converted = await cloudCompatibleMcpConfig(patch, catalog);
+  if (!isRecord(converted)) return converted;
+
+  const next: Record<string, unknown> = { ...catalog };
+  for (const [key, rawEntry] of Object.entries(patch)) {
+    const stored = catalog[key];
+    const entry = converted[key];
+    if (!isRecord(stored) || !isRecord(rawEntry) || !isRecord(entry)) {
+      // New server: `createMcpServer` always sends a complete `MCPServer`.
+      next[key] = entry;
+      continue;
+    }
+    // Sparse `MCPServerPatch` onto the stored entry. Nested `null`s (header
+    // tombstones) delete keys client-side — the cloud rejects `null` header
+    // values on the replace path.
+    const merged = applyMcpServerPatch(
+      stored as unknown as MCPServer,
+      entry as MCPServerPatch,
+    ) as unknown as Record<string, unknown>;
+    // A secret carrier cleared by the patch must reach the cloud as an
+    // explicit `null`: an omitted `headers`/`env`/`auth` makes the cloud carry
+    // the stored secret back.
+    for (const field of ["headers", "env", "auth"] as const) {
+      if (entry[field] === null) merged[field] = null;
+    }
+    // The credential was converted into headers (or cleared): drop the stored
+    // `auth` explicitly, otherwise the cloud restores the previous credential
+    // next to the new Authorization header.
+    if ("auth" in rawEntry && !("auth" in entry)) merged.auth = null;
+    next[key] = merged;
+  }
+  return next;
+};
+
+/**
+ * Read the skill allow-/deny-lists off a raw API response — for
+ * `getSettingsForConversation`, which returns the encrypted dump as-is rather
+ * than a normalized `Settings` object (so `toSkillEnablement` can't be used).
+ *
+ * `enabledSkills` stays `undefined` when absent: that is the "never migrated"
+ * signal `resolveEnabledCatalogSkills` reads, and an empty array would instead
+ * mean "every catalog skill off".
+ */
+const getSkillEnablement = (response: SettingsApiResponse): SkillEnablement => {
+  const prefs = response.misc_settings?.app_preferences;
+  const disabled = prefs?.disabled_skills;
+  const enabled = prefs?.enabled_skills;
+  return {
+    disabledSkills: Array.isArray(disabled) ? disabled : [],
+    enabledSkills: Array.isArray(enabled) ? enabled : undefined,
+  };
+};
+
+/**
+ * Transform API response into Settings object with derived fields.
+ */
+const transformApiResponse = (
+  response: SettingsApiResponse,
+): Partial<Settings> => {
+  const agentSettings = response.agent_settings ?? {};
+  const conversationSettings = response.conversation_settings ?? {};
+
+  const partial: Partial<Settings> = {
+    agent_settings: agentSettings,
+    conversation_settings: conversationSettings,
+    llm_api_key_set: response.llm_api_key_is_set,
+  };
+
+  // App-level user preferences come back nested under
+  // `misc_settings.app_preferences` from the local agent-server (added in
+  // 1.27, restructured into the `misc_settings` container in the follow-up
+  // refactor). Hoist them onto the flat Settings shape the rest of the
+  // frontend already speaks. Older servers omit the `misc_settings` field
+  // entirely; the migration helper invoked from `getSettings` promotes any
+  // leftover localStorage values to the server on first run, so the omitted
+  // case just falls back to defaults.
+  const prefs = response.misc_settings?.app_preferences;
+  if (prefs) {
+    for (const key of APP_PREFERENCE_FIELDS) {
+      const value = prefs[key];
+      if (value !== undefined) {
+        (partial as Record<string, unknown>)[key] = value;
+      }
+    }
+  }
+
+  return partial;
+};
+
+/**
+ * Sync derived settings fields from agent_settings and conversation_settings.
+ * This ensures backward compatibility with code that reads top-level fields.
+ */
+const syncDerivedSettings = (settings: Partial<Settings>): Settings => {
+  const agentSettings = mergeRecords(
+    DEFAULT_SETTINGS.agent_settings ?? {},
+    settings.agent_settings ?? {},
+  );
+  const conversationSettings = mergeRecords(
+    DEFAULT_SETTINGS.conversation_settings ?? {},
+    settings.conversation_settings ?? {},
+  );
+
+  const merged = {
+    ...deepClone(DEFAULT_SETTINGS),
+    ...settings,
+    provider_tokens_set: {
+      ...(DEFAULT_SETTINGS.provider_tokens_set ?? {}),
+      ...(settings.provider_tokens_set ?? {}),
+    },
+    agent_settings: agentSettings,
+    conversation_settings: conversationSettings,
+  } as Settings;
+
+  const llm = agentSettings.llm as Record<string, SettingsValue> | undefined;
+  const condenser = agentSettings.condenser as
+    Record<string, SettingsValue> | undefined;
+
+  if (typeof agentSettings.agent === "string") {
+    merged.agent = agentSettings.agent;
+  }
+  if (typeof llm?.model === "string" && llm.model.length > 0) {
+    merged.llm_model = llm.model;
+  }
+  if (typeof llm?.base_url === "string") {
+    merged.llm_base_url = llm.base_url;
+  }
+  // Note: api_key may be redacted ("**********") when fetched without expose header
+  // We don't sync it to top-level llm_api_key to avoid overwriting with redacted value
+  if (typeof condenser?.enabled === "boolean") {
+    merged.enable_default_condenser = condenser.enabled;
+  }
+  if (typeof condenser?.max_size === "number") {
+    merged.condenser_max_size = condenser.max_size;
+  }
+  if (typeof conversationSettings.confirmation_mode === "boolean") {
+    merged.confirmation_mode = conversationSettings.confirmation_mode;
+  }
+  if (
+    typeof conversationSettings.security_analyzer === "string" ||
+    conversationSettings.security_analyzer === null
+  ) {
+    merged.security_analyzer = conversationSettings.security_analyzer as
+      string | null;
+  }
+  if (typeof conversationSettings.max_iterations === "number") {
+    merged.max_iterations = conversationSettings.max_iterations;
+  }
+
+  merged.search_api_key_set = !!merged.search_api_key;
+
+  return merged;
+};
+
+class SettingsService {
+  /**
+   * Fetch settings from the agent server API with retry logic.
+   *
+   * @param exposeSecrets - Controls how secrets are returned:
+   *   - undefined: Secrets are redacted ("**********") - safe for display
+   *   - "encrypted": Secrets are cipher-encrypted - safe for round-trip to start conversation
+   *   - "plaintext": Raw secrets - DO NOT USE from frontend
+   */
+  static async fetchSettingsFromApi(
+    exposeSecrets?: ExposeSecretsMode,
+    clientOptions: AgentServerClientOptions = getAgentServerClientOptions(),
+  ): Promise<SettingsApiResponse> {
+    return withRetry(() =>
+      new SettingsClient(clientOptions).getSettings({
+        exposeSecrets,
+      }),
+    ) as Promise<SettingsApiResponse>;
+  }
+
+  /**
+   * Get settings for display (secrets are redacted).
+   * Uses in-memory cache for performance.
+   */
+  static async getSettings(): Promise<Settings> {
+    // Cloud uses a different settings shape (flat top-level fields
+    // including provider_tokens_set, llm_model, etc.). Branch out before
+    // touching the local-only cache: cloud responses bypass the local
+    // SettingsApiResponse shape and feed straight into syncDerivedSettings
+    // so cloud-native fields like provider_tokens_set reach the GUI's
+    // useUserProviders → useAppInstallations → useGitRepositories chain.
+    if (getActiveBackend().backend.kind === "cloud") {
+      try {
+        const cloud = await withRetry(() => fetchCloudSettings());
+        return syncDerivedSettings(cloud);
+      } catch (error) {
+        console.warn("Failed to fetch cloud settings, using defaults:", error);
+        return syncDerivedSettings({});
+      }
+    }
+
+    const backend = getActiveBackend().backend;
+    const connectionRevision = backend.connectionRevision ?? 0;
+    const cached = readCachedSettings(
+      backend.id,
+      connectionRevision,
+      "redacted",
+    );
+    if (cached) {
+      return syncDerivedSettings(transformApiResponse(cached));
+    }
+
+    try {
+      const clientOptions = getAgentServerClientOptions();
+      const response = await this.fetchSettingsFromApi(
+        undefined,
+        clientOptions,
+      );
+      cacheSettings(backend.id, connectionRevision, "redacted", response);
+      return syncDerivedSettings(transformApiResponse(response));
+    } catch (error) {
+      // If API fails, return defaults
+      console.warn("Failed to fetch settings from API, using defaults:", error);
+      return syncDerivedSettings({});
+    }
+  }
+
+  /**
+   * Get settings with encrypted secrets for starting conversations.
+   * The encrypted secrets can be passed to the start conversation API
+   * with secrets_encrypted=true for server-side decryption.
+   *
+   * @throws Error if encrypted settings cannot be fetched - conversations
+   *   should not start with broken/redacted credentials.
+   */
+  static async getSettingsForConversation(): Promise<{
+    agentSettings: Record<string, SettingsValue>;
+    conversationSettings: Record<string, SettingsValue>;
+    secretsEncrypted: boolean;
+    skillEnablement: SkillEnablement;
+  }> {
+    const backend = getActiveBackend().backend;
+    const connectionRevision = backend.connectionRevision ?? 0;
+    const clientOptions = getAgentServerClientOptions();
+    const cached = readCachedSettings(
+      backend.id,
+      connectionRevision,
+      "encrypted",
+    );
+    if (cached) {
+      return {
+        agentSettings: cached.agent_settings,
+        conversationSettings: cached.conversation_settings,
+        secretsEncrypted: true,
+        skillEnablement: getSkillEnablement(cached),
+      };
+    }
+
+    // Fetch encrypted settings - this MUST succeed for conversations to work.
+    // Do not fall back to redacted settings as that would cause auth failures.
+    const response = await this.fetchSettingsFromApi(
+      "encrypted",
+      clientOptions,
+    );
+    cacheSettings(backend.id, connectionRevision, "encrypted", response);
+    return {
+      agentSettings: response.agent_settings,
+      conversationSettings: response.conversation_settings,
+      secretsEncrypted: true,
+      skillEnablement: getSkillEnablement(response),
+    };
+  }
+
+  static async getSettingsSchema(): Promise<SettingsSchema> {
+    if (getActiveBackend().backend.kind === "cloud") {
+      return (await fetchCloudSettingsSchema()) as SettingsSchema;
+    }
+    return (await new SettingsClient(
+      getAgentServerClientOptions(),
+    ).getAgentSchema()) as SettingsSchema;
+  }
+
+  static async getConversationSettingsSchema(): Promise<SettingsSchema> {
+    if (getActiveBackend().backend.kind === "cloud") {
+      return (await fetchCloudConversationSettingsSchema()) as SettingsSchema;
+    }
+    return (await new SettingsClient(
+      getAgentServerClientOptions(),
+    ).getConversationSchema()) as SettingsSchema;
+  }
+
+  /**
+   * Apply one name-keyed MCP merge patch. Locally this is exactly one PATCH
+   * (the agent-server deep-merges `mcp_config`). On cloud it is one GET plus
+   * one POST carrying the full catalog, because the cloud replaces the whole
+   * catalog for a map without `null` entries — see
+   * `buildCloudMcpConfigPayload`. Untouched siblings are resent verbatim from
+   * the redacted GET (the cloud restores their secrets by key); redacted
+   * values are never used as input for the patched entry.
+   */
+  static async patchMcpConfig(patch: MCPConfigPatch): Promise<boolean> {
+    if (getActiveBackend().backend.kind === "cloud") {
+      const mcpConfig = await buildCloudMcpConfigPayload(patch);
+      await withRetry(() =>
+        saveCloudSettings({
+          agent_settings_diff: { mcp_config: mcpConfig as SettingsValue },
+        }),
+      );
+    } else {
+      await withRetry(() =>
+        new SettingsClient(getAgentServerClientOptions()).updateSettings({
+          agent_settings_diff: { mcp_config: patch },
+        }),
+      );
+    }
+    clearCache();
+    return true;
+  }
+
+  static async patchMcpServer(
+    settingsKey: string,
+    patch: MCPServerPatch,
+  ): Promise<boolean> {
+    if (getActiveBackend().backend.kind === "cloud") {
+      return SettingsService.patchMcpConfig({ [settingsKey]: patch });
+    }
+    await withRetry(() =>
+      new SettingsClient(getAgentServerClientOptions()).patchMcpServer(
+        settingsKey,
+        patch,
+      ),
+    );
+    clearCache();
+    return true;
+  }
+
+  static async createMcpServer(
+    settingsKey: string,
+    server: MCPServer,
+  ): Promise<boolean> {
+    if (getActiveBackend().backend.kind === "cloud") {
+      return SettingsService.patchMcpConfig({ [settingsKey]: server });
+    }
+    await withRetry(() =>
+      new SettingsClient(getAgentServerClientOptions()).createMcpServer(
+        settingsKey,
+        server,
+      ),
+    );
+    clearCache();
+    return true;
+  }
+
+  static async deleteMcpServer(settingsKey: string): Promise<boolean> {
+    if (getActiveBackend().backend.kind === "cloud") {
+      return SettingsService.patchMcpConfig({ [settingsKey]: null });
+    }
+    await withRetry(() =>
+      new SettingsClient(getAgentServerClientOptions()).deleteMcpServer(
+        settingsKey,
+      ),
+    );
+    clearCache();
+    return true;
+  }
+
+  /**
+   * Save settings to the agent server API.
+   * Uses PATCH for incremental updates.
+   *
+   * On cloud, an `agent_settings_diff.mcp_config` map without a `null` entry
+   * replaces the whole stored catalog: send a full catalog here, or use
+   * `patchMcpConfig` for sparse MCP mutations.
+   */
+  static async saveSettings(
+    settings: Partial<Settings> & Record<string, unknown>,
+  ): Promise<boolean> {
+    // Split app-level user-preference fields (language, git identity, sound
+    // notifications, analytics consent, disabled_skills) off and route them
+    // through `misc_settings_diff.app_preferences` (local) or as flat
+    // top-level keys (cloud). The local agent-server stores them under
+    // `PersistedSettings.misc_settings.app_preferences`; the cloud accepts
+    // them as flat keys on `POST /api/v1/settings`.
+    const { extracted: appPreferences, rest } = extractAppPreferences(
+      settings as Record<string, unknown>,
+    );
+    const hasAppPreferences = Object.keys(appPreferences).length > 0;
+
+    const payload: SettingsUpdateRequest = {};
+
+    // Extract agent_settings_diff
+    const agentSettingsDiff = rest.agent_settings_diff as
+      Record<string, SettingsValue> | undefined;
+    if (agentSettingsDiff && Object.keys(agentSettingsDiff).length > 0) {
+      payload.agent_settings_diff = agentSettingsDiff;
+    }
+
+    // Extract conversation_settings_diff
+    const conversationSettingsDiff = rest.conversation_settings_diff as
+      Record<string, SettingsValue> | undefined;
+    if (
+      conversationSettingsDiff &&
+      Object.keys(conversationSettingsDiff).length > 0
+    ) {
+      payload.conversation_settings_diff = conversationSettingsDiff;
+    }
+
+    if (hasAppPreferences) {
+      payload.misc_settings_diff = { app_preferences: appPreferences };
+    }
+
+    const isCloud = getActiveBackend().backend.kind === "cloud";
+    if (isCloud) {
+      const hasCloudWork =
+        !!payload.agent_settings_diff ||
+        !!payload.conversation_settings_diff ||
+        hasAppPreferences;
+      if (!hasCloudWork) {
+        return true;
+      }
+      // Build the cloud payload from the same diffs, but as a separate
+      // object so undefined keys don't appear in the call (saveCloudSettings
+      // is called from tests with an exact-shape assertion).
+      const cloudPayload: Parameters<typeof saveCloudSettings>[0] = {};
+      if (payload.agent_settings_diff) {
+        cloudPayload.agent_settings_diff = { ...payload.agent_settings_diff };
+        if ("mcp_config" in cloudPayload.agent_settings_diff) {
+          cloudPayload.agent_settings_diff.mcp_config =
+            (await cloudCompatibleMcpConfig(
+              cloudPayload.agent_settings_diff.mcp_config,
+            )) as SettingsValue;
+        }
+      }
+      if (payload.conversation_settings_diff) {
+        cloudPayload.conversation_settings_diff =
+          payload.conversation_settings_diff;
+      }
+      if (hasAppPreferences) {
+        // The cloud `POST /api/v1/settings` takes app-preference fields as
+        // flat top-level keys (not under `app_preferences_diff`).
+        // `saveCloudSettings` re-flattens them onto the request body.
+        cloudPayload.app_preferences = appPreferences;
+      }
+      await withRetry(() => saveCloudSettings(cloudPayload));
+    } else {
+      // The local agent-server PATCH /api/settings requires at least one of
+      // the three diff fields. Skip the request entirely if nothing changed.
+      const hasLocalDiffs =
+        !!payload.agent_settings_diff ||
+        !!payload.conversation_settings_diff ||
+        !!payload.misc_settings_diff;
+      if (!hasLocalDiffs) {
+        return true;
+      }
+      await withRetry(() =>
+        new SettingsClient(getAgentServerClientOptions()).updateSettings(
+          payload,
+        ),
+      );
+    }
+
+    // Invalidate cache after successful save
+    clearCache();
+
+    return true;
+  }
+
+  /**
+   * Invalidate the settings cache.
+   * Call this when settings may have changed externally.
+   */
+  static invalidateCache(): void {
+    clearCache();
+  }
+}
+
+export default SettingsService;

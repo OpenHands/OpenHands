@@ -1,0 +1,592 @@
+import { act, fireEvent, render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import { SidebarMobileNavProvider } from "#/components/features/sidebar/sidebar-mobile-nav-context";
+import {
+  NavigationProvider,
+  type NavigationContextValue,
+} from "#/context/navigation-context";
+import { requestAutomationSetupAgent } from "#/components/features/automations/setup/automation-setup-agent-request";
+import { markAutomationSetupHandoff } from "#/api/automation-setup-handoff-store";
+import { initializeAutomationFormSession } from "#/api/automation-form-session";
+
+// Mutable mock state for controlling breakpoint
+let mockIsMobile = false;
+let mockIsRightPanelShown = false;
+let mockLeftWidth = 50;
+let mockActiveConversationTags: Record<string, string> | null = null;
+
+const mockNavigate = vi.fn();
+const mockSetHasRightPanelToggled = vi.fn();
+const mockSetIsRightPanelShown = vi.fn();
+
+// Track ChatInterface unmount via vi.fn()
+const chatInterfaceUnmount = vi.fn();
+// Every conversation id the setup panel is rendered for. The real panel tags
+// that conversation as an automation setup on mount.
+const automationSetupPanelRender = vi.fn();
+
+vi.mock("react-i18next", () => ({
+  useTranslation: () => ({ t: (key: string) => key }),
+}));
+
+vi.mock("#/hooks/use-breakpoint", () => ({
+  useBreakpoint: () => mockIsMobile,
+  SIDEBAR_RAIL_COLLAPSE_MAX_WIDTH: 767,
+}));
+
+vi.mock("#/hooks/use-resizable-panels", () => ({
+  useResizablePanels: () => ({
+    leftWidth: mockLeftWidth,
+    rightWidth: 100 - mockLeftWidth,
+    isDragging: false,
+    containerRef: { current: null },
+    handleMouseDown: vi.fn(),
+  }),
+}));
+
+vi.mock("#/stores/conversation-store", () => ({
+  useConversationStore: () => ({
+    isRightPanelShown: mockIsRightPanelShown,
+    setHasRightPanelToggled: mockSetHasRightPanelToggled,
+    setIsRightPanelShown: mockSetIsRightPanelShown,
+  }),
+}));
+
+vi.mock("#/hooks/query/use-active-conversation", () => ({
+  useActiveConversation: () => ({
+    data: { title: "Daily Morning Haiku", tags: mockActiveConversationTags },
+  }),
+}));
+
+// Mock ChatInterface with useEffect to track mount/unmount lifecycle
+vi.mock("#/components/features/chat/chat-interface", () => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const React = require("react");
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { createPortal } = require("react-dom");
+  return {
+    ChatInterface: ({
+      showGitControlBar = true,
+      showEmptyStateSuggestions = true,
+      composerDockTarget = null,
+      onDockedComposerSubmit,
+      minimalComposer = false,
+      composerPlaceholder,
+    }: {
+      showGitControlBar?: boolean;
+      showEmptyStateSuggestions?: boolean;
+      composerDockTarget?: HTMLElement | null;
+      onDockedComposerSubmit?: () => void;
+      minimalComposer?: boolean;
+      composerPlaceholder?: string;
+    }) => {
+      React.useEffect(() => {
+        return () => chatInterfaceUnmount();
+      }, []);
+      return (
+        <>
+          <div
+            data-testid="chat-interface"
+            data-show-git-control-bar={showGitControlBar ? "true" : "false"}
+            data-show-empty-state-suggestions={
+              showEmptyStateSuggestions ? "true" : "false"
+            }
+            data-minimal-composer={minimalComposer ? "true" : "false"}
+            data-composer-placeholder={composerPlaceholder}
+          />
+          {composerDockTarget
+            ? createPortal(
+                <button
+                  type="button"
+                  data-testid="docked-composer-submit"
+                  onClick={() => onDockedComposerSubmit?.()}
+                />,
+                composerDockTarget,
+              )
+            : null}
+        </>
+      );
+    },
+  };
+});
+
+vi.mock(
+  "#/components/features/conversation/conversation-tabs/conversation-tab-content/conversation-tab-content",
+  () => ({
+    ConversationTabContent: () => (
+      <input data-testid="tab-content" aria-label="Panel draft" />
+    ),
+  }),
+);
+
+// ConversationMain now renders the conversation name and tabs inline as the
+// pane headers; both reach into route/store state we don't set up here, so
+// stub them out for layout-stability tests.
+vi.mock(
+  "#/components/features/conversation/conversation-name-with-status",
+  () => ({
+    ConversationNameWithStatus: () => (
+      <div data-testid="conversation-name-with-status" />
+    ),
+  }),
+);
+
+vi.mock(
+  "#/components/features/conversation/conversation-tabs/conversation-tabs",
+  () => ({
+    ConversationTabs: () => <div data-testid="conversation-tabs" />,
+  }),
+);
+
+vi.mock(
+  "#/components/features/automations/setup/automation-setup-panel",
+  () => {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { createPortal } = require("react-dom");
+    const automationDraftLabel = "Unsaved automation name";
+    return {
+      AutomationSetupPanel: ({
+        conversationId,
+        draft,
+        toolbarPortal,
+      }: {
+        conversationId?: string | null;
+        draft?: { form?: { name?: string } };
+        toolbarPortal?: HTMLElement | null;
+      }) => {
+        automationSetupPanelRender(conversationId);
+        return (
+          <>
+            {toolbarPortal
+              ? createPortal(
+                  <button
+                    type="button"
+                    data-testid="automation-setup-create"
+                  />,
+                  toolbarPortal,
+                )
+              : null}
+            <div
+              data-testid="automation-setup-panel"
+              data-conversation-id={conversationId ?? ""}
+            >
+              <input
+                aria-label={automationDraftLabel}
+                defaultValue={draft?.form?.name ?? ""}
+              />
+            </div>
+          </>
+        );
+      },
+    };
+  },
+);
+
+import { ConversationMain } from "#/components/features/conversation/conversation-main/conversation-main";
+
+function conversationMainTree(conversationId = "conv-1") {
+  const navigation: NavigationContextValue = {
+    currentPath: `/conversations/${conversationId}`,
+    conversationId,
+    isNavigating: false,
+    navigate: mockNavigate,
+  };
+
+  return (
+    <NavigationProvider value={navigation}>
+      <SidebarMobileNavProvider>
+        <ConversationMain />
+      </SidebarMobileNavProvider>
+    </NavigationProvider>
+  );
+}
+
+function renderConversationMain() {
+  return render(conversationMainTree());
+}
+
+describe("ConversationMain - Layout Transition Stability", () => {
+  beforeEach(() => {
+    mockIsMobile = false;
+    mockIsRightPanelShown = false;
+    mockLeftWidth = 50;
+    mockActiveConversationTags = null;
+    window.sessionStorage.clear();
+    chatInterfaceUnmount.mockClear();
+    automationSetupPanelRender.mockClear();
+    mockNavigate.mockClear();
+    mockSetHasRightPanelToggled.mockClear();
+    mockSetIsRightPanelShown.mockClear();
+  });
+
+  it("defers closed tabs until opened and preserves their state when closed again", async () => {
+    const user = userEvent.setup();
+    const { rerender } = renderConversationMain();
+    expect(screen.queryByTestId("tab-content")).not.toBeInTheDocument();
+
+    mockIsRightPanelShown = true;
+    rerender(conversationMainTree());
+    const panel = screen.getByRole("textbox", { name: "Panel draft" });
+    await user.type(panel, "unsaved draft");
+
+    mockIsRightPanelShown = false;
+    rerender(conversationMainTree());
+    expect(panel).toBeInTheDocument();
+    mockIsRightPanelShown = true;
+    rerender(conversationMainTree());
+    expect(screen.getByRole("textbox", { name: "Panel draft" })).toHaveValue(
+      "unsaved draft",
+    );
+
+    mockIsRightPanelShown = false;
+    rerender(conversationMainTree("conv-2"));
+    expect(screen.queryByTestId("tab-content")).not.toBeInTheDocument();
+    mockIsRightPanelShown = true;
+    rerender(conversationMainTree("conv-2"));
+    expect(screen.getByRole("textbox", { name: "Panel draft" })).toHaveValue(
+      "",
+    );
+  });
+
+  it("opens automation setup mode when the conversation has a draft tag", async () => {
+    mockActiveConversationTags = { automationsetup: "draft" };
+
+    renderConversationMain();
+
+    expect(
+      await screen.findByTestId("automation-setup-panel"),
+    ).toBeInTheDocument();
+    expect(mockSetHasRightPanelToggled).toHaveBeenCalledWith(true);
+    expect(mockSetIsRightPanelShown).toHaveBeenCalledWith(true);
+  });
+
+  it("keeps a setup handoff on its own conversation when navigating to another", () => {
+    markAutomationSetupHandoff("conv-1");
+    const { rerender } = render(conversationMainTree("conv-1"));
+    expect(screen.getByTestId("automation-setup-panel")).toHaveAttribute(
+      "data-conversation-id",
+      "conv-1",
+    );
+
+    rerender(conversationMainTree("conv-2"));
+
+    expect(automationSetupPanelRender).not.toHaveBeenCalledWith("conv-2");
+    expect(
+      screen.queryByTestId("automation-setup-panel"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("automation-setup-topbar"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("keeps the existing mobile conversation header outside the scroll area", () => {
+    mockIsMobile = true;
+    renderConversationMain();
+
+    expect(screen.getByTestId("chat-pane-header")).toHaveClass("shrink-0");
+    expect(
+      screen.getByTestId("sidebar-mobile-menu-toggle"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("conversation-mobile-back-button"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("opens the navigation drawer on a rightward swipe from the chat's left third", () => {
+    mockIsMobile = true;
+    renderConversationMain();
+    vi.spyOn(
+      screen.getByTestId("conversation-chat-panel"),
+      "getBoundingClientRect",
+    ).mockReturnValue({ left: 0, top: 0, width: 390, height: 844 } as DOMRect);
+    const chat = screen.getByTestId("chat-interface");
+
+    fireEvent.touchStart(chat, {
+      touches: [{ identifier: 0, clientX: 40, clientY: 400 }],
+    });
+    fireEvent.touchEnd(chat, {
+      touches: [],
+      changedTouches: [{ identifier: 0, clientX: 200, clientY: 404 }],
+    });
+
+    expect(screen.getByTestId("sidebar-mobile-menu-toggle")).toHaveAttribute(
+      "aria-expanded",
+      "true",
+    );
+  });
+
+  it("renders at desktop width without the app shell's mobile navigation", () => {
+    render(
+      <NavigationProvider
+        value={{
+          currentPath: "/conversations/conv-1",
+          conversationId: "conv-1",
+          isNavigating: false,
+          navigate: mockNavigate,
+        }}
+      >
+        <ConversationMain />
+      </NavigationProvider>,
+    );
+
+    expect(screen.getByTestId("chat-interface")).toBeInTheDocument();
+  });
+
+  it.each([
+    ["desktop", false],
+    ["mobile", true],
+  ])("renders ChatInterface at %s width", (_name, isMobile) => {
+    mockIsMobile = isMobile;
+    renderConversationMain();
+    expect(screen.getByTestId("chat-interface")).toHaveAttribute(
+      "data-show-git-control-bar",
+      "true",
+    );
+  });
+
+  it.each([
+    ["desktop to mobile", false, true],
+    ["mobile to desktop", true, false],
+  ])(
+    "does not unmount ChatInterface when crossing from %s",
+    (_name, initialIsMobile, nextIsMobile) => {
+      mockIsMobile = initialIsMobile;
+      const { rerender } = renderConversationMain();
+      expect(chatInterfaceUnmount).not.toHaveBeenCalled();
+
+      mockIsMobile = nextIsMobile;
+      rerender(conversationMainTree());
+
+      expect(chatInterfaceUnmount).not.toHaveBeenCalled();
+      expect(screen.getByTestId("chat-interface")).toBeInTheDocument();
+    },
+  );
+
+  it("survives rapid back-and-forth resize without unmounting ChatInterface", () => {
+    mockIsMobile = false;
+    const { rerender } = renderConversationMain();
+
+    // Simulate rapid resize back and forth across the breakpoint
+    for (const mobile of [true, false, true, false, true]) {
+      mockIsMobile = mobile;
+      rerender(conversationMainTree());
+    }
+
+    expect(chatInterfaceUnmount).not.toHaveBeenCalled();
+    expect(screen.getByTestId("chat-interface")).toBeInTheDocument();
+  });
+
+  it("uses a single automation setup top bar", () => {
+    mockIsRightPanelShown = true;
+    markAutomationSetupHandoff("conv-1");
+
+    renderConversationMain();
+
+    expect(screen.getByTestId("automation-setup-topbar")).toBeInTheDocument();
+    expect(screen.getByTestId("automation-setup-panel")).toHaveAttribute(
+      "data-conversation-id",
+      "conv-1",
+    );
+    expect(screen.queryByTestId("chat-pane-header")).not.toBeInTheDocument();
+    expect(
+      screen.getByTestId("automation-setup-conversation-title"),
+    ).toHaveTextContent("Daily Morning Haiku");
+    expect(screen.getByTestId("automation-setup-create")).toBeInTheDocument();
+    expect(screen.getByTestId("chat-interface")).toHaveAttribute(
+      "data-show-git-control-bar",
+      "false",
+    );
+    expect(screen.getByTestId("chat-interface")).toHaveAttribute(
+      "data-show-empty-state-suggestions",
+      "false",
+    );
+    expect(screen.getByTestId("chat-interface")).toHaveAttribute(
+      "data-composer-placeholder",
+      "AUTOMATION_SETUP$CONVERSATION_COMPOSER_PLACEHOLDER",
+    );
+    expect(
+      screen.queryByTestId("automation-setup-back"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("keeps the automation form on a narrow window and toggles to the styled conversation", async () => {
+    const user = userEvent.setup();
+    mockIsMobile = true;
+    mockIsRightPanelShown = true;
+    markAutomationSetupHandoff("conv-1");
+
+    renderConversationMain();
+
+    expect(screen.getByTestId("automation-setup-topbar")).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("conversation-mobile-back-button"),
+    ).not.toBeInTheDocument();
+
+    expect(screen.getByTestId("automation-setup-panel")).toHaveAttribute(
+      "data-conversation-id",
+      "conv-1",
+    );
+    expect(
+      screen.getByTestId("automation-setup-docked-composer"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByTestId("automation-setup-mobile-view-form"),
+    ).toHaveAttribute("aria-label", "AUTOMATION_SETUP$VIEW_FORM");
+    expect(
+      screen.getByTestId("automation-setup-mobile-view-conversation"),
+    ).toHaveAttribute("aria-label", "AUTOMATION_SETUP$VIEW_CONVERSATION");
+    expect(screen.queryByTestId("chat-pane-header")).not.toBeInTheDocument();
+    expect(screen.getByTestId("conversation-chat-panel")).toHaveClass("hidden");
+
+    await user.click(
+      screen.getByTestId("automation-setup-mobile-view-conversation"),
+    );
+
+    expect(screen.getByTestId("automation-setup-mobile-form")).toHaveClass(
+      "hidden",
+    );
+    expect(
+      screen.queryByTestId("automation-setup-docked-composer"),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByTestId("chat-pane-header")).not.toBeInTheDocument();
+    expect(screen.getByTestId("conversation-chat-panel")).not.toHaveClass(
+      "hidden",
+    );
+    expect(screen.getByTestId("chat-interface")).toHaveAttribute(
+      "data-show-git-control-bar",
+      "false",
+    );
+    expect(screen.getByTestId("chat-interface")).toHaveAttribute(
+      "data-show-empty-state-suggestions",
+      "false",
+    );
+    expect(screen.getByTestId("chat-interface")).toHaveAttribute(
+      "data-minimal-composer",
+      "true",
+    );
+    expect(screen.getByTestId("automation-setup-topbar")).toHaveClass(
+      "flex-col",
+    );
+
+    await user.click(screen.getByTestId("automation-setup-mobile-view-form"));
+
+    expect(
+      screen.getByTestId("automation-setup-mobile-form"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByTestId("automation-setup-docked-composer"),
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByTestId("docked-composer-submit"));
+
+    expect(screen.getByTestId("automation-setup-mobile-form")).toHaveClass(
+      "hidden",
+    );
+
+    await user.click(screen.getByTestId("automation-setup-mobile-view-form"));
+
+    act(() => {
+      requestAutomationSetupAgent();
+    });
+
+    expect(screen.getByTestId("automation-setup-mobile-form")).toHaveClass(
+      "hidden",
+    );
+    expect(screen.getByTestId("conversation-chat-panel")).not.toHaveClass(
+      "hidden",
+    );
+  });
+
+  it("retains unsaved phone form edits across view switches and after returning", async () => {
+    const user = userEvent.setup();
+    mockIsMobile = true;
+    mockActiveConversationTags = { automation_setup: "true" };
+    markAutomationSetupHandoff("conv-1");
+    const rendered = renderConversationMain();
+    const name = await screen.findByRole("textbox", {
+      name: "Unsaved automation name",
+    });
+    await user.type(name, "Keep my draft");
+    await user.click(
+      screen.getByTestId("automation-setup-mobile-view-conversation"),
+    );
+    await user.click(screen.getByTestId("automation-setup-mobile-view-form"));
+    expect(
+      screen.getByRole("textbox", { name: "Unsaved automation name" }),
+    ).toHaveValue("Keep my draft");
+    // The real panel keeps its edits in the conversation's form session.
+    initializeAutomationFormSession("conv-1", {
+      prompt: "",
+      kind: "prompt",
+      form: { name: "Keep my draft" },
+    });
+    rendered.unmount();
+    markAutomationSetupHandoff("conv-1");
+    renderConversationMain();
+    expect(
+      await screen.findByRole("textbox", { name: "Unsaved automation name" }),
+    ).toHaveValue("Keep my draft");
+  });
+
+  it("expands the automation form to full width when hiding the agent", async () => {
+    const user = userEvent.setup();
+    mockIsRightPanelShown = true;
+    markAutomationSetupHandoff("conv-1");
+
+    renderConversationMain();
+
+    expect(screen.getByTestId("conversation-chat-panel")).toHaveStyle({
+      width: "50%",
+    });
+    expect(screen.getByTestId("conversation-right-panel")).toHaveStyle({
+      width: "50%",
+    });
+    expect(
+      screen.queryByTestId("automation-setup-docked-composer"),
+    ).not.toBeInTheDocument();
+
+    await user.click(screen.getByTestId("automation-setup-agent-toggle"));
+
+    expect(screen.getByTestId("conversation-chat-panel")).toHaveStyle({
+      width: "0%",
+    });
+    expect(screen.getByTestId("conversation-right-panel")).toHaveStyle({
+      width: "100%",
+    });
+    expect(
+      screen.getByTestId("automation-setup-docked-composer"),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId("docked-composer-submit")).toBeInTheDocument();
+  });
+
+  it.each(["docked composer submit", "setup form help request"])(
+    "reveals the agent from %s",
+    async (trigger) => {
+      const user = userEvent.setup();
+      mockIsRightPanelShown = true;
+      markAutomationSetupHandoff("conv-1");
+
+      renderConversationMain();
+      await user.click(screen.getByTestId("automation-setup-agent-toggle"));
+      expect(screen.getByTestId("conversation-chat-panel")).toHaveStyle({
+        width: "0%",
+      });
+
+      if (trigger === "docked composer submit") {
+        await user.click(screen.getByTestId("docked-composer-submit"));
+      } else {
+        act(() => {
+          requestAutomationSetupAgent();
+        });
+      }
+
+      expect(screen.getByTestId("conversation-chat-panel")).toHaveStyle({
+        width: "50%",
+      });
+      expect(
+        screen.queryByTestId("automation-setup-docked-composer"),
+      ).not.toBeInTheDocument();
+    },
+  );
+});

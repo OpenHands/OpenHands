@@ -1,0 +1,254 @@
+import React from "react";
+import { useTranslation } from "react-i18next";
+import {
+  ArrowUpCircle,
+  Check,
+  CheckCircle2,
+  Copy,
+  ExternalLink,
+  RefreshCw,
+} from "lucide-react";
+import {
+  AGENT_CANVAS_RELEASE_NOTES_URL,
+  AGENT_CANVAS_UPDATE_COMMANDS,
+} from "#/api/agent-canvas-updates";
+import { ModalBackdrop } from "#/components/shared/modals/modal-backdrop";
+import { ModalCloseButton } from "#/components/shared/modals/modal-close-button";
+import DockerIcon from "#/icons/docker.svg?react";
+import NpmIcon from "#/icons/npm.svg?react";
+import { I18nKey } from "#/i18n/declaration";
+import { cn } from "#/utils/utils";
+import { statusToneBadgeClassName } from "#/utils/status-tone-classes";
+import { copyToClipboard } from "#/utils/copy-to-clipboard";
+import { displayErrorToast } from "#/utils/custom-toast-handlers";
+
+const COPY_FEEDBACK_MS = 2000;
+
+type UpdateCommandTab = "npm" | "docker";
+
+const UPDATE_COMMAND_TABS: UpdateCommandTab[] = ["npm", "docker"];
+
+interface AgentCanvasVersionModalProps {
+  installedVersion: string;
+  latestVersion: string | null;
+  updateAvailable: boolean;
+  isChecking: boolean;
+  onCheckForUpdates: () => void;
+  onClose: () => void;
+}
+
+function getUpdateCommandTabLabelKey(tab: UpdateCommandTab): I18nKey {
+  return tab === "npm"
+    ? I18nKey.SETTINGS$VERSION_NPM_RECOMMENDED
+    : I18nKey.SETTINGS$VERSION_DOCKER;
+}
+
+function UpdateCommandTabIcon({ tab }: { tab: UpdateCommandTab }) {
+  if (tab === "npm") {
+    return <NpmIcon className="size-4 shrink-0" aria-hidden />;
+  }
+  return <DockerIcon className="size-5 shrink-0" aria-hidden />;
+}
+
+export function AgentCanvasVersionModal({
+  installedVersion,
+  latestVersion,
+  updateAvailable,
+  isChecking,
+  onCheckForUpdates,
+  onClose,
+}: AgentCanvasVersionModalProps) {
+  const { t } = useTranslation("openhands");
+  const [selectedTab, setSelectedTab] = React.useState<UpdateCommandTab>("npm");
+  const [copied, setCopied] = React.useState(false);
+  const copiedTimeoutRef = React.useRef<number | null>(null);
+  const command =
+    selectedTab === "npm"
+      ? AGENT_CANVAS_UPDATE_COMMANDS.npm
+      : AGENT_CANVAS_UPDATE_COMMANDS.docker;
+
+  React.useEffect(
+    () => () => {
+      if (copiedTimeoutRef.current !== null) {
+        window.clearTimeout(copiedTimeoutRef.current);
+      }
+    },
+    [],
+  );
+
+  React.useEffect(() => {
+    setCopied(false);
+    if (copiedTimeoutRef.current !== null) {
+      window.clearTimeout(copiedTimeoutRef.current);
+      copiedTimeoutRef.current = null;
+    }
+  }, [selectedTab]);
+
+  const copyCommand = React.useCallback(async () => {
+    if (!(await copyToClipboard(command))) {
+      displayErrorToast(t(I18nKey.CHAT_INTERFACE$CHAT_MESSAGE_COPY_FAILED));
+      return;
+    }
+    setCopied(true);
+    if (copiedTimeoutRef.current !== null) {
+      window.clearTimeout(copiedTimeoutRef.current);
+    }
+    copiedTimeoutRef.current = window.setTimeout(() => {
+      setCopied(false);
+      copiedTimeoutRef.current = null;
+    }, COPY_FEEDBACK_MS);
+  }, [command, t]);
+
+  return (
+    <ModalBackdrop
+      onClose={onClose}
+      aria-label={t(I18nKey.SETTINGS$VERSION_MODAL_ARIA_LABEL)}
+    >
+      <section className="relative flex w-130 dialog-viewport-width flex-col gap-5 rounded-xl border border-border bg-base-secondary p-6 shadow-xl">
+        <ModalCloseButton
+          onClose={onClose}
+          testId="agent-canvas-version-modal-close"
+        />
+
+        <header className="flex items-center gap-3 pr-8">
+          {updateAvailable ? (
+            <ArrowUpCircle
+              className="size-7 shrink-0 text-info dark:text-canvas-update"
+              aria-hidden
+            />
+          ) : (
+            <CheckCircle2
+              className="size-7 shrink-0 text-status-success"
+              aria-hidden
+            />
+          )}
+          <h2 className="text-base font-semibold leading-6 text-contrast">
+            {t(
+              updateAvailable
+                ? I18nKey.SETTINGS$VERSION_UPDATE_AVAILABLE
+                : I18nKey.SETTINGS$VERSION_UP_TO_DATE_TITLE,
+            )}
+          </h2>
+          {updateAvailable && latestVersion ? (
+            <span
+              className={cn(
+                "rounded-full border border-info/30 px-2 py-0.5 text-xs font-semibold dark:border-transparent dark:bg-canvas-update-surface dark:text-canvas-update",
+                statusToneBadgeClassName.info,
+              )}
+            >
+              {latestVersion}
+            </span>
+          ) : null}
+        </header>
+
+        <div className="flex flex-col gap-1">
+          {updateAvailable && latestVersion ? (
+            <p className="text-sm text-canvas-version-copy">
+              {t(I18nKey.SETTINGS$VERSION_UPDATE_MESSAGE, {
+                installed: installedVersion,
+                latest: latestVersion,
+              })}{" "}
+              <a
+                href={AGENT_CANVAS_RELEASE_NOTES_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 whitespace-nowrap font-medium text-contrast hover:text-canvas-version-copy"
+              >
+                {t(I18nKey.SETTINGS$VERSION_RELEASE_NOTES)}
+                <ExternalLink className="size-4 shrink-0" aria-hidden />
+              </a>
+            </p>
+          ) : (
+            <>
+              <p className="text-sm text-canvas-version-copy">
+                {t(I18nKey.SETTINGS$VERSION_INSTALLED, {
+                  version: installedVersion,
+                })}
+              </p>
+              {latestVersion ? (
+                <p className="whitespace-nowrap text-sm text-status-success">
+                  {t(I18nKey.SETTINGS$VERSION_LATEST_MESSAGE)}{" "}
+                  <a
+                    href={AGENT_CANVAS_RELEASE_NOTES_URL}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 font-medium text-contrast hover:text-canvas-version-copy"
+                  >
+                    {t(I18nKey.SETTINGS$VERSION_RELEASE_NOTES)}
+                    <ExternalLink className="size-4 shrink-0" aria-hidden />
+                  </a>
+                </p>
+              ) : (
+                <p className="text-sm text-muted">
+                  {t(I18nKey.SETTINGS$VERSION_CHECK_UNAVAILABLE)}
+                </p>
+              )}
+            </>
+          )}
+        </div>
+
+        {updateAvailable ? (
+          <div>
+            <div className="flex justify-center">
+              {UPDATE_COMMAND_TABS.map((tab) => (
+                <button
+                  key={tab}
+                  type="button"
+                  onClick={() => setSelectedTab(tab)}
+                  className={cn(
+                    "inline-flex items-center gap-1.5 px-3 pb-2 text-sm font-medium",
+                    selectedTab === tab
+                      ? "border-b border-contrast text-contrast"
+                      : "text-muted hover:text-contrast",
+                  )}
+                >
+                  <UpdateCommandTabIcon tab={tab} />
+                  {t(getUpdateCommandTabLabelKey(tab))}
+                </button>
+              ))}
+            </div>
+            <div className="flex items-center gap-3 rounded-lg border border-border bg-surface-deep px-4 py-3">
+              <code className="min-w-0 flex-1 overflow-visible whitespace-nowrap font-mono text-sm text-contrast">
+                {command}
+              </code>
+              <button
+                type="button"
+                onClick={copyCommand}
+                aria-label={t(
+                  copied
+                    ? I18nKey.BUTTON$COPIED
+                    : I18nKey.SETTINGS$VERSION_COPY_COMMAND,
+                )}
+                disabled={copied}
+                className="shrink-0 text-muted hover:text-contrast disabled:hover:text-muted"
+              >
+                {copied ? (
+                  <Check className="size-4 text-status-success" aria-hidden />
+                ) : (
+                  <Copy className="size-4" aria-hidden />
+                )}
+              </button>
+            </div>
+          </div>
+        ) : null}
+
+        {!updateAvailable ? (
+          <div className="flex flex-wrap gap-x-8 gap-y-3">
+            <button
+              type="button"
+              onClick={onCheckForUpdates}
+              className="inline-flex items-center gap-2 text-sm font-medium text-contrast hover:text-canvas-version-copy disabled:cursor-wait disabled:text-muted"
+              disabled={isChecking}
+            >
+              {t(I18nKey.SETTINGS$VERSION_CHECK_FOR_UPDATES)}
+              <RefreshCw
+                className={cn("size-4 shrink-0", isChecking && "animate-spin")}
+                aria-hidden
+              />
+            </button>
+          </div>
+        ) : null}
+      </section>
+    </ModalBackdrop>
+  );
+}

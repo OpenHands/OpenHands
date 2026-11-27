@@ -1,0 +1,676 @@
+import React from "react";
+import { fireEvent, screen } from "@testing-library/react";
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import { renderWithProviders } from "test-utils";
+
+const useActiveConversationMock = vi.fn();
+const useSettingsMock = vi.fn();
+const useActiveBackendMock = vi.fn();
+const switchAcpModelMutate = vi.fn();
+
+vi.mock("#/hooks/query/use-active-conversation", () => ({
+  useActiveConversation: () => useActiveConversationMock(),
+}));
+
+vi.mock("#/hooks/query/use-settings", () => ({
+  useSettings: () => useSettingsMock(),
+}));
+
+vi.mock("#/contexts/active-backend-context", async () => {
+  const actual = await vi.importActual<
+    typeof import("#/contexts/active-backend-context")
+  >("#/contexts/active-backend-context");
+  return {
+    ...actual,
+    useActiveBackend: () => useActiveBackendMock(),
+  };
+});
+
+vi.mock("#/hooks/mutation/use-switch-acp-model", () => ({
+  useSwitchAcpModel: () => ({ mutate: switchAcpModelMutate }),
+}));
+
+const switchAcpEffortMutate = vi.fn();
+vi.mock("#/hooks/mutation/use-switch-acp-effort", () => ({
+  useSwitchAcpEffort: () => ({ mutate: switchAcpEffortMutate }),
+}));
+
+// What the session and the agent report; empty unless a test sets them.
+const sessionModelsMock = vi.fn();
+vi.mock("#/hooks/query/use-acp-session-models", () => ({
+  useAcpSessionModels: () => sessionModelsMock(),
+  useAcpSessionEffort: (
+    conversation: {
+      acp_available_efforts?: unknown[] | null;
+      acp_current_effort?: string | null;
+    } | null,
+  ) => ({
+    efforts: conversation?.acp_available_efforts ?? [],
+    currentEffort: conversation?.acp_current_effort ?? null,
+  }),
+}));
+const discoveryMock = vi.fn();
+vi.mock("#/hooks/query/use-acp-model-discovery", () => ({
+  useAcpModelDiscovery: () => ({
+    effortsFor: () => [],
+    defaultEffort: null,
+    ...discoveryMock(),
+  }),
+}));
+
+const EFFORTS = [
+  { value: "low", label: "Low" },
+  { value: "high", label: "High" },
+];
+
+const CLAUDE_MODELS = [
+  { id: "opus[1m]", label: "Claude Opus (1M)" },
+  { id: "sonnet", label: "Claude Sonnet" },
+];
+
+import { ChatInputModel } from "#/components/features/chat/components/chat-input-model";
+import {
+  clearPendingHomeModelPick,
+  hasPendingHomeModelPick,
+} from "#/hooks/use-chat-input-llm-profile-state";
+
+describe("ChatInputModel", () => {
+  beforeEach(() => {
+    useActiveConversationMock.mockReset();
+    useSettingsMock.mockReset();
+    useSettingsMock.mockReturnValue({ data: undefined });
+    useActiveBackendMock.mockReset();
+    // Default to a local backend (mirrors useActiveBackend's standalone
+    // fallback): live ACP model switching is local-only.
+    useActiveBackendMock.mockReturnValue({
+      backend: { id: "local-1", kind: "local" },
+      orgId: null,
+    });
+    switchAcpModelMutate.mockReset();
+    switchAcpEffortMutate.mockReset();
+    sessionModelsMock.mockReturnValue([]);
+    discoveryMock.mockReturnValue({ models: [], defaultModelId: null });
+    clearPendingHomeModelPick("local-1", null);
+  });
+
+  it("renders the active conversation's llm_model when present", () => {
+    useActiveConversationMock.mockReturnValue({
+      data: {
+        conversation_id: "test-conversation-id",
+        llm_model: "openai/gpt-4o",
+      },
+    });
+
+    renderWithProviders(<ChatInputModel />);
+
+    const model = screen.getByTestId("chat-input-llm-model");
+    expect(model).toBeInTheDocument();
+    expect(model).toHaveTextContent("openai/gpt…");
+    expect(model).toHaveAttribute("title", "openai/gpt-4o");
+    expect(
+      screen.queryByTestId("chat-input-llm-model-popover"),
+    ).not.toBeInTheDocument();
+
+    fireEvent.click(model);
+    const popover = screen.getByTestId("chat-input-llm-model-popover");
+    expect(popover).toHaveTextContent("openai/gpt-4o");
+    const llmSettingsLink = screen.getByRole("link", {
+      name: /LLM Profiles|SETTINGS\$LLM_PROFILES|LLM Settings|SETTINGS\$LLM_SETTINGS/,
+    });
+    expect(llmSettingsLink).toHaveAttribute("href", "/settings/llm");
+  });
+
+  it("renders nothing when llm_model is missing", () => {
+    useActiveConversationMock.mockReturnValue({
+      data: { conversation_id: "test-conversation-id" },
+    });
+
+    renderWithProviders(<ChatInputModel />);
+
+    expect(
+      screen.queryByTestId("chat-input-llm-model"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("renders an ACP conversation model and links to Agent settings", () => {
+    sessionModelsMock.mockReturnValue(CLAUDE_MODELS);
+    useActiveConversationMock.mockReturnValue({
+      data: {
+        conversation_id: "test-conversation-id",
+        agent_kind: "acp",
+        acp_server: "claude-code",
+        llm_model: "sonnet",
+      },
+    });
+
+    renderWithProviders(<ChatInputModel />);
+
+    const model = screen.getByTestId("chat-input-llm-model");
+    // ACP surfaces show the label the session gave the model.
+    expect(model).toHaveAttribute("title", "Claude Sonnet");
+    fireEvent.click(model);
+    expect(screen.getByRole("link")).toHaveAttribute(
+      "href",
+      "/settings/agents",
+    );
+  });
+
+  it("does not fall back to the OpenHands settings model for active ACP conversations", () => {
+    useActiveConversationMock.mockReturnValue({
+      data: {
+        conversation_id: "test-conversation-id",
+        agent_kind: "acp",
+        llm_model: null,
+      },
+    });
+    useSettingsMock.mockReturnValue({
+      data: { llm_model: "openai/gpt-4o" },
+    });
+
+    renderWithProviders(<ChatInputModel />);
+
+    expect(
+      screen.queryByTestId("chat-input-llm-model"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("does not show another provider's saved model before an ACP conversation reports its own", () => {
+    useActiveConversationMock.mockReturnValue({
+      data: {
+        conversation_id: "test-conversation-id",
+        agent_kind: "acp",
+        acp_server: "codex",
+        llm_model: null,
+      },
+    });
+    useSettingsMock.mockReturnValue({
+      data: {
+        agent_settings: {
+          agent_kind: "acp",
+          acp_server: "claude-code",
+          acp_model: "opus[1m]",
+        },
+      },
+    });
+
+    renderWithProviders(<ChatInputModel />);
+
+    expect(
+      screen.queryByTestId("chat-input-llm-model"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("falls back to the user's default model from settings when there is no active conversation", () => {
+    // Arrange — home page render: no conversation yet, but the user has
+    // a default model configured. The switcher should still show.
+    useActiveConversationMock.mockReturnValue({ data: undefined });
+    useSettingsMock.mockReturnValue({
+      data: { llm_model: "anthropic/claude-sonnet-4-20250514" },
+    });
+
+    renderWithProviders(<ChatInputModel />);
+
+    const model = screen.getByTestId("chat-input-llm-model");
+    expect(model).toHaveTextContent("anthropic/…");
+    expect(model).toHaveAttribute(
+      "title",
+      "anthropic/claude-sonnet-4-20250514",
+    );
+  });
+
+  it("uses the ACP settings model on the home page when ACP is active", () => {
+    useActiveConversationMock.mockReturnValue({ data: undefined });
+    useSettingsMock.mockReturnValue({
+      data: {
+        llm_model: "openai/gpt-4o",
+        agent_settings: {
+          agent_kind: "acp",
+          acp_model: "gemini-2.5-pro",
+        },
+      },
+    });
+
+    renderWithProviders(<ChatInputModel />);
+
+    const model = screen.getByTestId("chat-input-llm-model");
+    expect(model).toHaveAttribute("title", "gemini-2.5-pro");
+    fireEvent.click(model);
+    expect(screen.getByRole("link")).toHaveAttribute(
+      "href",
+      "/settings/agents",
+    );
+  });
+
+  it("renders nothing when neither the conversation nor settings provide an llm_model", () => {
+    useActiveConversationMock.mockReturnValue({ data: undefined });
+    useSettingsMock.mockReturnValue({ data: undefined });
+
+    renderWithProviders(<ChatInputModel />);
+
+    expect(
+      screen.queryByTestId("chat-input-llm-model"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("renders nothing for ACP conversations and does NOT fall back to settings.llm_model", () => {
+    // The ACP subprocess owns its model (via ``acp_model``); ``llm_model``
+    // is null on the conversation by design. The previous fallback to
+    // ``settings.llm_model`` would have resurrected the user's *default*
+    // OpenHands model on, say, a Claude-Code conversation — visibly
+    // wrong (the link goes to /settings, which is itself disabled for
+    // ACP) and silently lies about what model is actually running.
+    useActiveConversationMock.mockReturnValue({
+      data: {
+        conversation_id: "test-conversation-id",
+        agent_kind: "acp",
+        llm_model: null,
+      },
+    });
+    useSettingsMock.mockReturnValue({
+      data: { llm_model: "anthropic/claude-sonnet-4-20250514" },
+    });
+
+    renderWithProviders(<ChatInputModel />);
+
+    expect(
+      screen.queryByTestId("chat-input-llm-model"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("shows the agent's own default on the home page when no model is saved", () => {
+    // The next conversation starts on the agent's default, so the picker
+    // shows it. It links to Agent settings since ``settings.llm_model``
+    // doesn't apply to ACP.
+    discoveryMock.mockReturnValue({
+      models: CLAUDE_MODELS,
+      defaultModelId: "opus[1m]",
+    });
+    useActiveConversationMock.mockReturnValue({ data: undefined });
+    useSettingsMock.mockReturnValue({
+      data: {
+        agent_settings: { agent_kind: "acp", acp_server: "claude-code" },
+        // settings.llm_model is set (user has an OpenHands default
+        // configured), but agent_kind=acp suppresses it.
+        llm_model: "anthropic/claude-sonnet-4-20250514",
+      },
+    });
+
+    renderWithProviders(<ChatInputModel />);
+
+    const model = screen.getByTestId("chat-input-llm-model");
+    expect(model).toHaveAttribute("title", "Claude Opus (1M)");
+    fireEvent.click(model);
+    expect(screen.getByRole("link")).toHaveAttribute(
+      "href",
+      "/settings/agents",
+    );
+  });
+
+  it("renders the session's models as selectable rows for an ACP conversation", () => {
+    sessionModelsMock.mockReturnValue(CLAUDE_MODELS);
+    useActiveConversationMock.mockReturnValue({
+      data: {
+        conversation_id: "test-conversation-id",
+        agent_kind: "acp",
+        acp_server: "claude-code",
+        llm_model: "sonnet",
+      },
+    });
+
+    renderWithProviders(<ChatInputModel />);
+
+    fireEvent.click(screen.getByTestId("chat-input-llm-model"));
+
+    // Every model the session reported is a row, and the running one
+    // (sonnet) is marked selected.
+    const selectedRow = screen.getByTestId(
+      "chat-input-acp-model-option-sonnet",
+    );
+    expect(selectedRow).toBeInTheDocument();
+    expect(selectedRow).toHaveTextContent("Claude Sonnet");
+    expect(
+      screen.getByTestId("chat-input-acp-model-option-opus[1m]"),
+    ).toBeInTheDocument();
+  });
+
+  it("live-switches the model when a row is selected in an active ACP conversation", () => {
+    sessionModelsMock.mockReturnValue(CLAUDE_MODELS);
+    useActiveConversationMock.mockReturnValue({
+      data: {
+        conversation_id: "test-conversation-id",
+        agent_kind: "acp",
+        acp_server: "claude-code",
+        llm_model: "sonnet",
+      },
+    });
+
+    renderWithProviders(<ChatInputModel />);
+
+    fireEvent.click(screen.getByTestId("chat-input-llm-model"));
+    fireEvent.click(screen.getByTestId("chat-input-acp-model-option-opus[1m]"));
+
+    // Active conversation → live switch keyed by the conversation id from the
+    // navigation context (test-conversation-id), default-write NOT used.
+    expect(switchAcpModelMutate).toHaveBeenCalledWith({
+      conversationId: "test-conversation-id",
+      model: "opus[1m]",
+    });
+    // Popover closes after a selection.
+    expect(
+      screen.queryByTestId("chat-input-llm-model-popover"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("persists the choice as the default (conversationId null) in the home ACP case", () => {
+    discoveryMock.mockReturnValue({
+      models: CLAUDE_MODELS,
+      defaultModelId: null,
+    });
+    useActiveConversationMock.mockReturnValue({ data: undefined });
+    useSettingsMock.mockReturnValue({
+      data: {
+        agent_settings: { agent_kind: "acp", acp_server: "claude-code" },
+        llm_model: "anthropic/claude-sonnet-4-20250514",
+      },
+    });
+
+    renderWithProviders(<ChatInputModel />);
+
+    fireEvent.click(screen.getByTestId("chat-input-llm-model"));
+    fireEvent.click(screen.getByTestId("chat-input-acp-model-option-sonnet"));
+
+    // Home / no session → null conversationId routes the hook to the
+    // settings-default write path.
+    expect(switchAcpModelMutate).toHaveBeenCalledWith({
+      conversationId: null,
+      model: "sonnet",
+    });
+  });
+
+  it("offers Agent default on the home page and saves no model when it is picked", () => {
+    discoveryMock.mockReturnValue({
+      models: CLAUDE_MODELS,
+      defaultModelId: null,
+    });
+    useActiveConversationMock.mockReturnValue({ data: undefined });
+    useSettingsMock.mockReturnValue({
+      data: {
+        agent_settings: {
+          agent_kind: "acp",
+          acp_server: "claude-code",
+          acp_model: "sonnet",
+        },
+      },
+    });
+
+    renderWithProviders(<ChatInputModel />);
+
+    fireEvent.click(screen.getByTestId("chat-input-llm-model"));
+    const agentDefault = screen.getByTestId(
+      "chat-input-acp-model-option-agent-default",
+    );
+    expect(agentDefault).toHaveTextContent(
+      "SETTINGS$AGENT_MODEL_AGENT_DEFAULT",
+    );
+    fireEvent.click(agentDefault);
+
+    expect(switchAcpModelMutate).toHaveBeenCalledWith({
+      conversationId: null,
+      model: null,
+    });
+  });
+
+  it("marks Agent default, not the model it resolves to, when no model is saved", () => {
+    discoveryMock.mockReturnValue({
+      models: CLAUDE_MODELS,
+      defaultModelId: "opus[1m]",
+    });
+    useActiveConversationMock.mockReturnValue({ data: undefined });
+    useSettingsMock.mockReturnValue({
+      data: {
+        agent_settings: { agent_kind: "acp", acp_server: "claude-code" },
+      },
+    });
+
+    renderWithProviders(<ChatInputModel />);
+
+    fireEvent.click(screen.getByTestId("chat-input-llm-model"));
+    const agentDefault = screen.getByTestId(
+      "chat-input-acp-model-option-agent-default",
+    );
+    expect(agentDefault).toHaveTextContent(
+      "SETTINGS$AGENT_MODEL_AGENT_DEFAULT_IS",
+    );
+    expect(agentDefault).toHaveClass("bg-interactive-hover");
+    const opus = screen.getByTestId("chat-input-acp-model-option-opus[1m]");
+    expect(opus).not.toHaveClass("bg-interactive-hover");
+
+    // Picking the default's model by name pins it.
+    fireEvent.click(opus);
+    expect(switchAcpModelMutate).toHaveBeenCalledWith({
+      conversationId: null,
+      model: "opus[1m]",
+    });
+  });
+
+  it("shows the session's effort and switches it live", () => {
+    sessionModelsMock.mockReturnValue(CLAUDE_MODELS);
+    useActiveConversationMock.mockReturnValue({
+      data: {
+        conversation_id: "test-conversation-id",
+        agent_kind: "acp",
+        acp_server: "claude-code",
+        llm_model: "opus[1m]",
+        acp_current_effort: "high",
+        acp_available_efforts: EFFORTS,
+      },
+    });
+
+    renderWithProviders(<ChatInputModel />);
+
+    const trigger = screen.getByTestId("chat-input-llm-model");
+    expect(trigger).toHaveAttribute("title", "Claude Opus (1M) · High");
+    fireEvent.click(trigger);
+    expect(
+      screen.getByTestId("chat-input-acp-effort-option-high"),
+    ).toHaveAttribute("aria-pressed", "true");
+    // A live session can't return to the agent's own effort.
+    expect(
+      screen.queryByTestId("chat-input-acp-effort-option-agent-default"),
+    ).toBeNull();
+
+    fireEvent.click(screen.getByTestId("chat-input-acp-effort-option-low"));
+    expect(switchAcpEffortMutate).toHaveBeenCalledWith({
+      conversationId: "test-conversation-id",
+      effort: "low",
+    });
+  });
+
+  it.each([undefined, []])(
+    "hides effort controls when the session offers %j",
+    (efforts) => {
+      discoveryMock.mockReturnValue({
+        models: CLAUDE_MODELS,
+        defaultModelId: "opus[1m]",
+        effortsFor: (model: string | null) =>
+          model === "opus[1m]" ? EFFORTS : [],
+      });
+      useActiveConversationMock.mockReturnValue({
+        data: {
+          conversation_id: "test-conversation-id",
+          agent_kind: "acp",
+          acp_server: "claude-code",
+          llm_model: "opus[1m]",
+          acp_current_effort: "low",
+          acp_available_efforts: efforts,
+        },
+      });
+
+      renderWithProviders(<ChatInputModel />);
+      fireEvent.click(screen.getByTestId("chat-input-llm-model"));
+
+      expect(
+        screen.queryByTestId("chat-input-acp-effort-option-low"),
+      ).not.toBeInTheDocument();
+    },
+  );
+
+  it("saves the home effort for the chosen model and offers the agent's own", () => {
+    discoveryMock.mockReturnValue({
+      models: CLAUDE_MODELS,
+      defaultModelId: "opus[1m]",
+      defaultEffort: "high",
+      effortsFor: (model: string | null) => (model === "sonnet" ? [] : EFFORTS),
+    });
+    useActiveConversationMock.mockReturnValue({ data: undefined });
+    useSettingsMock.mockReturnValue({
+      data: {
+        agent_settings: {
+          agent_kind: "acp",
+          acp_server: "claude-code",
+          acp_model: "opus[1m]",
+        },
+      },
+    });
+
+    const { unmount } = renderWithProviders(<ChatInputModel />);
+    fireEvent.click(screen.getByTestId("chat-input-llm-model"));
+    const agentDefault = screen.getByTestId(
+      "chat-input-acp-effort-option-agent-default",
+    );
+    expect(agentDefault).toHaveTextContent(
+      "SETTINGS$AGENT_MODEL_AGENT_DEFAULT_IS",
+    );
+    expect(agentDefault).toHaveAttribute("aria-pressed", "true");
+    fireEvent.click(screen.getByTestId("chat-input-acp-effort-option-low"));
+    expect(switchAcpEffortMutate).toHaveBeenCalledWith({
+      conversationId: null,
+      effort: "low",
+    });
+    unmount();
+
+    // A model that offers no effort shows none.
+    useSettingsMock.mockReturnValue({
+      data: {
+        agent_settings: {
+          agent_kind: "acp",
+          acp_server: "claude-code",
+          acp_model: "sonnet",
+          acp_effort: "high",
+        },
+      },
+    });
+    renderWithProviders(<ChatInputModel />);
+    expect(screen.getByTestId("chat-input-llm-model")).not.toHaveTextContent(
+      "High",
+    );
+    fireEvent.click(screen.getByTestId("chat-input-llm-model"));
+    expect(screen.queryByTestId("chat-input-acp-effort-option-low")).toBeNull();
+  });
+
+  it("does not offer Agent default inside a conversation", () => {
+    sessionModelsMock.mockReturnValue(CLAUDE_MODELS);
+    useActiveConversationMock.mockReturnValue({
+      data: {
+        conversation_id: "test-conversation-id",
+        agent_kind: "acp",
+        acp_server: "claude-code",
+        llm_model: "sonnet",
+      },
+    });
+
+    renderWithProviders(<ChatInputModel />);
+
+    fireEvent.click(screen.getByTestId("chat-input-llm-model"));
+    expect(
+      screen.getByTestId("chat-input-acp-model-option-sonnet"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("chat-input-acp-model-option-agent-default"),
+    ).toBeNull();
+  });
+
+  it("does not offer Agent default for Gemini, which keeps its Vertex-safe model", () => {
+    discoveryMock.mockReturnValue({
+      models: [{ id: "gemini-2.5-pro", label: "Gemini 2.5 Pro" }],
+      defaultModelId: "auto",
+    });
+    useActiveConversationMock.mockReturnValue({ data: undefined });
+    useSettingsMock.mockReturnValue({
+      data: { agent_settings: { agent_kind: "acp", acp_server: "gemini-cli" } },
+    });
+
+    renderWithProviders(<ChatInputModel />);
+
+    fireEvent.click(screen.getByTestId("chat-input-llm-model"));
+    expect(
+      screen.getByTestId("chat-input-acp-model-option-gemini-2.5-pro"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("chat-input-acp-model-option-agent-default"),
+    ).toBeNull();
+  });
+
+  it("offers selectable rows on a cloud backend for ACP conversations (mid-conversation model switching is supported)", () => {
+    useActiveBackendMock.mockReturnValue({ backend: { kind: "cloud" } });
+    sessionModelsMock.mockReturnValue(CLAUDE_MODELS);
+    useActiveConversationMock.mockReturnValue({
+      data: {
+        conversation_id: "test-conversation-id",
+        agent_kind: "acp",
+        acp_server: "claude-code",
+        llm_model: "sonnet",
+      },
+    });
+
+    renderWithProviders(<ChatInputModel />);
+
+    fireEvent.click(screen.getByTestId("chat-input-llm-model"));
+
+    // Cloud ACP conversations support mid-conversation model switching,
+    // so selectable model rows are shown.
+    const selectedRow = screen.getByTestId(
+      "chat-input-acp-model-option-sonnet",
+    );
+    expect(selectedRow).toBeInTheDocument();
+    expect(selectedRow).toHaveTextContent("Claude Sonnet");
+    expect(
+      screen.getByTestId("chat-input-acp-model-option-opus[1m]"),
+    ).toBeInTheDocument();
+    const popover = screen.getByTestId("chat-input-llm-model-popover");
+    expect(popover).toHaveTextContent("Claude Sonnet");
+    expect(screen.getByRole("link")).toHaveAttribute(
+      "href",
+      "/settings/agents",
+    );
+  });
+
+  it("does not mark a home LLM pick when selecting an ACP model or Agent default on the home page (#19138)", () => {
+    discoveryMock.mockReturnValue({
+      models: CLAUDE_MODELS,
+      defaultModelId: null,
+    });
+    useActiveConversationMock.mockReturnValue({ data: undefined });
+    useSettingsMock.mockReturnValue({
+      data: {
+        agent_settings: {
+          agent_kind: "acp",
+          acp_server: "claude-code",
+          acp_model: "sonnet",
+        },
+      },
+    });
+
+    renderWithProviders(<ChatInputModel />);
+
+    fireEvent.click(screen.getByTestId("chat-input-llm-model"));
+    fireEvent.click(screen.getByTestId("chat-input-acp-model-option-sonnet"));
+    expect(hasPendingHomeModelPick("local-1", null)).toBe(false);
+
+    fireEvent.click(screen.getByTestId("chat-input-llm-model"));
+    fireEvent.click(
+      screen.getByTestId("chat-input-acp-model-option-agent-default"),
+    );
+    expect(hasPendingHomeModelPick("local-1", null)).toBe(false);
+  });
+});

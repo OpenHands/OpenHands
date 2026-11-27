@@ -1,0 +1,440 @@
+import { MCPClient } from "@openhands/typescript-client/clients";
+import type { AgentServerMCPTestRequest } from "@openhands/typescript-client";
+import { getAgentServerClientOptions } from "../agent-server-client-options";
+import {
+  getActiveBackend,
+  getRegisteredBackends,
+} from "../backend-registry/active-store";
+import {
+  getCloudMcpOAuthStatus,
+  startCloudMcpOAuth,
+  testCloudMcpServer,
+} from "../cloud/mcp-service.api";
+import { headersFromMcpAuth } from "../settings-service/settings-service.api";
+import {
+  getCredentialValidationForServer,
+  type CredentialValidation,
+} from "#/utils/mcp-credential-validation";
+import type {
+  ExtendedMCPTestResponse,
+  MCPOAuthStartResponse,
+  MCPOAuthStatusResponse,
+  MCPServerConfig,
+} from "#/types/mcp-server";
+import { redactMcpSecrets } from "#/utils/redact-mcp-secrets";
+import { substituteRedactedMcpCredentials } from "./mcp-redacted-credentials";
+
+const OAUTH_MCP_TEST_TIMEOUT_SECONDS = 120;
+// Upper bound accepted by the app server's `POST /api/v1/mcp/test`.
+const MAX_CLOUD_MCP_TEST_TIMEOUT_SECONDS = 120;
+
+function toMcpServer(
+  server: MCPServerConfig,
+): AgentServerMCPTestRequest["server"] {
+  if (server.type === "stdio") {
+    return {
+      type: "stdio",
+      command: server.command!,
+      ...(server.args?.length && { args: server.args }),
+      ...(server.env &&
+        Object.keys(server.env).length > 0 && { env: server.env }),
+    };
+  }
+  return {
+    type: server.type === "sse" ? "sse" : "http",
+    url: server.url!,
+    ...(server.headers &&
+      Object.keys(server.headers).length > 0 && { headers: server.headers }),
+    ...(server.auth ? { auth: server.auth } : {}),
+  };
+}
+
+function getMcpTestTimeout(server: MCPServerConfig): number | undefined {
+  if (server.auth?.strategy !== "oauth2") return server.timeout;
+  return OAUTH_MCP_TEST_TIMEOUT_SECONDS;
+}
+
+async function buildMcpTestRequest(server: MCPServerConfig): Promise<{
+  request: AgentServerMCPTestRequest;
+  substituted: MCPServerConfig;
+}> {
+  const validation = getCredentialValidationForServer(server);
+  const substituted = await substituteRedactedMcpCredentials(server);
+  const serverSpec = toMcpServer(substituted);
+  const timeout = getMcpTestTimeout(server);
+  return {
+    request: {
+      server: serverSpec,
+      ...(server.name ? { name: server.name } : {}),
+      ...(timeout !== undefined ? { timeout } : {}),
+      ...(validation ? { tool_call: validation.toolCall } : {}),
+    },
+    substituted,
+  };
+}
+
+function redactMcpTestResponse(
+  result: ExtendedMCPTestResponse,
+  redactionSources: (MCPServerConfig | undefined)[],
+): ExtendedMCPTestResponse {
+  if (!result.ok) {
+    return {
+      ...result,
+      error: redactMcpSecrets(result.error, ...redactionSources),
+    };
+  }
+  if (result.tool_result) {
+    return {
+      ...result,
+      tool_result: {
+        ...result.tool_result,
+        text: redactMcpSecrets(result.tool_result.text, ...redactionSources),
+      },
+    };
+  }
+  return result;
+}
+
+/**
+ * Display-boundary post-processing shared by the test and OAuth probes:
+ * scrub secrets from error/tool-result text, then let the catalog entry's
+ * credential validation turn a failed read-only tool call into a
+ * `credentials` failure. The interpretation only runs when the probe tool
+ * is actually advertised in `tools` — a server variant that doesn't expose
+ * the tool (e.g. a hosted alternative to the stdio server the spec was
+ * written for) must degrade to a connectivity-only success, not be
+ * misreported as bad credentials.
+ */
+function finalizeMcpTestResponse(
+  result: ExtendedMCPTestResponse,
+  validation: CredentialValidation | undefined,
+  redactionSources: (MCPServerConfig | undefined)[],
+): ExtendedMCPTestResponse {
+  const redacted = redactMcpTestResponse(result, redactionSources);
+  if (
+    redacted.ok &&
+    validation &&
+    redacted.tool_result &&
+    redacted.tools.includes(validation.toolCall.name)
+  ) {
+    const credentialError = validation.interpret(redacted.tool_result);
+    if (credentialError) {
+      return {
+        ok: false,
+        error: credentialError,
+        error_kind: "credentials",
+      };
+    }
+  }
+  return redacted;
+}
+
+function getMcpProbeOptions(): { host: string; apiKey?: string } {
+  const active = getActiveBackend().backend;
+  if (active.kind === "local") {
+    const { host, apiKey } = getAgentServerClientOptions();
+    return { host, ...(apiKey ? { apiKey } : {}) };
+  }
+
+  const localBackend = getRegisteredBackends().find(
+    (backend) => backend.kind === "local" && backend.host,
+  );
+  if (localBackend) {
+    return {
+      host: localBackend.host.replace(/\/+$/, ""),
+      ...(localBackend.apiKey ? { apiKey: localBackend.apiKey } : {}),
+    };
+  }
+  throw new Error("OAuth authorization requires a reachable local backend.");
+}
+
+/**
+ * The agent-server base URL as this browser reaches it. The agent-server
+ * sends the OAuth provider's redirect to its own route under it; without it,
+ * the redirect goes to a loopback port on the agent-server host, which a
+ * browser outside that container or machine cannot reach.
+ */
+function getMcpOAuthCallbackBaseUrl(host: string): string | undefined {
+  try {
+    const url = new URL(host || "/", window.location.href);
+    return `${url.origin}${url.pathname}`.replace(/\/+$/, "");
+  } catch {
+    return undefined;
+  }
+}
+
+function createMcpProbeClient({
+  host,
+  apiKey,
+}: {
+  host: string;
+  apiKey?: string;
+}): MCPClient {
+  return new MCPClient({
+    host,
+    ...(apiKey ? { apiKey } : {}),
+    timeout: OAUTH_MCP_TEST_TIMEOUT_SECONDS * 1000 + 5000,
+  });
+}
+
+/**
+ * OAuth probes run on the local agent-server (`/api/mcp/oauth/*`) or, for
+ * cloud backends, on the app server (`/api/v1/mcp/oauth/*`). Both share the
+ * start/status contract, so callers only differ in transport.
+ */
+interface McpOAuthTransport {
+  start(server: MCPServerConfig): Promise<MCPOAuthStartResponse>;
+  status(jobId: string): Promise<MCPOAuthStatusResponse>;
+  close(): void;
+}
+
+function oauthStatusToTestResponse(
+  status: MCPOAuthStatusResponse,
+): ExtendedMCPTestResponse {
+  if (status.status === "succeeded") {
+    return {
+      ok: true,
+      tools: status.tools ?? [],
+      ...(status.tool_result !== undefined && {
+        tool_result: status.tool_result,
+      }),
+      ...(status.oauth_state !== undefined && {
+        oauth_state: status.oauth_state,
+      }),
+    };
+  }
+  // The backend's probe gives up after its own budget. When it had already
+  // handed out an authorization URL, that budget ran out waiting for the
+  // person to finish the sign-in, not for the server.
+  if (status.error_kind === "timeout" && status.authorization_url) {
+    return {
+      ok: false,
+      error: status.error || "OAuth authorization was not completed",
+      error_kind: "authorization",
+    };
+  }
+  return {
+    ok: false,
+    error: status.error || "OAuth authorization did not complete",
+    error_kind: status.error_kind || "unknown",
+  };
+}
+
+const sleep = (ms: number) =>
+  new Promise<void>((resolve) => {
+    window.setTimeout(resolve, ms);
+  });
+
+class McpService {
+  static async testServer(
+    server: MCPServerConfig,
+  ): Promise<ExtendedMCPTestResponse> {
+    if (getActiveBackend().backend.kind === "cloud") {
+      // A stdio server spawns inside the cloud sandbox, which isn't reachable
+      // from the browser before the user starts a conversation, so it cannot
+      // be probed from the settings page. Short-circuit with a synthetic
+      // success so saving/installing proceeds; any real failure surfaces
+      // inside the conversation runtime instead. (Throwing here would block
+      // the install flow entirely — see the cloud regression test.)
+      if (server.type === "stdio") {
+        return { ok: true, tools: [] };
+      }
+      return McpService.testRemoteServerViaCloud(server);
+    }
+    const validation = getCredentialValidationForServer(server);
+    const { host, apiKey } = getAgentServerClientOptions();
+    const client = new MCPClient({ host, ...(apiKey ? { apiKey } : {}) });
+    try {
+      const { request, substituted } = await buildMcpTestRequest(server);
+      const result = (await client.testServer(
+        request,
+      )) as ExtendedMCPTestResponse;
+      // Redact against both config forms: `server` may hold fresh plaintext
+      // input, `substituted` the stored (encrypted) round-trip values.
+      return finalizeMcpTestResponse(result, validation, [substituted, server]);
+    } finally {
+      client.close();
+    }
+  }
+
+  /**
+   * Remote servers on cloud backends are probed by the app server's
+   * `POST /api/v1/mcp/test`. Unchanged (redacted) credentials are not
+   * substituted here: the app server restores them from the stored server of
+   * the same settings key, which is why the key is sent as `name`. `auth` is
+   * flattened to headers the same way cloud saves persist it so that
+   * restoration matches; an `auth` that cannot be flattened (e.g. OAuth
+   * without tokens) is passed through and the app server answers with a
+   * structured failure.
+   */
+  private static async testRemoteServerViaCloud(
+    server: MCPServerConfig,
+  ): Promise<ExtendedMCPTestResponse> {
+    const validation = getCredentialValidationForServer(server);
+    const authHeaders = server.auth
+      ? headersFromMcpAuth({ ...server.auth })
+      : null;
+    const headers = { ...server.headers, ...authHeaders };
+    const name = server.id || server.name;
+    const timeout = getMcpTestTimeout(server);
+    const request: AgentServerMCPTestRequest = {
+      server: {
+        type: server.type === "sse" ? "sse" : "http",
+        url: server.url!,
+        ...(Object.keys(headers).length > 0 && { headers }),
+        ...(server.auth && authHeaders === null && { auth: server.auth }),
+      },
+      ...(name ? { name } : {}),
+      ...(timeout !== undefined && {
+        timeout: Math.min(timeout, MAX_CLOUD_MCP_TEST_TIMEOUT_SECONDS),
+      }),
+      ...(validation ? { tool_call: validation.toolCall } : {}),
+    };
+    const result = await testCloudMcpServer(request);
+    return finalizeMcpTestResponse(result, validation, [server]);
+  }
+
+  static async authorizeOAuth(
+    server: MCPServerConfig,
+  ): Promise<ExtendedMCPTestResponse> {
+    const validation = getCredentialValidationForServer(server);
+    const finalize = (result: ExtendedMCPTestResponse) =>
+      finalizeMcpTestResponse(result, validation, [server]);
+    // Opened synchronously inside the click handler so popup blockers allow
+    // it; every failure path below closes it again.
+    let popup: Window | null = window.open("about:blank", "_blank");
+    let transport: McpOAuthTransport | null = null;
+    try {
+      transport = McpService.createOAuthTransport();
+      const start = await transport.start(server);
+      if (!start.ok || !start.job_id) {
+        popup?.close();
+        return finalize({
+          ok: false,
+          error: start.error || "Could not start OAuth authorization",
+          error_kind: start.error_kind || "unknown",
+        });
+      }
+      // No authorization URL: the probe completed on the stored tokens (still
+      // valid, or refreshed), so no consent is needed and the outcome is read
+      // from the status route.
+      if (!start.authorization_url) {
+        popup?.close();
+        popup = null;
+      }
+
+      let status = await transport.status(start.job_id);
+      for (let attempt = 0; attempt < 20; attempt += 1) {
+        if (status.status === "succeeded" || status.status === "failed") {
+          popup?.close();
+          return finalize(oauthStatusToTestResponse(status));
+        }
+        if (status.callback_ready) break;
+        await sleep(250);
+        status = await transport.status(start.job_id);
+      }
+
+      if (popup && start.authorization_url) {
+        popup.location.href = start.authorization_url;
+      }
+
+      for (
+        let attempt = 0;
+        attempt < OAUTH_MCP_TEST_TIMEOUT_SECONDS;
+        attempt += 1
+      ) {
+        await sleep(1000);
+        status = await transport.status(start.job_id);
+        if (status.status === "succeeded" || status.status === "failed") {
+          popup?.close();
+          return finalize(oauthStatusToTestResponse(status));
+        }
+      }
+
+      // With a pop-up, nothing on the server timed out: the person did not
+      // finish the sign-in. Without one, the app server was still probing the
+      // stored tokens, which is a plain timeout.
+      if (start.authorization_url) {
+        return {
+          ok: false,
+          error: "OAuth authorization was not completed",
+          error_kind: "authorization",
+        };
+      }
+      return {
+        ok: false,
+        error: "OAuth authorization timed out",
+        error_kind: "timeout",
+      };
+    } catch (err) {
+      popup?.close();
+      throw err;
+    } finally {
+      transport?.close();
+    }
+  }
+
+  /**
+   * The cloud request is built like the cloud connection test: unchanged
+   * (redacted) credentials are restored server-side from the stored server of
+   * the same settings key (hence `name`), and `auth` stays the `oauth2`
+   * credential so the app server runs the OAuth flow rather than flattening
+   * it to headers.
+   */
+  private static createOAuthTransport(): McpOAuthTransport {
+    if (getActiveBackend().backend.kind === "cloud") {
+      return {
+        start: (server) => {
+          const validation = getCredentialValidationForServer(server);
+          const name = server.id || server.name;
+          return startCloudMcpOAuth({
+            server: toMcpServer(server),
+            ...(name ? { name } : {}),
+            timeout: OAUTH_MCP_TEST_TIMEOUT_SECONDS,
+            ...(validation ? { tool_call: validation.toolCall } : {}),
+          });
+        },
+        status: getCloudMcpOAuthStatus,
+        close: () => {},
+      };
+    }
+    const probe = getMcpProbeOptions();
+    const client = createMcpProbeClient(probe);
+    const callbackBaseUrl = getMcpOAuthCallbackBaseUrl(probe.host);
+    return {
+      start: (server) =>
+        McpService.startOAuthWithClient(client, server, callbackBaseUrl),
+      status: (jobId) => McpService.getOAuthStatusWithClient(client, jobId),
+      close: () => client.close(),
+    };
+  }
+
+  private static async startOAuthWithClient(
+    client: MCPClient,
+    server: MCPServerConfig,
+    callbackBaseUrl: string | undefined,
+  ): Promise<MCPOAuthStartResponse> {
+    const { request } = await buildMcpTestRequest(server);
+    // Agent-servers before `callback_base_url` existed ignore the field.
+    const startRequest: AgentServerMCPTestRequest & {
+      callback_base_url?: string;
+    } = {
+      ...request,
+      ...(callbackBaseUrl ? { callback_base_url: callbackBaseUrl } : {}),
+    };
+    return client.startOAuth(startRequest);
+  }
+
+  // typescript-client 1.36 types the OAuth probes with the generated
+  // agent-server models, which describe the opaque `oauth_state` JSON blobs as
+  // `unknown` rather than the recursive `MCPJsonValue` the local types use. The
+  // wire shape is unchanged, so narrow back to the app's boundary type.
+  private static async getOAuthStatusWithClient(
+    client: MCPClient,
+    jobId: string,
+  ): Promise<MCPOAuthStatusResponse> {
+    return (await client.getOAuthStatus(jobId)) as MCPOAuthStatusResponse;
+  }
+}
+
+export default McpService;

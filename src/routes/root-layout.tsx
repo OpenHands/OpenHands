@@ -1,0 +1,253 @@
+import React from "react";
+import {
+  useRouteError,
+  isRouteErrorResponse,
+  Outlet,
+  useLocation,
+} from "react-router";
+import { useTranslation } from "react-i18next";
+import { I18nKey } from "#/i18n/declaration";
+import i18n from "#/i18n";
+import { useConfig } from "#/hooks/query/use-config";
+import { Sidebar } from "#/components/features/sidebar/sidebar";
+import {
+  SidebarMobileNavProvider,
+  useSidebarMobileNav,
+} from "#/components/features/sidebar/sidebar-mobile-nav-context";
+import { SidebarMobileMenuBar } from "#/components/features/sidebar/sidebar-mobile-menu-bar";
+import { LicenseBanner } from "#/components/features/alerts/license-banner";
+import { useSettings } from "#/hooks/query/use-settings";
+import { useEnsureActiveProfile } from "#/hooks/use-ensure-active-profile";
+import { useMigrateDefaultAgentProfile } from "#/hooks/use-migrate-default-agent-profile";
+import { useMigrateEnabledSkills } from "#/hooks/use-migrate-enabled-skills";
+import { useSyncTelemetryConsent } from "#/hooks/use-sync-telemetry-consent";
+import { useSyncAutomationTelemetryConsent } from "#/hooks/use-sync-automation-telemetry-consent";
+import {
+  SIDEBAR_RAIL_COLLAPSE_MAX_WIDTH,
+  useBreakpoint,
+} from "#/hooks/use-breakpoint";
+
+import { useTelemetryIdentity } from "#/hooks/use-telemetry-identity";
+import { useSyncDocumentLanguage } from "#/hooks/use-sync-document-language";
+import { LoadingSpinner } from "#/components/shared/loading-spinner";
+import { CloudOrganizationBoundary } from "#/components/features/backends/cloud-organization-boundary";
+import { useAppTitle } from "#/hooks/use-app-title";
+import { ReactRouterNavigationProvider } from "./react-router-navigation-provider";
+import { OnboardingHost } from "#/components/features/onboarding";
+import { isOnboardingPreviewActive } from "#/components/features/onboarding/onboarding-preview";
+import { CanvasExtensionsRuntimeProvider } from "#/components/features/canvas-extensions/canvas-extensions-runtime";
+import { isMacDesktopShell } from "#/utils/desktop-shell";
+import { useDesktopFullScreen } from "#/hooks/use-desktop-full-screen";
+import { cn } from "#/utils/utils";
+
+const EnvironmentSwitchOverlay = React.lazy(
+  () => import("#/components/features/backends/environment-switch-overlay"),
+);
+const AlertBanner = React.lazy(() =>
+  import("#/components/features/alerts/alert-banner").then((m) => ({
+    default: m.AlertBanner,
+  })),
+);
+const CommandMenu = React.lazy(() =>
+  import("#/components/features/command-menu/command-menu").then((m) => ({
+    default: m.CommandMenu,
+  })),
+);
+const SuperAdminSetupGuide = React.lazy(
+  () => import("#/components/features/setup-guide/super-admin-setup-guide"),
+);
+
+/**
+ * The macOS desktop app hides its title bar ("hiddenInset"), leaving the
+ * traffic lights over the shell. Screens reserve a 28px band for them (pt-7)
+ * and make it the window's drag handle; the padding keeps it free of controls.
+ */
+function useShowTitleBarBand(): boolean {
+  const isFullScreen = useDesktopFullScreen();
+  // Fullscreen hides the traffic lights, so the band has nothing to clear.
+  return isMacDesktopShell() && !isFullScreen;
+}
+
+function TitleBarDragRegion() {
+  if (!useShowTitleBarBand()) return null;
+  return (
+    <div
+      data-testid="titlebar-drag-region"
+      aria-hidden="true"
+      className="app-region-drag fixed inset-x-0 top-0 z-50 h-7"
+    />
+  );
+}
+
+function MobileNavBackgroundContent({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  const { isOpen } = useSidebarMobileNav();
+  const isMobileDrawerPresentation = useBreakpoint(
+    SIDEBAR_RAIL_COLLAPSE_MAX_WIDTH,
+  );
+  const shouldHideForMobileDrawer = isOpen && isMobileDrawerPresentation;
+
+  return (
+    <div
+      data-testid="mobile-nav-background-content"
+      className="flex min-h-0 flex-col w-full min-w-0 h-full gap-3"
+      inert={shouldHideForMobileDrawer ? true : undefined}
+      aria-hidden={shouldHideForMobileDrawer ? true : undefined}
+    >
+      {children}
+    </div>
+  );
+}
+
+function ErrorShell({ children }: { children: React.ReactNode }) {
+  const showTitleBarBand = useShowTitleBarBand();
+  return (
+    <div className={cn(showTitleBarBand && "app-shell-titlebar-inset")}>
+      <TitleBarDragRegion />
+      {children}
+    </div>
+  );
+}
+
+export function ErrorBoundary() {
+  const error = useRouteError();
+  const { t } = useTranslation("openhands");
+
+  if (isRouteErrorResponse(error)) {
+    return (
+      <ErrorShell>
+        <h1>{error.status}</h1>
+        <p>{error.statusText}</p>
+        <pre>
+          {error.data instanceof Object
+            ? JSON.stringify(error.data)
+            : error.data}
+        </pre>
+      </ErrorShell>
+    );
+  }
+  if (error instanceof Error) {
+    return (
+      <ErrorShell>
+        <h1>{t(I18nKey.ERROR$GENERIC)}</h1>
+        <pre>{error.message}</pre>
+      </ErrorShell>
+    );
+  }
+
+  return (
+    <ErrorShell>
+      <h1>{t(I18nKey.ERROR$UNKNOWN)}</h1>
+    </ErrorShell>
+  );
+}
+
+export default function MainApp() {
+  return (
+    <CloudOrganizationBoundary>
+      <MainAppContent />
+    </CloudOrganizationBoundary>
+  );
+}
+
+function DocumentTitle() {
+  const appTitle = useAppTitle();
+  return <title>{appTitle}</title>;
+}
+
+function MainAppContent() {
+  const location = useLocation();
+  const { data: settings } = useSettings();
+  const config = useConfig();
+  const showTitleBarBand = useShowTitleBarBand();
+
+  useSyncAutomationTelemetryConsent();
+
+  useSyncTelemetryConsent();
+  useTelemetryIdentity();
+  // Local-mode policy: keep a profile active so a usable LLM is always selected.
+  useEnsureActiveProfile();
+  // One-shot move from the catalog deny-list to an explicit allow-list.
+  useMigrateEnabledSkills();
+  // One-shot move of global agent behavior into the `default` profile.
+  useMigrateDefaultAgentProfile();
+
+  React.useEffect(() => {
+    if (settings?.language) {
+      i18n.changeLanguage(settings.language);
+    }
+  }, [settings?.language]);
+  useSyncDocumentLanguage();
+
+  if (config.isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-canvas-base">
+        <TitleBarDragRegion />
+        <LoadingSpinner size="large" />
+      </div>
+    );
+  }
+
+  const isConversationRoute = /^\/conversations\/[^/]+/.test(location.pathname);
+  const hideMobileSidebarMenuBar = isConversationRoute;
+  const showOnboardingPreview = isOnboardingPreviewActive(location.search);
+
+  return (
+    <ReactRouterNavigationProvider>
+      <CanvasExtensionsRuntimeProvider>
+        <SidebarMobileNavProvider>
+          <div
+            data-testid="root-layout"
+            className={cn(
+              "app-shell-safe-area h-dvh lg:min-w-5xl flex flex-col md:flex-row bg-canvas-base overflow-hidden p-0",
+              showTitleBarBand && "app-shell-titlebar-inset",
+            )}
+          >
+            <DocumentTitle />
+            <TitleBarDragRegion />
+            <Sidebar />
+
+            <MobileNavBackgroundContent>
+              {!hideMobileSidebarMenuBar ? <SidebarMobileMenuBar /> : null}
+              <LicenseBanner />
+              {config.data &&
+                (config.data.maintenance_start_time ||
+                  (config.data.faulty_models &&
+                    config.data.faulty_models.length > 0) ||
+                  config.data.error_message) && (
+                  <React.Suspense fallback={null}>
+                    <AlertBanner
+                      maintenanceStartTime={config.data.maintenance_start_time}
+                      faultyModels={config.data.faulty_models}
+                      errorMessage={config.data.error_message}
+                      updatedAt={config.data.updated_at}
+                    />
+                  </React.Suspense>
+                )}
+              <div
+                id="root-outlet"
+                className={cn(
+                  "relative min-h-0 flex-1 px-0 custom-scrollbar",
+                  isConversationRoute ? "overflow-hidden" : "overflow-auto",
+                )}
+              >
+                <Outlet />
+              </div>
+            </MobileNavBackgroundContent>
+          </div>
+          <React.Suspense fallback={null}>
+            <EnvironmentSwitchOverlay />
+            <CommandMenu />
+          </React.Suspense>
+          <React.Suspense fallback={null}>
+            <SuperAdminSetupGuide />
+          </React.Suspense>
+          {showOnboardingPreview ? <OnboardingHost /> : null}
+        </SidebarMobileNavProvider>
+      </CanvasExtensionsRuntimeProvider>
+    </ReactRouterNavigationProvider>
+  );
+}

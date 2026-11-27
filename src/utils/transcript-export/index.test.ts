@@ -1,0 +1,595 @@
+import { describe, expect, it, vi } from "vitest";
+import type {
+  AskUserAnswerEvent,
+  AskUserObservation,
+} from "@openhands/typescript-client";
+import type {
+  AskUserAction,
+  ExecuteBashAction,
+  MCPToolAction,
+  TaskAction,
+} from "#/types/agent-server/core/base/action";
+import type {
+  ActionEvent,
+  AgentErrorEvent,
+  MessageEvent,
+  ObservationEvent,
+  UserRejectObservation,
+} from "#/types/agent-server/core";
+import type { ACPToolCallEvent } from "#/types/agent-server/core/events/acp-tool-call-event";
+import type {
+  ExecuteBashObservation,
+  TaskObservation,
+} from "#/types/agent-server/core/base/observation";
+import type { StreamingDeltaEvent } from "#/types/agent-server/core/events/streaming-delta-event";
+import { SecurityRisk } from "#/types/agent-server/core/base/common";
+import { eventsToHtml, eventsToMarkdown } from ".";
+
+vi.mock("#/i18n", () => ({
+  default: {
+    exists: () => false,
+    language: "en",
+    resolvedLanguage: "en",
+    t: (key: string, values?: Record<string, string>) => {
+      const translations: Record<string, string> = {
+        ACTION_MESSAGE$ACP_TOOL: values?.title
+          ? `<cmd>${values.title}</cmd>`
+          : "<cmd>{{title}}</cmd>",
+        CHAT_INTERFACE$ASSISTANT: "Assistant",
+        COMMON$ERROR: "Error",
+        EVENT$REJECTED: "Rejected",
+        TASK$QUERY: "Query",
+        TASK$RESULT: "Result",
+        TASK$SUBAGENT: "Subagent",
+        TASK$TASK_ID: "Task ID",
+        TRANSCRIPT_EXPORT$DEFAULT_TITLE: "Conversation transcript",
+        TRANSCRIPT_EXPORT$MODEL: "Model",
+        TRANSCRIPT_EXPORT$TOOL: "Tool",
+        TRANSCRIPT_EXPORT$USER: "User",
+      };
+      return translations[key] ?? values?.name ?? key;
+    },
+  },
+}));
+
+const timestamp = "2026-07-10T12:34:56.000Z";
+
+const userMessage: MessageEvent = {
+  id: "user-1",
+  timestamp,
+  source: "user",
+  llm_message: {
+    role: "user",
+    content: [{ type: "text", text: "Please diagnose **the failure**." }],
+  },
+  activated_skills: [],
+  extended_content: [],
+};
+
+const assistantMessage: MessageEvent = {
+  id: "assistant-1",
+  timestamp: "2026-07-10T12:35:00.000Z",
+  source: "agent",
+  llm_message: {
+    role: "assistant",
+    content: [{ type: "text", text: "The service is healthy now." }],
+  },
+  activated_skills: [],
+  extended_content: [],
+};
+
+const terminalAction: ActionEvent<ExecuteBashAction> = {
+  id: "action-1",
+  timestamp: "2026-07-10T12:34:57.000Z",
+  source: "agent",
+  thought: [],
+  thinking_blocks: [],
+  action: {
+    kind: "ExecuteBashAction",
+    command: "npm test",
+    is_input: false,
+    timeout: null,
+    reset: false,
+  },
+  tool_name: "terminal",
+  tool_call_id: "tool-1",
+  tool_call: {
+    id: "tool-1",
+    type: "function",
+    function: { name: "terminal", arguments: "{}" },
+  },
+  llm_response_id: "response-1",
+  security_risk: SecurityRisk.LOW,
+  summary: "Run the unit tests",
+};
+
+const terminalObservation = (
+  output: string,
+): ObservationEvent<ExecuteBashObservation> => ({
+  id: "observation-1",
+  timestamp: "2026-07-10T12:34:58.000Z",
+  source: "environment",
+  tool_name: "terminal",
+  tool_call_id: "tool-1",
+  action_id: "action-1",
+  observation: {
+    kind: "ExecuteBashObservation",
+    command: "npm test",
+    content: [{ type: "text", text: output }],
+    exit_code: 0,
+    error: false,
+    timeout: false,
+    metadata: {
+      exit_code: 0,
+      pid: 123,
+      username: "openhands",
+      hostname: "sandbox",
+      working_dir: "/workspace/project",
+      py_interpreter_path: null,
+      prefix: "",
+      suffix: "",
+    },
+  },
+});
+
+const defaultOptions = {
+  includeToolDetails: true,
+  includeTimestamps: true,
+  title: "Debug session",
+  model: "anthropic/claude-sonnet",
+};
+
+describe("conversation transcript export", () => {
+  it.each([
+    {
+      kind: "AskUserForConversationAction",
+      option_index: 1,
+      option_label: "PostgreSQL",
+      text: "Use the EU region",
+    },
+    {
+      kind: "AskUserAction",
+      option_index: null,
+      option_label: null,
+      text: "Neither, use JSON",
+    },
+  ] as const)(
+    "exports a complete decision exchange in both formats: %j",
+    ({ kind, ...answer }) => {
+      const question: ActionEvent<AskUserAction> = {
+        ...terminalAction,
+        id: "question-1",
+        summary: undefined,
+        tool_name: "ask_user",
+        action: {
+          kind,
+          ...(kind === "AskUserForConversationAction"
+            ? { for_conversation: "worker-conversation-id" }
+            : {}),
+          question: "Choose storage?",
+          options: [
+            { label: "SQLite", consequence: "Stay on this device." },
+            { label: "PostgreSQL", consequence: "Share across servers." },
+          ],
+          recommended: 1,
+        },
+      };
+      const result: ObservationEvent<AskUserObservation> = {
+        ...terminalObservation(""),
+        action_id: question.id,
+        tool_name: "ask_user",
+        observation: {
+          kind: "AskUserObservation",
+          content: [],
+          is_error: false,
+        },
+      };
+      const event: AskUserAnswerEvent = {
+        id: "answer-1",
+        kind: "AskUserAnswerEvent",
+        source: "user",
+        timestamp,
+        ask_id: "question-1",
+        ...answer,
+      };
+      const machine: MessageEvent = {
+        ...userMessage,
+        llm_message: {
+          role: "user",
+          content: [
+            {
+              type: "text",
+              text: '[Answer to your question: "Choose storage?"]\nMachine copy',
+            },
+          ],
+        },
+      };
+      for (const includeToolDetails of [false, true]) {
+        for (const exportTranscript of [eventsToMarkdown, eventsToHtml]) {
+          const output = exportTranscript([question, result, event, machine], {
+            ...defaultOptions,
+            includeToolDetails,
+          });
+          expect(output).toContain("Choose storage?");
+          expect(output).toContain("SQLite");
+          expect(output).toContain("Stay on this device.");
+          expect(output).toContain("PostgreSQL (ASK_USER$RECOMMENDED)");
+          expect(output).toContain("Share across servers.");
+          expect(output.split(answer.text)).toHaveLength(2);
+          expect(output.indexOf("Choose storage?")).toBeLessThan(
+            output.indexOf(answer.text),
+          );
+          expect(output).not.toContain("Machine copy");
+          expect(output).not.toContain("Answer to your question");
+        }
+      }
+    },
+  );
+
+  it("exports only the answer that reached the agent after a crash and retry", () => {
+    const question: ActionEvent<AskUserAction> = {
+      ...terminalAction,
+      id: "question-1",
+      summary: undefined,
+      tool_name: "ask_user",
+      action: {
+        kind: "AskUserAction",
+        question: "Choose storage?",
+        options: [
+          { label: "SQLite", consequence: "" },
+          { label: "PostgreSQL", consequence: "" },
+        ],
+        recommended: null,
+      },
+    };
+    const result: ObservationEvent<AskUserObservation> = {
+      ...terminalObservation(""),
+      action_id: question.id,
+      tool_name: "ask_user",
+      observation: { kind: "AskUserObservation", content: [], is_error: false },
+    };
+    const answer = (
+      id: string,
+      option_label: string,
+      text: string,
+    ): AskUserAnswerEvent => ({
+      id,
+      kind: "AskUserAnswerEvent",
+      source: "user",
+      timestamp,
+      ask_id: question.id,
+      option_index: option_label === "SQLite" ? 0 : 1,
+      option_label,
+      text,
+    });
+    const machine: MessageEvent = {
+      ...userMessage,
+      llm_message: {
+        role: "user",
+        content: [
+          {
+            type: "text",
+            text: '[Answer to your question: "Choose storage?"]\nPostgreSQL',
+          },
+        ],
+      },
+    };
+    const events = [
+      question,
+      result,
+      answer("orphan", "SQLite", "Lost before delivery"),
+      answer("delivered", "PostgreSQL", "Now delivered"),
+      machine,
+    ];
+    for (const exportTranscript of [eventsToMarkdown, eventsToHtml]) {
+      const output = exportTranscript(events, defaultOptions);
+      expect(output).toContain("Now delivered");
+      expect(output).not.toContain("Lost before delivery");
+    }
+  });
+
+  it("exports messages and collapsed tool details as GitHub-ready Markdown", () => {
+    const markdown = eventsToMarkdown(
+      [
+        userMessage,
+        terminalAction,
+        terminalObservation("3 tests passed"),
+        assistantMessage,
+      ],
+      defaultOptions,
+    );
+
+    expect(markdown).toContain("# Debug session");
+    expect(markdown).toContain("**Model:** anthropic/claude-sonnet");
+    expect(markdown).toContain("## User");
+    expect(markdown).toContain("Please diagnose **the failure**.");
+    expect(markdown).toContain("<details>");
+    expect(markdown).toContain("Run the unit tests");
+    expect(markdown).toContain("3 tests passed");
+    expect(markdown).toContain("## Assistant");
+  });
+
+  it("honors tool-detail and timestamp options in both formats", () => {
+    const events = [userMessage, terminalAction, terminalObservation("passed")];
+    const options = {
+      ...defaultOptions,
+      includeToolDetails: false,
+      includeTimestamps: false,
+    };
+    const markdown = eventsToMarkdown(events, options);
+    const html = eventsToHtml(events, options);
+
+    expect(markdown).toContain("<strong>Tool:</strong> Run the unit tests");
+    expect(markdown).not.toContain("<details>");
+    expect(markdown).not.toContain("passed");
+    expect(markdown).not.toContain(timestamp);
+    expect(html).not.toContain("<details>");
+    expect(html).not.toContain("passed");
+    expect(html).not.toContain("<time");
+  });
+
+  it("exports agent errors and uses the UI's tool-output truncation", () => {
+    const errorEvent: AgentErrorEvent = {
+      id: "error-1",
+      timestamp,
+      kind: "AgentErrorEvent",
+      source: "agent",
+      tool_name: "terminal",
+      tool_call_id: "tool-error",
+      error: "Command failed with exit code 1",
+    };
+    const markdown = eventsToMarkdown(
+      [terminalAction, terminalObservation("x".repeat(1200)), errorEvent],
+      defaultOptions,
+    );
+
+    expect(markdown).toContain("## Error");
+    expect(markdown).toContain("> Command failed with exit code 1");
+    expect(markdown).toContain(`${"x".repeat(1000)}...`);
+    expect(markdown).not.toContain("x".repeat(1001));
+  });
+
+  it("exports a rejected tool call as rejected with its reason", () => {
+    const rejection: UserRejectObservation = {
+      id: "rejection-1",
+      timestamp,
+      source: "environment",
+      tool_name: "terminal",
+      tool_call_id: "tool-1",
+      action_id: "action-1",
+      rejection_reason: "User rejected the action",
+    };
+
+    const markdown = eventsToMarkdown(
+      [terminalAction, rejection],
+      defaultOptions,
+    );
+
+    expect(markdown).toContain("Run the unit tests (Rejected)");
+    expect(markdown).toContain("User rejected the action");
+  });
+
+  it("exports assistant narration once when an observation replaces its action", () => {
+    const narratedAction: ActionEvent<ExecuteBashAction> = {
+      ...terminalAction,
+      thought: [{ type: "text", text: "I checked the failing service." }],
+      reasoning_content: "The logs point to a stale process.",
+    };
+    const markdown = eventsToMarkdown(
+      [narratedAction, terminalObservation("passed")],
+      defaultOptions,
+    );
+
+    expect(markdown.match(/I checked the failing service\./g)).toHaveLength(1);
+    expect(markdown.match(/The logs point to a stale process\./g)).toHaveLength(
+      1,
+    );
+  });
+
+  it("exports streaming reasoning with the same inline-think split as chat", () => {
+    const streamingEvent: StreamingDeltaEvent = {
+      id: "streaming-1",
+      timestamp,
+      source: "agent",
+      kind: "StreamingDeltaEvent",
+      reasoning_content: "Separate reasoning",
+      content: "<think>Inline reasoning</think>Visible answer",
+    };
+
+    const markdown = eventsToMarkdown([streamingEvent], defaultOptions);
+
+    expect(markdown).toContain("Separate reasoning");
+    expect(markdown).toContain("Inline reasoning");
+    expect(markdown).toContain("Visible answer");
+    expect(markdown).not.toContain("&lt;think&gt;");
+  });
+
+  it("splits inline reasoning from finalized assistant messages", () => {
+    const messageEvent: MessageEvent = {
+      ...assistantMessage,
+      llm_message: {
+        role: "assistant",
+        content: [
+          {
+            type: "text",
+            text: "<think>Reloaded reasoning</think>Reloaded answer",
+          },
+        ],
+      },
+    };
+
+    const markdown = eventsToMarkdown([messageEvent], defaultOptions);
+
+    expect(markdown).toContain("Reloaded reasoning");
+    expect(markdown).toContain("Reloaded answer");
+    expect(markdown).not.toContain("&lt;think&gt;");
+  });
+
+  it("exports task inputs and results through their display projection", () => {
+    const taskAction: ActionEvent<TaskAction> = {
+      ...terminalAction,
+      id: "task-action",
+      tool_name: "task",
+      tool_call_id: "task-call",
+      tool_call: {
+        id: "task-call",
+        type: "function",
+        function: { name: "task", arguments: "{}" },
+      },
+      action: {
+        kind: "TaskAction",
+        prompt: "Inspect the authentication flow",
+        subagent_type: "security",
+        description: "Inspect authentication",
+      },
+      summary: "Delegate authentication review",
+    };
+    const taskObservation: ObservationEvent<TaskObservation> = {
+      id: "task-observation",
+      timestamp: "2026-07-10T12:34:59.000Z",
+      source: "environment",
+      tool_name: "task",
+      tool_call_id: "task-call",
+      action_id: "task-action",
+      observation: {
+        kind: "TaskObservation",
+        content: [{ type: "text", text: "No credential leak found." }],
+        task_id: "task-123",
+        subagent: "security",
+        status: "completed",
+        is_error: false,
+      },
+    };
+
+    const markdown = eventsToMarkdown(
+      [taskAction, taskObservation],
+      defaultOptions,
+    );
+
+    expect(markdown).toContain("Inspect the authentication flow");
+    expect(markdown).toContain("No credential leak found.");
+    expect(markdown).toContain("task-123");
+  });
+
+  it("only exports the redacted display projection, never hidden raw tool arguments", () => {
+    const redactedAction: ActionEvent<MCPToolAction> = {
+      ...terminalAction,
+      id: "secret-action",
+      tool_call_id: "secret-tool",
+      action: {
+        kind: "MCPToolAction",
+        data: { api_key: "**********" },
+      },
+      tool_call: {
+        id: "secret-tool",
+        type: "function",
+        function: {
+          name: "mcp_call",
+          arguments: '{"api_key":"raw-secret-must-not-export"}',
+        },
+      },
+      tool_name: "mcp_call",
+      summary: "Call the configured service",
+    };
+
+    const markdown = eventsToMarkdown([redactedAction], defaultOptions);
+    const html = eventsToHtml([redactedAction], defaultOptions);
+
+    expect(markdown).toContain("**********");
+    expect(html).toContain("**********");
+    expect(markdown).not.toContain("raw-secret-must-not-export");
+    expect(html).not.toContain("raw-secret-must-not-export");
+  });
+
+  it("neutralizes active content in Markdown and HTML", () => {
+    const unsafeMessage: MessageEvent = {
+      ...userMessage,
+      llm_message: {
+        role: "user",
+        content: [
+          {
+            type: "text",
+            text: "<script>alert(1)</script> [click](javascript:alert(1))\n[ref]: javascript:alert(2)",
+          },
+        ],
+      },
+    };
+    const markdown = eventsToMarkdown([unsafeMessage], defaultOptions);
+    const html = eventsToHtml([unsafeMessage], defaultOptions);
+
+    expect(markdown).not.toContain("<script>");
+    expect(markdown).toContain("&lt;script&gt;");
+    expect(markdown).toContain("\\[click\\](javascript:alert(1))");
+    expect(markdown).toContain("\\[ref\\]: javascript:alert(2)");
+    expect(html).not.toContain("<script>");
+    expect(html).toContain("&lt;script&gt;");
+  });
+
+  it("renders a self-contained HTML document", () => {
+    const html = eventsToHtml(
+      [
+        userMessage,
+        terminalAction,
+        terminalObservation("3 tests passed"),
+        assistantMessage,
+      ],
+      defaultOptions,
+    );
+
+    expect(html).not.toMatch(/<(?:link|script)[^>]+(?:href|src)=/i);
+    expect(html).toMatchSnapshot();
+  });
+
+  it("exports titleless ACP tool calls with a plain-text summary and no template leaks", () => {
+    const titlelessACPEvent: ACPToolCallEvent = {
+      id: "acp-1",
+      timestamp,
+      source: "agent",
+      kind: "ACPToolCallEvent",
+      tool_call_id: "call-1",
+      title: "",
+      status: "completed",
+      tool_kind: "other",
+      raw_input: null,
+      raw_output: null,
+      content: null,
+      is_error: false,
+    };
+
+    const markdown = eventsToMarkdown([titlelessACPEvent], defaultOptions);
+    const html = eventsToHtml([titlelessACPEvent], defaultOptions);
+
+    expect(markdown).toContain("Tool");
+    expect(markdown).not.toContain("{{title}}");
+    expect(markdown).not.toContain("<cmd>");
+    expect(markdown).not.toContain("&lt;cmd&gt;");
+
+    expect(html).toContain("Tool");
+    expect(html).not.toContain("{{title}}");
+    expect(html).not.toContain("<cmd>");
+    expect(html).not.toContain("&lt;cmd&gt;");
+  });
+
+  it("exports ACP tool calls with title intact", () => {
+    const titledACPEvent: ACPToolCallEvent = {
+      id: "acp-2",
+      timestamp,
+      source: "agent",
+      kind: "ACPToolCallEvent",
+      tool_call_id: "call-2",
+      title: "Read /workspace/main.py",
+      status: "completed",
+      tool_kind: "read",
+      raw_input: null,
+      raw_output: null,
+      content: null,
+      is_error: false,
+    };
+
+    const markdown = eventsToMarkdown([titledACPEvent], defaultOptions);
+    const html = eventsToHtml([titledACPEvent], defaultOptions);
+
+    expect(markdown).toContain("/workspace/main.py");
+    expect(html).toContain("/workspace/main.py");
+  });
+});

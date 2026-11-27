@@ -1,0 +1,92 @@
+---
+name: Issue Duplicate Check via OpenHands Cloud
+
+on:
+    issues:
+        types: [opened]
+    schedule:
+        - cron: 0 9 * * *
+    workflow_dispatch:
+        inputs:
+            mode:
+                description: Which workflow path to run
+                required: true
+                type: choice
+                options:
+                    - smoke-clone
+                    - issue-check
+                    - auto-close
+                default: smoke-clone
+            issue_number:
+                description: Existing issue number to analyze when mode is issue-check
+                required: false
+                type: number
+            close_after_days:
+                description: Days to wait before auto-closing duplicate candidates in auto-close mode
+                required: false
+                type: number
+                default: 3
+
+permissions:
+    contents: read
+    issues: write
+
+jobs:
+    smoke-clone:
+        if: github.event_name == 'workflow_dispatch' && inputs.mode == 'smoke-clone'
+        runs-on: ubuntu-latest
+        timeout-minutes: 5
+        steps:
+            - name: Clone repository
+              env:
+                  REPOSITORY: ${{ github.repository }}
+              run: |
+                  git clone --depth 1 "https://github.com/${REPOSITORY}.git" /tmp/repo-clone
+                  echo "REPO_HEAD=$(git -C /tmp/repo-clone rev-parse --short HEAD)" >> "$GITHUB_ENV"
+
+            - name: Summarize smoke test
+              run: |
+                  {
+                    echo "## Smoke clone completed"
+                    echo
+                    echo "- Repository cloned to /tmp/repo-clone"
+                    echo "- Repository HEAD: ${REPO_HEAD}"
+                  } >> "$GITHUB_STEP_SUMMARY"
+
+    issue-duplicate-check:
+        if: |
+            github.event_name == 'issues' ||
+            (github.event_name == 'workflow_dispatch' && inputs.mode == 'issue-check' && inputs.issue_number != '')
+        runs-on: ubuntu-latest
+        timeout-minutes: 35
+        concurrency:
+            group: issue-duplicate-check-${{ github.repository }}-${{ github.event.issue.number || inputs.issue_number }}
+            cancel-in-progress: false
+        steps:
+            - name: Run issue duplicate check
+              uses: OpenHands/extensions/plugins/issue-duplicate-checker@fb020c71eb8e7cd2678f0251ab24327d3738da7d
+              with:
+                  mode: issue-check
+                  repository: ${{ github.repository }}
+                  issue-number: ${{ github.event.issue.number || inputs.issue_number }}
+                  close-after-days: ${{ inputs.close_after_days || '3' }}
+                  openhands-api-key: ${{ secrets.OPENHANDS_API_KEY }}
+                  github-token: ${{ secrets.OPENHANDS_BOT_GITHUB_PAT_PUBLIC || github.token }}
+
+    auto-close-duplicates:
+        if: |
+            github.event_name == 'schedule' ||
+            (github.event_name == 'workflow_dispatch' && inputs.mode == 'auto-close')
+        runs-on: ubuntu-latest
+        timeout-minutes: 20
+        concurrency:
+            group: auto-close-duplicates-${{ github.repository }}
+            cancel-in-progress: false
+        steps:
+            - name: Auto-close aged duplicate candidates
+              uses: OpenHands/extensions/plugins/issue-duplicate-checker@fb020c71eb8e7cd2678f0251ab24327d3738da7d
+              with:
+                  mode: auto-close
+                  repository: ${{ github.repository }}
+                  close-after-days: ${{ inputs.close_after_days || '3' }}
+                  github-token: ${{ secrets.OPENHANDS_BOT_GITHUB_PAT_PUBLIC || github.token }}

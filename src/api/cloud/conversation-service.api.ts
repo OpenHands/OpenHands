@@ -1,0 +1,389 @@
+import {
+  getActiveBackend,
+  getRegisteredBackends,
+} from "../backend-registry/active-store";
+import type { Backend } from "../backend-registry/types";
+import { getStoredConversationMetadata } from "../conversation-metadata-store";
+import type {
+  AppConversation,
+  AppConversationPage,
+  AppConversationStartRequest,
+  AppConversationStartTask,
+} from "../conversation-service/agent-server-conversation-service.types";
+import { AGENT_CANVAS_CLIENT_HEADERS } from "../client-source";
+import type { Provider } from "#/types/settings";
+import { callCloudProxy } from "./proxy";
+
+/**
+ * Connect Repo saves the selection on the server
+ * (`updateCloudConversationRepository`) and also caches it in local storage
+ * (see `AgentServerConversationService.updateConversationRepository`). The
+ * cache is overlaid here for each field whose server value is empty: for
+ * example older conversations connected before the server save existed, or
+ * a repository the server rejected when the conversation had none.
+ *
+ * Server values take precedence whenever they're populated; the
+ * local-storage fallback only fills in fields the server returned as
+ * `null`/`undefined`.
+ */
+function overlayStoredRepoSelection(
+  conversation: AppConversation | null,
+): AppConversation | null {
+  if (!conversation?.id) return conversation;
+  const stored = getStoredConversationMetadata(conversation.id);
+  if (!stored) return conversation;
+
+  return {
+    ...conversation,
+    selected_repository:
+      conversation.selected_repository ?? stored.selected_repository ?? null,
+    selected_branch:
+      conversation.selected_branch ?? stored.selected_branch ?? null,
+    git_provider: conversation.git_provider ?? stored.git_provider ?? null,
+    // The id belongs to the repository it was saved with, so a server-held
+    // repository without one must not pick up a stale cached id.
+    git_provider_id: conversation.selected_repository
+      ? (conversation.git_provider_id ?? null)
+      : (stored.git_provider_id ?? null),
+    selected_workspace:
+      conversation.selected_workspace ?? stored.selected_workspace ?? null,
+  };
+}
+
+function getActiveCloudBackend(): Backend {
+  const active = getActiveBackend().backend;
+  if (active.kind !== "cloud") {
+    throw new Error("Cloud conversations call requires a cloud backend.");
+  }
+  return active;
+}
+
+/**
+ * Resolve the cloud backend a Cloud conversation should be launched against
+ * when the active backend may not be a cloud one. Cloud conversations cannot
+ * register client tools, so the typed launch action always runs from a local
+ * parent and has to reach a registered-but-inactive cloud backend.
+ *
+ * Prefers the active backend when it is already cloud, then the first
+ * registered cloud backend that carries credentials. Returns `null` when the
+ * user has no cloud backend connected, so callers can give the agent
+ * corrective guidance instead of failing opaquely.
+ *
+ * Note: `createCloudClient` only sends `X-Org-Id` for the *active* backend, so
+ * a conversation launched against an inactive backend lands in the API key's
+ * own organization.
+ */
+export function pickCloudBackendForLaunch(): Backend | null {
+  const active = getActiveBackend().backend;
+  if (active.kind === "cloud") return active;
+  return (
+    getRegisteredBackends().find(
+      (backend) => backend.kind === "cloud" && !!backend.apiKey,
+    ) ?? null
+  );
+}
+
+/**
+ * Search the cloud app-conversations list. Mirrors the local
+ * `AgentServerConversationService.searchConversations` interface but calls
+ * the cloud endpoint `/api/v1/app-conversations/search`.
+ */
+export async function searchCloudConversations(
+  limit: number = 20,
+  pageId?: string,
+): Promise<AppConversationPage> {
+  const backend = getActiveCloudBackend();
+  const params = new URLSearchParams();
+  params.set("limit", String(limit));
+  if (pageId) params.set("page_id", pageId);
+  params.set("sort_order", "UPDATED_AT_DESC");
+
+  const data = await callCloudProxy<{
+    items: AppConversation[];
+    next_page_id: string | null;
+  }>({
+    backend,
+    method: "GET",
+    path: `/api/v1/app-conversations/search?${params.toString()}`,
+  });
+
+  return {
+    items: (data?.items ?? []).map(
+      (item) => overlayStoredRepoSelection(item) as AppConversation,
+    ),
+    next_page_id: data?.next_page_id ?? null,
+  };
+}
+
+/**
+ * Batch-fetch cloud app-conversations by id. Mirrors the local
+ * `AgentServerConversationService.batchGetAppConversations` interface.
+ */
+export async function batchGetCloudConversations(
+  ids: string[],
+): Promise<(AppConversation | null)[]> {
+  if (ids.length === 0) return [];
+  const backend = getActiveCloudBackend();
+  const params = new URLSearchParams();
+  for (const id of ids) params.append("ids", id);
+  const data = await callCloudProxy<(AppConversation | null)[]>({
+    backend,
+    method: "GET",
+    path: `/api/v1/app-conversations?${params.toString()}`,
+  });
+  return (data ?? []).map(overlayStoredRepoSelection);
+}
+
+/**
+ * Create a v1 app-conversation on the cloud backend.
+ *
+ * Mirrors OpenHands' cloud flow: POST /api/v1/app-conversations with the
+ * `AppConversationStartRequest` payload, returning a
+ * `AppConversationStartTask`. The task is initially WORKING; the caller
+ * polls `getCloudAppConversationStartTask` (3s cadence per OpenHands)
+ * until status is READY (then `app_conversation_id`, `agent_server_url`,
+ * and `session_api_key` are populated) or ERROR.
+ *
+ * This path does NOT use encrypted-settings round-tripping. Secrets stay
+ * server-side on the cloud backend — the only auth carried is the cloud bearer
+ * token, and the conversation runtime is
+ * provisioned with its own ephemeral session_api_key returned in the
+ * task.
+ */
+export async function createCloudAppConversation(
+  request: AppConversationStartRequest,
+  // Defaults to the active backend. The typed launch action passes an explicit
+  // backend because it always runs from a *local* parent conversation.
+  backendOverride?: Backend,
+): Promise<AppConversationStartTask> {
+  const backend = backendOverride ?? getActiveCloudBackend();
+  const data = await callCloudProxy<AppConversationStartTask>({
+    backend,
+    method: "POST",
+    path: "/api/v1/app-conversations",
+    body: request as unknown as Record<string, unknown>,
+    headers: AGENT_CANVAS_CLIENT_HEADERS,
+  });
+  return data;
+}
+
+/**
+ * Download a v1 app-conversation as a ZIP from the cloud backend. Mirrors
+ * the local `AgentServerConversationService.downloadConversation` interface but
+ * calls
+ * `GET /api/v1/app-conversations/{id}/download`, which returns
+ * `application/zip` with `Content-Disposition` set by the cloud backend.
+ */
+export async function downloadCloudConversation(
+  conversationId: string,
+): Promise<Blob> {
+  const backend = getActiveCloudBackend();
+  return callCloudProxy<Blob>({
+    backend,
+    method: "GET",
+    path: `/api/v1/app-conversations/${conversationId}/download`,
+    responseType: "blob",
+  });
+}
+
+/**
+ * Delete a v1 app-conversation on the cloud backend. Mirrors the local
+ * `AgentServerConversationService.deleteConversation` interface but calls
+ * `DELETE /api/v1/app-conversations/{id}`, which returns a JSON
+ * `Success` envelope (discarded here — the caller only needs to know
+ * the request didn't error).
+ */
+export async function deleteCloudConversation(
+  conversationId: string,
+  scope?: { backend: Backend; orgId: string | null },
+): Promise<void> {
+  await callCloudProxy<unknown>({
+    backend: scope?.backend ?? getActiveCloudBackend(),
+    method: "DELETE",
+    path: `/api/v1/app-conversations/${conversationId}`,
+    ...(scope ? { orgId: scope.orgId } : {}),
+  });
+}
+
+/**
+ * Toggle the public-sharing flag on a cloud v1 app-conversation. Mirrors
+ * OpenHands' `AgentServerConversationService.updateConversationPublicFlag`:
+ * `PATCH /api/v1/app-conversations/{id}` with `{ public }`, returning
+ * the updated conversation.
+ */
+export async function updateCloudConversationPublicFlag(
+  conversationId: string,
+  isPublic: boolean,
+): Promise<AppConversation> {
+  const backend = getActiveCloudBackend();
+  const data = await callCloudProxy<AppConversation>({
+    backend,
+    method: "PATCH",
+    path: `/api/v1/app-conversations/${conversationId}`,
+    body: { public: isPublic },
+  });
+  return data;
+}
+
+/**
+ * Apply a tag merge patch to a cloud v1 app-conversation:
+ * `PATCH /api/v1/app-conversations/{id}` with `{ tags: patch }`, where a
+ * `null` value deletes the key and unmentioned keys are left untouched.
+ * Server-managed keys (`acpserver`, `archiveworkspacepath`,
+ * `agentprofileid`, `agentprofilerevision`) are rejected by the app-server,
+ * so callers must only send caller-owned keys.
+ */
+export async function updateCloudConversationTags(
+  conversationId: string,
+  patch: Record<string, string | null>,
+): Promise<AppConversation> {
+  const backend = getActiveCloudBackend();
+  const data = await callCloudProxy<AppConversation>({
+    backend,
+    method: "PATCH",
+    path: `/api/v1/app-conversations/${conversationId}`,
+    body: { tags: patch },
+  });
+  return overlayStoredRepoSelection(data) as AppConversation;
+}
+
+/**
+ * Rename a cloud v1 app-conversation. The title belongs to the Cloud
+ * app-conversation resource, so updating a runtime Agent Server would not
+ * persist it in the Cloud conversation list.
+ */
+export async function updateCloudConversationTitle(
+  conversationId: string,
+  title: string,
+): Promise<AppConversation> {
+  const backend = getActiveCloudBackend();
+  return callCloudProxy<AppConversation>({
+    backend,
+    method: "PATCH",
+    path: `/api/v1/app-conversations/${conversationId}`,
+    body: { title },
+  });
+}
+
+/**
+ * Attach, change, or clear the repository of a cloud v1 app-conversation.
+ * `PATCH /api/v1/app-conversations/{id}`. The server stores the fields but
+ * does not clone; the caller asks the agent to clone the repository.
+ */
+export async function updateCloudConversationRepository(
+  conversationId: string,
+  repository: string | null,
+  branch: string | null,
+  gitProvider: Provider | null,
+  gitProviderId?: number | null,
+): Promise<AppConversation> {
+  const backend = getActiveCloudBackend();
+  return callCloudProxy<AppConversation>({
+    backend,
+    method: "PATCH",
+    path: `/api/v1/app-conversations/${conversationId}`,
+    body: {
+      selected_repository: repository,
+      selected_branch: branch,
+      git_provider: gitProvider,
+      ...(gitProviderId != null ? { git_provider_id: gitProviderId } : {}),
+    },
+  });
+}
+
+/**
+ * Pause the cloud sandbox backing a v1 app-conversation. Mirrors
+ * OpenHands' `SandboxService.pauseSandbox`:
+ * `POST /api/v1/sandboxes/{sandboxId}/pause` on the cloud backend, which stops
+ * the runtime owning the conversation.
+ */
+export async function pauseCloudSandbox(sandboxId: string): Promise<void> {
+  const backend = getActiveCloudBackend();
+  await callCloudProxy<unknown>({
+    backend,
+    method: "POST",
+    path: `/api/v1/sandboxes/${sandboxId}/pause`,
+  });
+}
+
+/**
+ * Resume a paused cloud sandbox. Mirrors OpenHands' `SandboxService.resumeSandbox`
+ * by calling `POST /api/v1/sandboxes/{sandboxId}/resume` on the SaaS.
+ *
+ * This is the correct endpoint for waking a PAUSED sandbox. It is a
+ * lightweight unpause — NOT the same as creating a new start task via
+ * `POST /api/v1/app-conversations`, which provisions a fresh conversation
+ * and is subject to the 120-second sandbox-start timeout.
+ */
+export async function resumeCloudSandbox(sandboxId: string): Promise<void> {
+  const backend = getActiveCloudBackend();
+  await callCloudProxy<unknown>({
+    backend,
+    method: "POST",
+    path: `/api/v1/sandboxes/${sandboxId}/resume`,
+  });
+}
+
+/**
+ * Read a file from a cloud conversation's sandbox workspace. Mirrors
+ * OpenHands' `AgentServerConversationService.readConversationFile` — hits
+ * `GET /api/v1/app-conversations/{id}/file?file_path=...` on the cloud backend
+ * and returns the file content as a string.
+ */
+export async function readCloudConversationFile(
+  conversationId: string,
+  filePath: string,
+): Promise<string> {
+  const backend = getActiveCloudBackend();
+  const params = new URLSearchParams();
+  params.append("file_path", filePath);
+  const data = await callCloudProxy<string>({
+    backend,
+    method: "GET",
+    path: `/api/v1/app-conversations/${conversationId}/file?${params.toString()}`,
+  });
+  return data ?? "";
+}
+
+/**
+ * List every file in a cloud conversation's sandbox workspace. Hits
+ * `GET /api/v1/app-conversations/{id}/files?path=...` on the cloud backend,
+ * which resolves the conversation's runtime and runs a bounded `find`
+ * server-side (see enterprise `list_conversation_files`). Unlike the
+ * git-changes source, this returns the full tree so the Files tab matches the
+ * local-backend experience. Paths come back relative to `path`.
+ */
+export async function listCloudConversationFiles(
+  conversationId: string,
+  path: string,
+): Promise<string[]> {
+  const backend = getActiveCloudBackend();
+  const params = new URLSearchParams();
+  params.append("path", path);
+  const data = await callCloudProxy<string[]>({
+    backend,
+    method: "GET",
+    path: `/api/v1/app-conversations/${conversationId}/files?${params.toString()}`,
+  });
+  return Array.isArray(data) ? data : [];
+}
+
+/**
+ * Fetch a single v1 app-conversation start task. Mirrors OpenHands'
+ * `AgentServerConversationService.getStartTask` — uses the batch search endpoint
+ * with a single id and unwraps the first result.
+ */
+export async function getCloudAppConversationStartTask(
+  taskId: string,
+  backendOverride?: Backend,
+): Promise<AppConversationStartTask | null> {
+  const backend = backendOverride ?? getActiveCloudBackend();
+  const params = new URLSearchParams();
+  params.set("ids", taskId);
+  const data = await callCloudProxy<(AppConversationStartTask | null)[]>({
+    backend,
+    method: "GET",
+    path: `/api/v1/app-conversations/start-tasks?${params.toString()}`,
+  });
+  return data?.[0] ?? null;
+}

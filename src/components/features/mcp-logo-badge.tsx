@@ -1,0 +1,107 @@
+import type { ComponentType, ReactNode, SVGProps } from "react";
+import { Bot } from "lucide-react";
+import type { IntegrationCatalogEntry } from "@openhands/extensions/integrations";
+import SlackIcon from "#/icons/slack.svg?react";
+import { cn } from "#/utils/utils";
+
+type McpLogoEntry = Pick<
+  IntegrationCatalogEntry,
+  "id" | "name" | "iconBg" | "iconColor" | "logoUrl"
+>;
+
+export type { McpLogoEntry };
+
+interface McpLogoBadgeProps {
+  entry?: McpLogoEntry | null;
+  size?: "xs" | "sm" | "base" | "md";
+  className?: string;
+  fallback?: ReactNode;
+  testId?: string;
+}
+
+const sizeClassNames = {
+  xs: "h-4 w-4 rounded [&>svg]:h-2.5 [&>svg]:w-2.5",
+  sm: "h-5 w-5 rounded-md [&>svg]:h-3 [&>svg]:w-3",
+  base: "h-7 w-7 rounded-lg [&>svg]:h-3.5 [&>svg]:w-3.5",
+  md: "h-10 w-10 rounded-lg [&>svg]:h-5 [&>svg]:w-5",
+};
+
+// Catalog entries whose remote logoUrl is unreliable (e.g. Slack's was removed
+// from cdn.simpleicons.org and now 404s) render a bundled mark instead, keyed
+// by IntegrationCatalogEntry.id.
+const LOCAL_LOGO_ICONS: Record<
+  string,
+  ComponentType<SVGProps<SVGSVGElement>>
+> = {
+  slack: SlackIcon,
+};
+
+const WHITE_SIMPLE_ICON_URL =
+  /^https:\/\/cdn\.simpleicons\.org\/[^/]+\/(fff|ffffff)$/i;
+
+export function McpLogoBadge({
+  entry,
+  size = "md",
+  className,
+  fallback,
+  testId,
+}: McpLogoBadgeProps) {
+  const LocalLogoIcon = entry ? LOCAL_LOGO_ICONS[entry.id] : undefined;
+  const hasThemeBackground = !!entry?.iconBg?.startsWith("var(--oh-");
+  // A white mark on a theme surface disappears in light themes, so paint it
+  // with the badge ink through a mask instead of loading the white raster.
+  const tintedLogoUrl =
+    hasThemeBackground &&
+    entry?.logoUrl &&
+    WHITE_SIMPLE_ICON_URL.test(entry.logoUrl)
+      ? entry.logoUrl
+      : undefined;
+  return (
+    <span
+      aria-hidden="true"
+      title={entry?.name}
+      data-testid={testId}
+      className={cn(
+        "inline-flex shrink-0 items-center justify-center overflow-hidden",
+        "border border-contrast/10 shadow-badge-inset",
+        sizeClassNames[size],
+        className,
+      )}
+      style={{
+        backgroundColor: entry?.iconBg ?? "var(--oh-color-tertiary)",
+        color:
+          entry?.iconColor ??
+          (entry?.iconBg && !hasThemeBackground
+            ? "#FFFFFF"
+            : "var(--oh-contrast)"),
+      }}
+    >
+      {LocalLogoIcon ? (
+        <LocalLogoIcon />
+      ) : tintedLogoUrl ? (
+        <span
+          data-testid="mcp-logo-tinted-mark"
+          className="size-5/9 bg-current"
+          style={{
+            maskImage: `url("${tintedLogoUrl}")`,
+            maskSize: "contain",
+            maskRepeat: "no-repeat",
+            maskPosition: "center",
+          }}
+        />
+      ) : entry?.logoUrl ? (
+        <img
+          src={entry.logoUrl}
+          alt={`${entry.name} logo`}
+          className="h-full w-full object-contain p-[22%]"
+          onError={(e) => {
+            const image = e.currentTarget;
+            image.style.display = "none";
+          }}
+        />
+      ) : (
+        (fallback ?? <Bot className="h-5 w-5" strokeWidth={2.25} />)
+      )}
+    </span>
+  );
+}

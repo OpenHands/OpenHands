@@ -1,0 +1,108 @@
+import React from "react";
+import { AppearancePortal } from "#/components/shared/appearance-portal";
+import { useEscapeBoundary } from "#/hooks/use-close-on-escape";
+import { useModalFocus } from "./use-modal-focus";
+
+interface ModalBackdropProps {
+  children: React.ReactNode;
+  onClose?: () => void;
+  /** When false, pressing Escape does not close the modal. Defaults to true. */
+  closeOnEscape?: boolean;
+  /** When false, clicking the backdrop does not close the modal. Defaults to true. */
+  closeOnBackdropClick?: boolean;
+  /** When true, renders above the default modal layer. Defaults to false. */
+  elevated?: boolean;
+  "aria-label"?: string;
+  /** Ids of the elements that explain the dialog, read right after its label. */
+  "aria-describedby"?: string;
+}
+
+export function ModalBackdrop({
+  children,
+  onClose,
+  closeOnEscape = true,
+  closeOnBackdropClick = true,
+  elevated = false,
+  "aria-label": ariaLabel,
+  "aria-describedby": ariaDescribedBy,
+}: ModalBackdropProps) {
+  const focus = useModalFocus({ elevated });
+  // The dialog is on top: menus and drawers opened before it never take its
+  // Escape, whether or not it closes on Escape itself.
+  useEscapeBoundary(true);
+
+  React.useEffect(() => {
+    if (!closeOnEscape) return undefined;
+    // An expanded combobox consumes this Escape itself: React Aria closes its
+    // listbox and lets the event keep propagating, so the same press would
+    // also close the dialog and lose any unsaved input (#19646). Focus stays
+    // on the combobox input while its popup is open (virtual focus rides the
+    // options), and aria-expanded flips false once the popup closes — the
+    // next press then closes the dialog.
+    //
+    // Reading that state needs both phases. Capture sees the keydown before
+    // React's discrete-event handlers collapse the popup (a bubble listener
+    // would always read the already-closed state); the close itself must run
+    // on bubble so content that handles Escape with `stopPropagation` (e.g.
+    // custom popovers) keeps shielding the dialog as before.
+    let comboboxExpandedAtKeypress = false;
+    const recordComboboxState = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      const target = e.target instanceof Element ? e.target : null;
+      comboboxExpandedAtKeypress =
+        target?.getAttribute("role") === "combobox" &&
+        target.getAttribute("aria-expanded") === "true";
+    };
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      if (comboboxExpandedAtKeypress) return;
+      onClose?.();
+    };
+
+    window.addEventListener("keydown", recordComboboxState, true);
+    window.addEventListener("keydown", handleEscape);
+    return () => {
+      window.removeEventListener("keydown", recordComboboxState, true);
+      window.removeEventListener("keydown", handleEscape);
+    };
+  }, [closeOnEscape, onClose]);
+
+  const handleClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!closeOnBackdropClick) return;
+    if (e.target === e.currentTarget) onClose?.(); // only close if the click was on the backdrop
+  };
+
+  if (typeof document === "undefined") return null;
+
+  // Portal to document.body so the modal's `position: fixed` resolves
+  // against the viewport. Otherwise a transformed ancestor (e.g. the
+  // onboarding slide rail) would become the containing block and the
+  // modal would render trapped inside it instead of overlapping its
+  // parent modal.
+  return (
+    <AppearancePortal>
+      {/* Focus and key events from content (including portaled popovers)
+          bubble through the React tree; see useModalFocus. */}
+      {/* eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions */}
+      <div
+        ref={focus.rootRef}
+        role="dialog"
+        aria-modal="true"
+        aria-label={ariaLabel}
+        aria-describedby={ariaDescribedBy}
+        tabIndex={-1}
+        onFocus={focus.onFocus}
+        onKeyDown={focus.onKeyDown}
+        className={`fixed inset-0 flex items-center justify-center outline-none ${
+          elevated ? "z-70" : "z-60"
+        }`}
+      >
+        <div
+          onClick={handleClick}
+          className="fixed inset-0 bg-black opacity-60"
+        />
+        <div className="relative">{children}</div>
+      </div>
+    </AppearancePortal>
+  );
+}

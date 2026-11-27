@@ -1,0 +1,28 @@
+export const CONVERSATION_OVERVIEW_PANEL_WIDTH_PX = 240;
+export const CONVERSATION_OVERVIEW_COLUMN_MIN_GAP_PX = 8;
+/** Horizontal padding on the overview column (`pl-3` + `pr-4`). */
+export const CONVERSATION_OVERVIEW_COLUMN_LEFT_PADDING_PX = 12;
+export const CONVERSATION_OVERVIEW_COLUMN_RIGHT_PADDING_PX = 16;
+export const CONVERSATION_OVERVIEW_COLUMN_HORIZONTAL_PADDING_PX =
+  CONVERSATION_OVERVIEW_COLUMN_LEFT_PADDING_PX +
+  CONVERSATION_OVERVIEW_COLUMN_RIGHT_PADDING_PX;
+/** Minimum chat-thread width before the overview panel is hidden entirely. */
+export const CONVERSATION_OVERVIEW_MIN_THREAD_WIDTH_PX = 320;
+
+export const CONVERSATION_OVERVIEW_PANEL_TRANSITION = {
+  duration: 0.2,
+  ease: "easeInOut" as const,
+};
+
+export const CONVERSATION_OVERVIEW_COLUMN_WIDTH_PX =
+  CONVERSATION_OVERVIEW_PANEL_WIDTH_PX +
+  CONVERSATION_OVERVIEW_COLUMN_HORIZONTAL_PADDING_PX;
+
+export function hasEnoughOverviewLayoutSpace(containerWidth: number): boolean {
+  return (
+    containerWidth >=
+    CONVERSATION_OVERVIEW_COLUMN_WIDTH_PX +
+      CONVERSATION_OVERVIEW_COLUMN_MIN_GAP_PX +
+      CONVERSATION_OVERVIEW_MIN_THREAD_WIDTH_PX
+  );
+}

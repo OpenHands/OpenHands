@@ -1,0 +1,59 @@
+import { useMemo } from "react";
+import { useTranslation } from "react-i18next";
+import { I18nKey } from "#/i18n/declaration";
+import TachometerFastIcon from "#/icons/tachometer-fast.svg?react";
+import PrStatusIcon from "#/icons/pr-status.svg?react";
+import DocumentIcon from "#/icons/document.svg?react";
+import WaterIcon from "#/icons/u-water.svg?react";
+
+export type Suggestion = { label: I18nKey | string; value: string };
+
+interface SuggestionItemProps {
+  suggestion: Suggestion;
+  onClick: (value: string) => void;
+}
+
+export function SuggestionItem({ suggestion, onClick }: SuggestionItemProps) {
+  const { t } = useTranslation("openhands");
+
+  const itemIcon = useMemo(() => {
+    switch (suggestion.label) {
+      case "INCREASE_TEST_COVERAGE":
+        return (
+          <TachometerFastIcon
+            width={24}
+            height={24}
+            color="var(--oh-contrast)"
+          />
+        );
+      case "AUTO_MERGE_PRS":
+        return (
+          <PrStatusIcon width={19} height={20} color="var(--oh-contrast)" />
+        );
+      case "FIX_README":
+        return (
+          <DocumentIcon width={24} height={24} color="var(--oh-contrast)" />
+        );
+      case "CLEAN_DEPENDENCIES":
+        return <WaterIcon width={24} height={24} color="var(--oh-contrast)" />;
+      default:
+        return null;
+    }
+  }, [suggestion]);
+
+  return (
+    <button
+      type="button"
+      className="list-none border border-border-input rounded-composer hover:bg-surface-raised dark:hover:border-interactive-hover transition-colors flex-1 flex items-center justify-center cursor-pointer gap-2.5 h-13.75 px-4"
+      onClick={() => onClick(suggestion.value)}
+    >
+      {itemIcon}
+      <span
+        data-testid="suggestion"
+        className="text-sm-plus font-normal leading-5 text-contrast text-center cursor-pointer"
+      >
+        {t(suggestion.label)}
+      </span>
+    </button>
+  );
+}

@@ -1,0 +1,444 @@
+import { renderHook, waitFor } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { AxiosError, AxiosHeaders } from "axios";
+import { HttpError } from "@openhands/typescript-client";
+import { describe, expect, it, vi, beforeEach } from "vitest";
+import { useSwitchLlmProfile } from "#/hooks/mutation/use-switch-llm-profile";
+import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
+import SettingsService from "#/api/settings-service/settings-service.api";
+import {
+  LLM_PROFILES_QUERY_KEYS,
+  SETTINGS_QUERY_KEYS,
+} from "#/hooks/query/query-keys";
+import { recordModelSwitchMessage } from "#/hooks/chat/record-model-switch-message";
+import {
+  getStoredConversationMetadata,
+  setStoredConversationMetadata,
+} from "#/api/conversation-metadata-store";
+import { displayErrorToast } from "#/utils/custom-toast-handlers";
+import {
+  BACKEND_REQUEST_TIMEOUT_MESSAGE,
+  CORS_OR_NETWORK_ERROR_MESSAGE,
+} from "#/utils/user-facing-error";
+import {
+  clearPendingHomeModelPick,
+  hasPendingHomeModelPick,
+} from "#/hooks/use-chat-input-llm-profile-state";
+
+vi.mock("#/utils/custom-toast-handlers");
+
+vi.mock(
+  "#/api/conversation-service/agent-server-conversation-service.api",
+  () => ({
+    default: {
+      switchProfile: vi.fn(),
+    },
+  }),
+);
+
+vi.mock("#/hooks/chat/record-model-switch-message", async (importOriginal) => ({
+  // Keep the real stampActiveLlmProfile so the metadata-stamp assertions
+  // below exercise the actual write; only the inline-message recorder is spied.
+  ...(await importOriginal<
+    typeof import("#/hooks/chat/record-model-switch-message")
+  >()),
+  recordModelSwitchMessage: vi.fn(),
+}));
+
+vi.mock("#/hooks/chat/model-command-event-anchor", () => ({
+  getLastRenderableEventId: () => "evt-9",
+}));
+
+const updateDefaultAgentProfileMock = vi.hoisted(() => vi.fn());
+vi.mock("#/hooks/mutation/sync-agent-profiles", async (importOriginal) => ({
+  ...(await importOriginal<
+    typeof import("#/hooks/mutation/sync-agent-profiles")
+  >()),
+  updateDefaultAgentProfile: updateDefaultAgentProfileMock,
+}));
+
+/** The `default` fields the sync would change, from a stored LLM ref. */
+const mirroredFrom = (llmProfileRef: string) => {
+  expect(updateDefaultAgentProfileMock).toHaveBeenCalledOnce();
+  const [, change] = updateDefaultAgentProfileMock.mock.calls[0];
+  return change({ agent_kind: "openhands", llm_profile_ref: llmProfileRef });
+};
+
+const renderSwitchHook = () => {
+  const queryClient = new QueryClient({
+    defaultOptions: {
+      queries: { retry: false },
+      mutations: { retry: false },
+    },
+  });
+  const invalidateQueriesSpy = vi.spyOn(queryClient, "invalidateQueries");
+  const { result } = renderHook(() => useSwitchLlmProfile(), {
+    wrapper: ({ children }) => (
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    ),
+  });
+  return { result, invalidateQueriesSpy };
+};
+
+describe("useSwitchLlmProfile", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    window.localStorage.clear();
+    SettingsService.invalidateCache();
+    clearPendingHomeModelPick("local", null);
+  });
+
+  it("invalidates the settings cache on the home-page activate path (conversationId === null)", async () => {
+    vi.mocked(AgentServerConversationService.switchProfile).mockResolvedValue(
+      undefined as never,
+    );
+    const invalidateCacheSpy = vi.spyOn(SettingsService, "invalidateCache");
+
+    const { result, invalidateQueriesSpy } = renderSwitchHook();
+
+    result.current.mutate({ conversationId: null, profileName: "my-profile" });
+
+    await waitFor(() => {
+      expect(result.current.isSuccess).toBe(true);
+    });
+
+    expect(AgentServerConversationService.switchProfile).toHaveBeenCalledWith(
+      null,
+      "my-profile",
+    );
+    // The stale settings cache must be cleared so conversation-start uses the
+    // newly activated profile's LLM (the core of bug #640).
+    expect(invalidateCacheSpy).toHaveBeenCalled();
+    expect(invalidateQueriesSpy).toHaveBeenCalledWith({
+      queryKey: LLM_PROFILES_QUERY_KEYS.all,
+    });
+    expect(invalidateQueriesSpy).toHaveBeenCalledWith({
+      queryKey: SETTINGS_QUERY_KEYS.personal(),
+    });
+    expect(mirroredFrom("old")).toEqual({ llm_profile_ref: "my-profile" });
+
+    invalidateCacheSpy.mockRestore();
+  });
+
+  it("does not touch the settings cache for the per-conversation switch path", async () => {
+    vi.mocked(AgentServerConversationService.switchProfile).mockResolvedValue(
+      undefined as never,
+    );
+    const invalidateCacheSpy = vi.spyOn(SettingsService, "invalidateCache");
+
+    const { result, invalidateQueriesSpy } = renderSwitchHook();
+
+    result.current.mutate({
+      conversationId: "conv-1",
+      profileName: "my-profile",
+    });
+
+    await waitFor(() => {
+      expect(result.current.isSuccess).toBe(true);
+    });
+
+    expect(invalidateCacheSpy).not.toHaveBeenCalled();
+    expect(invalidateQueriesSpy).toHaveBeenCalledWith({
+      queryKey: LLM_PROFILES_QUERY_KEYS.all,
+    });
+    expect(invalidateQueriesSpy).toHaveBeenCalledWith({
+      queryKey: ["user", "conversation", "conv-1"],
+    });
+    expect(invalidateQueriesSpy).not.toHaveBeenCalledWith({
+      queryKey: SETTINGS_QUERY_KEYS.personal(),
+    });
+    expect(updateDefaultAgentProfileMock).not.toHaveBeenCalled();
+
+    invalidateCacheSpy.mockRestore();
+  });
+
+  it("does not invalidate the settings cache when the switch fails", async () => {
+    vi.mocked(AgentServerConversationService.switchProfile).mockRejectedValue(
+      new Error("boom"),
+    );
+    const invalidateCacheSpy = vi.spyOn(SettingsService, "invalidateCache");
+
+    const { result } = renderSwitchHook();
+
+    result.current.mutate({ conversationId: null, profileName: "my-profile" });
+
+    await waitFor(() => {
+      expect(result.current.isError).toBe(true);
+    });
+
+    expect(invalidateCacheSpy).not.toHaveBeenCalled();
+
+    invalidateCacheSpy.mockRestore();
+  });
+
+  // Errors surface via a tailored onError (not the global mutation toast) so a
+  // failed switch keeps the specific "Switched to {name} failed" message
+  // (#1571 review).
+  it("shows the tailored switch-failed message when the error carries no server detail", async () => {
+    // An empty-message Error carries no usable message (see getApiErrorMessage),
+    // so the tailored fallback is what actually renders.
+    vi.mocked(AgentServerConversationService.switchProfile).mockRejectedValue(
+      new Error(),
+    );
+
+    const { result } = renderSwitchHook();
+    result.current.mutate({ conversationId: null, profileName: "Smart" });
+
+    await waitFor(() => expect(result.current.isError).toBe(true));
+    // The global i18n mock returns the raw key (see vitest.setup.ts).
+    expect(displayErrorToast).toHaveBeenCalledWith("MODEL$SWITCH_FAILED");
+  });
+
+  it("prefers the server-provided error detail over the tailored fallback", async () => {
+    const axiosError = new AxiosError(
+      "Request failed",
+      "500",
+      undefined,
+      undefined,
+      {
+        status: 404,
+        statusText: "Not Found",
+        headers: new AxiosHeaders(),
+        config: { headers: new AxiosHeaders() },
+        data: { message: "LLM profile 'gpt-5' not found" },
+      },
+    );
+    vi.mocked(AgentServerConversationService.switchProfile).mockRejectedValue(
+      axiosError,
+    );
+
+    const { result } = renderSwitchHook();
+    result.current.mutate({ conversationId: null, profileName: "Smart" });
+
+    await waitFor(() => expect(result.current.isError).toBe(true));
+    expect(displayErrorToast).toHaveBeenCalledWith(
+      "LLM profile 'gpt-5' not found",
+    );
+  });
+
+  it("shows the server's `detail` instead of the raw HttpError text for an unknown profile (#17937)", async () => {
+    // Arrange — the agent-server answers /switch_profile with a FastAPI 404,
+    // which the shared TypeScript client throws as an HttpError.
+    vi.mocked(AgentServerConversationService.switchProfile).mockRejectedValue(
+      new HttpError(
+        404,
+        "Not Found",
+        { detail: "Profile 'qa-nope' not found" },
+        `HTTP request failed (404 Not Found): {"detail":"Profile 'qa-nope' not found"}`,
+      ),
+    );
+
+    // Act
+    const { result } = renderSwitchHook();
+    result.current.mutate({ conversationId: "conv-1", profileName: "qa-nope" });
+
+    // Assert
+    await waitFor(() => expect(result.current.isError).toBe(true));
+    expect(displayErrorToast).toHaveBeenCalledWith(
+      "Profile 'qa-nope' not found",
+    );
+  });
+
+  it("falls back to the tailored switch-failed message for an HttpError without a server detail", async () => {
+    vi.mocked(AgentServerConversationService.switchProfile).mockRejectedValue(
+      new HttpError(
+        502,
+        "Bad Gateway",
+        null,
+        "HTTP request failed (502 Bad Gateway): null",
+      ),
+    );
+
+    const { result } = renderSwitchHook();
+    result.current.mutate({ conversationId: "conv-1", profileName: "Smart" });
+
+    await waitFor(() => expect(result.current.isError).toBe(true));
+    expect(displayErrorToast).toHaveBeenCalledWith("MODEL$SWITCH_FAILED");
+  });
+
+  it("keeps the shared disconnect wording when the switch request never reaches the server", async () => {
+    // Arrange — the shared client wraps a fetch failure in a plain Error that
+    // carries no response body.
+    vi.mocked(AgentServerConversationService.switchProfile).mockRejectedValue(
+      new Error("Request failed: Failed to fetch", {
+        cause: new TypeError("Failed to fetch"),
+      }),
+    );
+
+    // Act
+    const { result } = renderSwitchHook();
+    result.current.mutate({ conversationId: "conv-1", profileName: "Smart" });
+
+    // Assert
+    await waitFor(() => expect(result.current.isError).toBe(true));
+    expect(displayErrorToast).toHaveBeenCalledWith(
+      CORS_OR_NETWORK_ERROR_MESSAGE,
+    );
+  });
+
+  it("keeps the shared timeout wording when the switch request times out", async () => {
+    vi.mocked(AgentServerConversationService.switchProfile).mockRejectedValue(
+      new Error("Request timeout after 60000ms"),
+    );
+
+    const { result } = renderSwitchHook();
+    result.current.mutate({ conversationId: "conv-1", profileName: "Smart" });
+
+    await waitFor(() => expect(result.current.isError).toBe(true));
+    expect(displayErrorToast).toHaveBeenCalledWith(
+      BACKEND_REQUEST_TIMEOUT_MESSAGE,
+    );
+  });
+
+  // The following behaviors run in the mutation-level onSuccess (not
+  // mutate-scoped callbacks) so they survive the switcher menu unmounting on
+  // select (#1571).
+  it("records the inline switch message anchored to the last renderable event", async () => {
+    vi.mocked(AgentServerConversationService.switchProfile).mockResolvedValue(
+      undefined as never,
+    );
+
+    const { result } = renderSwitchHook();
+    result.current.mutate({ conversationId: "conv-1", profileName: "Smart" });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(recordModelSwitchMessage).toHaveBeenCalledWith(
+      "conv-1",
+      "Smart",
+      "evt-9",
+    );
+  });
+
+  it("stamps the switched-to profile onto the conversation metadata, preserving repo/workspace (#1082)", async () => {
+    vi.mocked(AgentServerConversationService.switchProfile).mockResolvedValue(
+      undefined as never,
+    );
+    // Repo metadata persisted at creation must survive the merge.
+    setStoredConversationMetadata("conv-1", {
+      selected_repository: "octocat/hello-world",
+      selected_branch: "main",
+      git_provider: "github",
+    });
+
+    const { result } = renderSwitchHook();
+    result.current.mutate({
+      conversationId: "conv-1",
+      profileName: "claude-sonnet-4.6",
+    });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    // The switch carries the previous record forward wholesale rather than
+    // re-listing known fields, so optional keys the record never had stay
+    // absent instead of being materialized as null.
+    expect(getStoredConversationMetadata("conv-1")).toEqual({
+      selected_repository: "octocat/hello-world",
+      selected_branch: "main",
+      git_provider: "github",
+      active_profile: "claude-sonnet-4.6",
+      // Client-clock ISO timestamp; the mutation path has no event timestamp.
+      stamped_at: expect.any(String),
+    });
+  });
+
+  it("preserves metadata fields the switch does not know about, such as the local planner id", async () => {
+    vi.mocked(AgentServerConversationService.switchProfile).mockResolvedValue(
+      undefined as never,
+    );
+    setStoredConversationMetadata("conv-1", {
+      selected_repository: null,
+      selected_branch: null,
+      git_provider: null,
+      local_planning_conversation_id: "plan-conv-1",
+    });
+
+    const { result } = renderSwitchHook();
+    result.current.mutate({
+      conversationId: "conv-1",
+      profileName: "claude-sonnet-4.6",
+    });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(
+      getStoredConversationMetadata("conv-1")?.local_planning_conversation_id,
+    ).toBe("plan-conv-1");
+  });
+
+  it("preserves the conversation's attached plugins across a profile switch", async () => {
+    vi.mocked(AgentServerConversationService.switchProfile).mockResolvedValue(
+      undefined as never,
+    );
+    setStoredConversationMetadata("conv-1", {
+      selected_repository: null,
+      selected_branch: null,
+      git_provider: null,
+      plugins: [
+        { source: "github:acme/city-weather", ref: null, repo_path: null },
+      ],
+    });
+
+    const { result } = renderSwitchHook();
+    result.current.mutate({
+      conversationId: "conv-1",
+      profileName: "claude-sonnet-4.6",
+    });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(getStoredConversationMetadata("conv-1")?.plugins).toEqual([
+      { source: "github:acme/city-weather", ref: null, repo_path: null },
+    ]);
+  });
+
+  it("does not stamp metadata for the home-page activate path (conversationId === null)", async () => {
+    vi.mocked(AgentServerConversationService.switchProfile).mockResolvedValue(
+      undefined as never,
+    );
+
+    const { result } = renderSwitchHook();
+    result.current.mutate({ conversationId: null, profileName: "Smart" });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(getStoredConversationMetadata("conv-1")).toBeNull();
+    expect(recordModelSwitchMessage).not.toHaveBeenCalled();
+  });
+
+  it("does not stamp metadata when the switch fails", async () => {
+    vi.mocked(AgentServerConversationService.switchProfile).mockRejectedValue(
+      new Error("boom"),
+    );
+
+    const { result } = renderSwitchHook();
+    result.current.mutate({ conversationId: "conv-1", profileName: "Smart" });
+
+    await waitFor(() => expect(result.current.isError).toBe(true));
+    expect(getStoredConversationMetadata("conv-1")).toBeNull();
+    expect(recordModelSwitchMessage).not.toHaveBeenCalled();
+  });
+
+  it("does not set the home-pick flag (the UI handler does that, not the hook)", async () => {
+    // The flag lives in selectProfile in useChatInputLlmProfileState — the
+    // single chokepoint covering every home LLM pick path (member held pick,
+    // agent-profile-owned LLM, global activate). The hook itself no longer
+    // touches it, so a home switch leaves the flag alone.
+    vi.mocked(AgentServerConversationService.switchProfile).mockResolvedValue(
+      undefined as never,
+    );
+
+    const { result } = renderSwitchHook();
+    result.current.mutate({ conversationId: null, profileName: "Smart" });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(hasPendingHomeModelPick("local", null)).toBe(false);
+  });
+
+  it("does not mark a pick made inside an existing conversation", async () => {
+    vi.mocked(AgentServerConversationService.switchProfile).mockResolvedValue(
+      undefined as never,
+    );
+
+    const { result } = renderSwitchHook();
+    result.current.mutate({ conversationId: "conv-1", profileName: "Smart" });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(hasPendingHomeModelPick("local", null)).toBe(false);
+  });
+});

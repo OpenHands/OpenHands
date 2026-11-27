@@ -1,0 +1,58 @@
+import { LoaderCircle } from "lucide-react";
+import { useTranslation } from "react-i18next";
+import FileIcon from "#/icons/file.svg?react";
+import { RemoveFileButton } from "./remove-file-button";
+import { cn, getFileExtension } from "#/utils/utils";
+import { I18nKey } from "#/i18n/declaration";
+
+interface UploadedFileProps {
+  file: File;
+  onRemove: () => void;
+  isLoading?: boolean;
+}
+
+export function UploadedFile({
+  file,
+  onRemove,
+  isLoading = false,
+}: UploadedFileProps) {
+  const { t } = useTranslation("openhands");
+  const fileExtension = getFileExtension(file.name);
+
+  return (
+    <div className="group flex gap-2 rounded-lg bg-interactive-hover max-w-40 px-3 py-1 relative">
+      <div className="flex flex-col justify-center gap-0.25">
+        <RemoveFileButton
+          onClick={onRemove}
+          ariaLabel={t(I18nKey.CHAT_INTERFACE$REMOVE_FILE, {
+            fileName: file.name,
+          })}
+        />
+        <div className="flex items-center gap-2 w-full">
+          <span
+            className={cn(
+              "text-sm font-normal leading-5 flex-1 max-w-34 truncate",
+              isLoading ? "max-w-27 text-muted" : "text-contrast",
+            )}
+          >
+            {file.name}
+          </span>
+        </div>
+        <div className="flex items-center gap-2">
+          <FileIcon width={12} height={12} color="var(--oh-muted)" />
+          <span className="text-4xs font-normal leading-5 text-muted">
+            {fileExtension}
+          </span>
+        </div>
+      </div>
+      {isLoading && (
+        <div className="flex items-center justify-center">
+          <LoaderCircle
+            className="animate-spin w-5 h-5"
+            color="var(--oh-contrast)"
+          />
+        </div>
+      )}
+    </div>
+  );
+}

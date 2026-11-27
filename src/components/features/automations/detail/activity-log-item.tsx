@@ -1,0 +1,204 @@
+import { useState } from "react";
+import { MessageSquare } from "lucide-react";
+import { useTranslation } from "react-i18next";
+import { I18nKey } from "#/i18n/declaration";
+import TerminalIcon from "#/icons/terminal.svg?react";
+import {
+  AutomationRunStatus,
+  type Automation,
+  type AutomationRun,
+} from "#/types/automation";
+import { isInvalidTimestamp } from "#/utils/format-relative-time";
+import { getAutomationRunDisplay } from "#/utils/automation-run-display";
+import { RunStatusBadge } from "./run-status-badge";
+import { RunPhase, shouldShowRunPhase } from "./run-phase";
+import { RunLogsModal } from "./run-logs-modal";
+import { buildAgentCanvasPath } from "#/utils/base-path";
+
+interface ActivityLogItemProps {
+  run: AutomationRun;
+  automation?: Automation;
+}
+
+function formatRunTimestamp(dateStr: string, locale: string): string {
+  const date = new Date(dateStr);
+  return date.toLocaleDateString(locale, {
+    weekday: "long",
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
+/** Rows sit under a day heading, so the row itself shows only the time. */
+function formatRunTime(dateStr: string, locale: string): string {
+  return new Date(dateStr).toLocaleTimeString(locale, {
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
+function getConversationUrl(conversationId: string): string {
+  // In agent-canvas, conversations are at /conversations/:id, under the base
+  // path when Canvas is mounted on a subpath.
+  return buildAgentCanvasPath(`/conversations/${conversationId}`);
+}
+
+/**
+ * Format the run's accumulated LLM cost, or return null when it is unknown.
+ *
+ * A genuine `0` is rendered (`$0.0000`) rather than hidden: the automation
+ * service records zero only when the SDK reported a real zero-cost run, and
+ * leaves the value null when the cost could not be determined. Matches the
+ * 4-decimal USD convention used by the conversation metrics modal.
+ */
+function formatRunCost(cost: number | null | undefined): string | null {
+  if (typeof cost !== "number" || !Number.isFinite(cost)) return null;
+  return `$${cost.toFixed(4)}`;
+}
+
+export function ActivityLogItem({ run, automation }: ActivityLogItemProps) {
+  const { t, i18n } = useTranslation("openhands");
+  const hasConversation = !!run.conversation_id;
+  const hasBashCommand = !!run.bash_command_id;
+  // Only surface "Conversation not created" when the run has reached a
+  // terminal status without a conversation — i.e. the conversation truly
+  // will not be created (e.g. sandbox provisioning failed). While
+  // PENDING/RUNNING the conversation may still be in the process of being
+  // created, and the status badge already communicates the in-progress
+  // state.
+  const isTerminal =
+    run.status === AutomationRunStatus.COMPLETED ||
+    run.status === AutomationRunStatus.FAILED ||
+    run.status === AutomationRunStatus.CANCELLED ||
+    run.status === AutomationRunStatus.SKIPPED;
+  // Script runs never have a conversation; the runs section says so once
+  // instead of on every row.
+  const showNoConversationLabel =
+    !hasConversation && !hasBashCommand && isTerminal;
+  const showPhase = shouldShowRunPhase(run.status);
+  const [logsOpen, setLogsOpen] = useState(false);
+  // The backend leaves started_at unset (epoch/zero) while a run is Pending
+  // and only populates it once execution begins. Show the user's local time
+  // at first render in that window so the row doesn't read "Jan 1, 1970".
+  const [fallbackStartedAt] = useState(() => new Date().toISOString());
+  const effectiveStartedAt = isInvalidTimestamp(run.started_at)
+    ? fallbackStartedAt
+    : run.started_at;
+
+  const formattedTimestamp = formatRunTimestamp(
+    effectiveStartedAt,
+    i18n.language,
+  );
+  const formattedCost = formatRunCost(run.cost);
+  const display = getAutomationRunDisplay(run);
+
+  const handleLogsClick = (
+    e:
+      | React.MouseEvent<HTMLButtonElement>
+      | React.KeyboardEvent<HTMLButtonElement>,
+  ) => {
+    // Stop the click bubbling up to the parent <a> so the user stays on
+    // the automation detail page instead of navigating to the conversation.
+    e.stopPropagation();
+    e.preventDefault();
+    setLogsOpen(true);
+  };
+
+  const logsButton = hasBashCommand ? (
+    <button
+      type="button"
+      onClick={handleLogsClick}
+      className="rounded-md p-1 text-muted hover:bg-surface-raised hover:text-foreground focus:bg-surface-raised focus:outline-none"
+      aria-label={t(I18nKey.AUTOMATIONS$DETAIL$LOGS_VIEW, {
+        timestamp: formattedTimestamp,
+      })}
+      title={t(I18nKey.AUTOMATIONS$DETAIL$LOGS_VIEW_SHORT)}
+    >
+      <TerminalIcon className="size-4" />
+    </button>
+  ) : null;
+
+  const content = (
+    <>
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-3">
+          <time
+            dateTime={effectiveStartedAt}
+            title={formattedTimestamp}
+            className="text-sm tabular-nums text-content"
+          >
+            {formatRunTime(effectiveStartedAt, i18n.language)}
+          </time>
+          {showNoConversationLabel && (
+            <span className="text-xs text-muted">
+              {t(I18nKey.AUTOMATIONS$DETAIL$NO_CONVERSATION)}
+            </span>
+          )}
+        </div>
+        {display.summary ? (
+          <p className="mt-1 truncate text-xs text-muted">{display.summary}</p>
+        ) : null}
+      </div>
+      <div className="flex min-w-0 items-center gap-2">
+        {formattedCost && (
+          <span
+            data-testid="run-cost"
+            title={t(I18nKey.AUTOMATIONS$DETAIL$RUN_COST)}
+            className="text-xs tabular-nums text-muted"
+          >
+            {formattedCost}
+          </span>
+        )}
+        {hasConversation && (
+          <span
+            role="img"
+            data-testid="run-conversation-indicator"
+            className="p-1 text-muted"
+            aria-label={t(I18nKey.AUTOMATIONS$DETAIL$CONVERSATION_STARTED)}
+            title={t(I18nKey.AUTOMATIONS$DETAIL$CONVERSATION_STARTED)}
+          >
+            <MessageSquare className="size-4" aria-hidden />
+          </span>
+        )}
+        {logsButton}
+        {showPhase && <RunPhase currentPhase={run.current_phase} wide />}
+        <RunStatusBadge status={display.badgeStatus} />
+      </div>
+    </>
+  );
+
+  return (
+    <>
+      {hasConversation && run.conversation_id ? (
+        <a
+          href={getConversationUrl(run.conversation_id)}
+          className="flex items-center justify-between px-5 py-3 transition-colors cursor-pointer hover:bg-surface-raised focus:bg-surface-raised focus:outline-none"
+          aria-label={t(I18nKey.AUTOMATIONS$DETAIL$VIEW_CONVERSATION_FOR_RUN, {
+            timestamp: formattedTimestamp,
+          })}
+        >
+          {content}
+        </a>
+      ) : (
+        <div className="flex items-center justify-between px-5 py-3 cursor-default">
+          {content}
+        </div>
+      )}
+
+      {hasBashCommand && (
+        <RunLogsModal
+          conversationId={run.conversation_id}
+          sandboxId={run.sandbox_id ?? null}
+          bashCommandId={run.bash_command_id}
+          isOpen={logsOpen}
+          onClose={() => setLogsOpen(false)}
+          run={run}
+          automation={automation}
+        />
+      )}
+    </>
+  );
+}

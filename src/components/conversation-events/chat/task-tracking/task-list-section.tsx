@@ -1,0 +1,33 @@
+import { useTranslation } from "react-i18next";
+import { TaskItem } from "./task-item";
+import LessonPlanIcon from "#/icons/lesson-plan.svg?react";
+import { TaskItem as TaskItemType } from "#/types/agent-server/core/base/common";
+import { I18nKey } from "#/i18n/declaration";
+import { Typography } from "#/ui/typography";
+
+interface TaskListSectionProps {
+  taskList: TaskItemType[];
+}
+
+export function TaskListSection({ taskList }: TaskListSectionProps) {
+  const { t } = useTranslation("openhands");
+
+  return (
+    <div className="flex flex-col overflow-clip bg-surface border border-border rounded-xl w-full">
+      {/* Header Tabs */}
+      <div className="flex gap-1 items-center border-b border-border h-10.25 px-2 shrink-0">
+        <LessonPlanIcon className="shrink-0 w-4.5 h-4.5 text-muted" />
+        <Typography.Text className="text-2xs text-nowrap text-contrast tracking-metadata font-medium leading-4 whitespace-pre">
+          {t(I18nKey.COMMON$TASKS)}
+        </Typography.Text>
+      </div>
+
+      {/* Task Items */}
+      <div>
+        {taskList.map((task, index) => (
+          <TaskItem key={`task-${index}`} task={task} />
+        ))}
+      </div>
+    </div>
+  );
+}

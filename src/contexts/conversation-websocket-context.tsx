@@ -1,0 +1,1799 @@
+import React, {
+  createContext,
+  useContext,
+  useEffect,
+  useLayoutEffect,
+  useState,
+  useCallback,
+  useMemo,
+  useRef,
+} from "react";
+import { ConversationClient } from "@openhands/typescript-client/clients";
+
+import { useQueryClient } from "@tanstack/react-query";
+import { useWebSocket, WebSocketHookOptions } from "#/hooks/use-websocket";
+import { usePageVisibilityReconnect } from "#/hooks/use-page-visibility-reconnect";
+import {
+  useConnectionErrorGracePeriod,
+  type ConnectionRecoveryState,
+} from "#/hooks/use-connection-error-grace-period";
+import { useEventStore } from "#/stores/use-event-store";
+import { useErrorMessageStore } from "#/stores/error-message-store";
+import { useOptimisticUserMessageStore } from "#/stores/optimistic-user-message-store";
+import { useConversationStateStore } from "#/stores/conversation-state-store";
+import { useBrowserStore } from "#/stores/browser-store";
+import { useGoalStore } from "#/stores/goal-store";
+import {
+  isAgentServerEvent,
+  isAgentErrorEvent,
+  isUserMessageEvent,
+  isActionEvent,
+  isConversationStateUpdateEvent,
+  isFullStateConversationStateUpdateEvent,
+  isAgentStatusConversationStateUpdateEvent,
+  isStatsConversationStateUpdateEvent,
+  isGoalConversationStateUpdateEvent,
+  isDisplayableErrorEvent,
+  isPlanningFileEditorObservationEvent,
+  isBrowserObservationEvent,
+  isBrowserNavigateActionEvent,
+  isSwitchLLMObservationEvent,
+  isClassifyAndSwitchLLMObservationEvent,
+  isCanvasUIActionEvent,
+  isAutomationFormUpdateActionEvent,
+  isLaunchChildConversationActionEvent,
+  isRequestSecretActionEvent,
+} from "#/types/agent-server/type-guards";
+import {
+  asSessionFrame,
+  type SessionFrame,
+} from "#/types/agent-server/session-frames";
+import {
+  createStreamingDeltaBatcher,
+  StreamingDeltaBatcher,
+} from "#/utils/streaming-delta-batcher";
+import { handleCanvasUIAction } from "#/services/canvas-ui";
+import { handleAutomationFormUpdateAction } from "#/services/automation-form";
+import { handleLaunchChildConversationAction } from "#/services/child-conversation-launch";
+import { handleRequestSecretAction } from "#/services/secret-request";
+import { ConversationStateUpdateEventStats } from "#/types/agent-server/core/events/conversation-state-event";
+import { ExecutionStatus } from "#/types/agent-server/core/base/common";
+import type {
+  ConversationErrorEvent,
+  ServerErrorEvent,
+} from "#/types/agent-server/core/events/conversation-state-event";
+import { handleActionEventCacheInvalidation } from "#/utils/cache-utils";
+import { buildWebSocketUrl } from "#/utils/websocket-url";
+import { createSeqCursor, type SeqCursor } from "#/utils/session-seq-cursor";
+import type {
+  AppConversation,
+  SendMessageRequest,
+} from "#/api/conversation-service/agent-server-conversation-service.types";
+import EventService from "#/api/event-service/event-service.api";
+import { getAgentServerClientOptions } from "#/api/agent-server-client-options";
+import { getActiveBackend } from "#/api/backend-registry/active-store";
+import { useConversationStore } from "#/stores/conversation-store";
+import { trackError } from "#/utils/error-handler";
+import { buildUsageBreakdown } from "#/utils/conversation-metrics";
+import { getUnreadableEventFileReason } from "#/utils/unreadable-event-file-error";
+import { matchesPendingConversationId } from "#/utils/pending-task-message-link";
+import { useReadConversationFile } from "#/hooks/mutation/use-read-conversation-file";
+import useMetricsStore, { type MetricsState } from "#/stores/metrics-store";
+import {
+  useConversationHistory,
+  usePersistedConversationHistory,
+  getConversationHistoryScope,
+} from "#/hooks/query/use-conversation-history";
+import { clearConfirmedConversationDraft } from "#/utils/conversation-local-storage";
+import {
+  recordModelSwitchMessage,
+  seedModelSwitchesFromHistory,
+  stampActiveLlmProfile,
+} from "#/hooks/chat/record-model-switch-message";
+import {
+  invalidateConversationQueries,
+  updateConversationLlmModelInCache,
+} from "#/hooks/mutation/conversation-mutation-utils";
+import { isPlanFilePath } from "#/utils/plan-file";
+
+export type WebSocketConnectionState =
+  "CONNECTING" | "OPEN" | "CLOSED" | "CLOSING";
+
+/**
+ * A message submitted while its cloud conversation had no runtime URL yet
+ * (sandbox PAUSED/STARTING). Held until that conversation's socket opens.
+ */
+interface HeldMessage {
+  message: SendMessageRequest;
+  /** Whether an optimistic "sending" bubble existed when the message was held. */
+  hadBubble: boolean;
+}
+
+const heldMessageText = (message: SendMessageRequest): string =>
+  message.content
+    .map((item) => (item.type === "text" ? item.text : ""))
+    .join("");
+
+interface SendMessageResult {
+  queued: boolean; // true if message was queued for later delivery, false if sent immediately
+}
+
+interface ConversationWebSocketContextType {
+  connectionState: WebSocketConnectionState;
+  recoveryState: ConnectionRecoveryState;
+  recoveryConversationId?: string;
+  /**
+   * The main connection's own state, unmerged with the planning connection —
+   * see `useMainWebSocketStatus`.
+   */
+  mainConnectionState: WebSocketConnectionState;
+  sendMessage: (message: SendMessageRequest) => Promise<SendMessageResult>;
+  isLoadingHistory: boolean;
+  /** True once the current main socket has finished its initial history replay. */
+  isHistoryReady: boolean;
+  reconnect: () => void;
+  /**
+   * True once the main or planning socket has opened at least once for the
+   * current conversation. Lets the UI say "Reconnecting" instead of the
+   * first-connect "Connecting" — see `getStatusCode`.
+   */
+  hasConnectedOnce: boolean;
+}
+
+const ConversationWebSocketContext = createContext<
+  ConversationWebSocketContextType | undefined
+>(undefined);
+
+/**
+ * Extract the text body of an echoed user `MessageEvent` for matching against
+ * the optimistic pending-message queue. The server wraps the original
+ * `args.content` string in one or more `TextContent` entries (alongside any
+ * `ImageContent` entries for inline images), so concatenating the `text`
+ * fields gives us back the exact prompt we sent.
+ */
+function extractMessageEventText(
+  event: import("#/types/agent-server/core/events/message-event").MessageEvent,
+): string {
+  return event.llm_message.content
+    .filter(
+      (part): part is { type: "text"; text: string } => part.type === "text",
+    )
+    .map((part) => part.text)
+    .join("");
+}
+
+/** The execution status a state update reports, if it reports one. */
+const reportedExecutionStatus = (
+  event: Parameters<typeof isFullStateConversationStateUpdateEvent>[0],
+): ExecutionStatus | null => {
+  if (isFullStateConversationStateUpdateEvent(event)) {
+    return event.value.execution_status;
+  }
+  if (isAgentStatusConversationStateUpdateEvent(event)) {
+    return event.value;
+  }
+  return null;
+};
+
+/**
+ * Follow the execution status through a replay: returns the newest status seen
+ * so far, and the status to apply when this frame is the replay boundary
+ * (`through_seq`). Runs for every replayed frame, including ones already in
+ * the store.
+ */
+const trackReplayStatus = (
+  event: { seq?: number } & Parameters<
+    typeof isConversationStateUpdateEvent
+  >[0],
+  throughSeq: number | null,
+  pending: ExecutionStatus | null,
+): { pending: ExecutionStatus | null; apply: ExecutionStatus | null } => {
+  const newest =
+    (isConversationStateUpdateEvent(event)
+      ? reportedExecutionStatus(event)
+      : null) ?? pending;
+  if (event.seq === undefined || event.seq !== throughSeq) {
+    return { pending: newest, apply: null };
+  }
+  return { pending: null, apply: newest };
+};
+
+/**
+ * Route one frame of `/sockets/session/{id}`.
+ *
+ * Progress frames (`item_started` / `delta` / `item_aborted`) are applied to
+ * the streaming slot here and produce no event. Durable and transient frames
+ * are unwrapped and returned for the caller's normal event handling; a durable
+ * frame also advances the resume cursor and stamps its `seq` on the event, so
+ * the UI can place a slot relative to it.
+ */
+const routeSessionFrame = (
+  raw: unknown,
+  batcher: StreamingDeltaBatcher | null,
+  /** Report a durable frame's `seq` to this socket's resume cursor. */
+  advanceCursor: (seq: number) => void,
+  replayThroughSeq: number | null,
+  onSync: (throughSeq: number | null) => void,
+  slotMeta: { isFromPlanningAgent?: boolean } = {},
+): { event: unknown; isReplay: boolean; isTransient: boolean } | null => {
+  const frame: SessionFrame | null = asSessionFrame(raw);
+  if (!frame) {
+    return null;
+  }
+
+  if (frame.type === "delta") {
+    batcher?.enqueue(frame);
+    return null;
+  }
+
+  // Nothing else may overtake text that was streamed ahead of it.
+  batcher?.flush();
+
+  switch (frame.type) {
+    case "sync":
+      onSync(frame.from_seq == null ? null : (frame.through_seq ?? null));
+      return null;
+    case "item_started":
+      useEventStore.getState().openStreamingSlot(frame, slotMeta);
+      return null;
+    case "item_aborted":
+      // Nothing durable is coming to supersede the provisional text.
+      useEventStore.getState().abortStreamingSlot(frame.item_id, frame.attempt);
+      return null;
+    case "durable":
+      advanceCursor(frame.seq);
+      return {
+        event: { ...frame.event, seq: frame.seq },
+        isReplay: replayThroughSeq !== null && frame.seq <= replayThroughSeq,
+        isTransient: false,
+      };
+    case "transient":
+      return { event: frame.event, isReplay: false, isTransient: true };
+    case "error":
+      // The server answers a rejected inbound message with an ErrorFrame and
+      // keeps the socket open ("not worth dropping over"), so there is no
+      // reconnect and nothing else will ever surface this to the user.
+      useErrorMessageStore
+        .getState()
+        .setErrorMessage(frame.detail, "conversation", frame.code);
+      return null;
+    default:
+      return null;
+  }
+};
+
+export function ConversationWebSocketProvider({
+  children,
+  conversationId,
+  conversationUrl,
+  sessionApiKey,
+  subConversations,
+  subConversationIds,
+}: {
+  children: React.ReactNode;
+  conversationId?: string;
+  conversationUrl?: string | null;
+  sessionApiKey?: string | null;
+  subConversations?: AppConversation[];
+  subConversationIds?: string[];
+}) {
+  // Separate connection state tracking for each WebSocket
+  const [mainConnectionState, setMainConnectionState] =
+    useState<WebSocketConnectionState>("CONNECTING");
+  const [planningConnectionState, setPlanningConnectionState] =
+    useState<WebSocketConnectionState>("CONNECTING");
+
+  // Track if we've ever successfully connected for each connection
+  const hasConnectedRefMain = React.useRef(false);
+  // Whether the open main socket has delivered any frame yet (see sendMessage).
+  const mainServedRef = React.useRef(false);
+  const hasConnectedRefPlanning = React.useRef(false);
+
+  const queryClient = useQueryClient();
+  const addEvent = useEventStore((state) => state.addEvent);
+  const addEvents = useEventStore((state) => state.addEvents);
+  const clearEventsForConversation = useEventStore(
+    (state) => state.clearEventsForConversation,
+  );
+  const { setErrorMessage, removeErrorMessage, clearConnectionError } =
+    useErrorMessageStore();
+  const consumeMatchingPendingMessage = useOptimisticUserMessageStore(
+    (state) => state.consumeMatchingPendingMessage,
+  );
+  const { setExecutionStatus } = useConversationStateStore();
+  const resetBrowserStore = useBrowserStore((state) => state.reset);
+
+  // Coalesce streaming deltas to ≤1 store commit/render per frame.
+  // Separate batchers keep the main and planning streams from ever merging.
+  const mainDeltaBatcherRef = useRef<StreamingDeltaBatcher | null>(null);
+  if (mainDeltaBatcherRef.current === null) {
+    mainDeltaBatcherRef.current = createStreamingDeltaBatcher((frames) => {
+      useEventStore.getState().appendStreamingDeltas(frames);
+      // A delta means connectivity recovered — mirror handleNonErrorEvent.
+      useErrorMessageStore.getState().clearConnectionError();
+    });
+  }
+  const planningDeltaBatcherRef = useRef<StreamingDeltaBatcher | null>(null);
+  if (planningDeltaBatcherRef.current === null) {
+    planningDeltaBatcherRef.current = createStreamingDeltaBatcher((frames) => {
+      useEventStore
+        .getState()
+        .appendStreamingDeltas(frames, { isFromPlanningAgent: true });
+      useErrorMessageStore.getState().clearConnectionError();
+    });
+  }
+
+  // Resume cursors, one per socket. Started at connect time (see the lazy
+  // `queryParams` below) and advanced per durable frame without re-rendering.
+  const mainCursorRef = useRef<SeqCursor>(createSeqCursor());
+  const planningCursorRef = useRef<SeqCursor>(createSeqCursor());
+  const mainReplayThroughSeqRef = useRef<number | null>(null);
+  const planningReplayThroughSeqRef = useRef<number | null>(null);
+  // The newest status seen in the replay so far. Applied once the replay
+  // reaches its boundary: a run can start after the connect-time snapshot but
+  // before `through_seq` is taken (an ACP agent starting its subprocess), and
+  // then only the replay knows it is running.
+  const mainReplayStatusRef = useRef<ExecutionStatus | null>(null);
+  const planningReplayStatusRef = useRef<ExecutionStatus | null>(null);
+  // The server sends its connect-time snapshot (a transient full state taken
+  // before `through_seq`) after the replay, so once the replay has set the
+  // status, that snapshot is older and must not override it.
+  const mainReplayOwnsStatusRef = useRef(false);
+  const planningReplayOwnsStatusRef = useRef(false);
+
+  // History loading state.
+  // - Main conversation history is now loaded via REST (`useConversationHistory`),
+  //   so its loading state mirrors the REST query state (see below).
+  // - Planning sub-conversation history still streams over the WebSocket using
+  //   `resend_mode='all'`, so we keep the count-based detection for it.
+  const [isLoadingHistoryPlanning, setIsLoadingHistoryPlanning] =
+    useState(true);
+  const [expectedEventCountPlanning, setExpectedEventCountPlanning] = useState<
+    number | null
+  >(null);
+
+  const { setPlanContent } = useConversationStore();
+
+  useEffect(() => {
+    setPlanContent(null);
+  }, [conversationId, setPlanContent]);
+
+  const { mutate: readConversationFile } = useReadConversationFile();
+
+  // Track planning-agent received events (still WS-driven).
+  const receivedEventCountRefPlanning = useRef(0);
+
+  // Track the latest PlanningFileEditorObservation for Plan.md during history replay
+  const latestPlanningFileEventRef = useRef<{
+    path: string;
+    conversationId: string;
+  } | null>(null);
+
+  const handleNonErrorEvent = useCallback(() => {
+    // A normal event means connectivity recovered: clear a transient connection
+    // error, but keep sticky conversation errors (e.g. a wrong API key).
+    clearConnectionError();
+  }, [clearConnectionError]);
+
+  // Helper function to update metrics from stats event
+  const updateMetricsFromStats = useCallback(
+    (
+      event: ConversationStateUpdateEventStats,
+      sourceConversationId: string,
+    ) => {
+      const usageToMetrics = event.value.usage_to_metrics;
+      if (!usageToMetrics) {
+        return;
+      }
+
+      // usage_to_metrics is keyed by arbitrary LLM usage ids ("default",
+      // "condenser", "profile:<name>:<uuid>", …) — combine across all of
+      // them, mirroring getCombinedMetrics on the REST path.
+      const combined = Object.values(usageToMetrics).reduce<{
+        cost: number;
+        maxBudgetPerTask: number | null;
+        usage: MetricsState["usage"];
+      }>(
+        (acc, metrics) => {
+          acc.cost += metrics.accumulated_cost;
+          if (
+            acc.maxBudgetPerTask === null &&
+            metrics.max_budget_per_task !== null
+          ) {
+            acc.maxBudgetPerTask = metrics.max_budget_per_task;
+          }
+          const tokenUsage = metrics.accumulated_token_usage;
+          if (tokenUsage) {
+            acc.usage = {
+              prompt_tokens:
+                (acc.usage?.prompt_tokens ?? 0) + tokenUsage.prompt_tokens,
+              completion_tokens:
+                (acc.usage?.completion_tokens ?? 0) +
+                tokenUsage.completion_tokens,
+              cache_read_tokens:
+                (acc.usage?.cache_read_tokens ?? 0) +
+                tokenUsage.cache_read_tokens,
+              cache_write_tokens:
+                (acc.usage?.cache_write_tokens ?? 0) +
+                tokenUsage.cache_write_tokens,
+              context_window: Math.max(
+                acc.usage?.context_window ?? 0,
+                tokenUsage.context_window,
+              ),
+              per_turn_token: Math.max(
+                acc.usage?.per_turn_token ?? 0,
+                tokenUsage.per_turn_token,
+              ),
+            };
+          }
+          return acc;
+        },
+        { cost: 0, maxBudgetPerTask: null, usage: null },
+      );
+
+      useMetricsStore.getState().setMetrics(
+        {
+          cost: combined.cost,
+          max_budget_per_task: combined.maxBudgetPerTask,
+          usage: combined.usage,
+          usage_breakdown: buildUsageBreakdown(usageToMetrics),
+        },
+        sourceConversationId,
+      );
+    },
+    [],
+  );
+
+  // Initial REST history load: fetch the most recent events and seed the
+  // store. Older events are paginated in via `useLoadOlderEvents` when the
+  // user scrolls to the top of the chat. The WebSocket connection waits for
+  // this query so it can subscribe with `resend_mode='since'` and avoid
+  // re-streaming everything REST already returned.
+  const {
+    data: preloadedHistory,
+    isPending: isPreloadingHistory,
+    error: historyError,
+  } = useConversationHistory(conversationId);
+
+  // A server that cannot read one of the event files cannot open the
+  // conversation, so the socket below would only retry with nothing to show.
+  // Say why instead of leaving an empty chat.
+  useEffect(() => {
+    const reason = getUnreadableEventFileReason(historyError);
+    if (reason) {
+      useErrorMessageStore.getState().setErrorMessage(reason, "conversation");
+    }
+  }, [historyError]);
+
+  const historyScope = getConversationHistoryScope();
+  const historyConnectionKey = JSON.stringify([
+    historyScope,
+    conversationId,
+    conversationUrl,
+    sessionApiKey,
+  ]);
+  const [readyHistoryConnectionKey, setReadyHistoryConnectionKey] = useState<
+    string | null
+  >(null);
+  // REST failure releases the socket gate, but does not prove the chat is
+  // empty. Readiness belongs to this connection's completed replay instead.
+  const isHistoryReady = readyHistoryConnectionKey === historyConnectionKey;
+  useEffect(() => {
+    // Forget the old connection even if the user switches back before the
+    // replacement socket opens and runs its lifecycle callbacks.
+    setReadyHistoryConnectionKey(null);
+  }, [historyConnectionKey]);
+  const { data: persistedHistory } =
+    usePersistedConversationHistory(conversationId);
+  const visibleHistory = useMemo(() => {
+    if (!persistedHistory) return preloadedHistory;
+    if (!preloadedHistory) return persistedHistory;
+    return {
+      ...preloadedHistory,
+      events: [...persistedHistory.events, ...preloadedHistory.events],
+    };
+  }, [persistedHistory, preloadedHistory]);
+
+  // Skeleton only on the genuine first load (no cached data yet). On return the
+  // cached page is present, so `isPending` is false and we render the
+  // last-known discussion immediately while the tail refetch runs in the
+  // background — the socket gate below also keys on `isPending`, so that
+  // refetch never drops a live socket.
+  const isLoadingHistoryMain =
+    !!conversationId && isPreloadingHistory && !persistedHistory;
+
+  // First-connect cursor from the REST page (see `afterSeq`). Read lazily by
+  // the socket's `queryParams`; after the first connect the socket's own
+  // cursor takes over.
+  const historyAfterSeqRef = useRef<number | null>(null);
+  useEffect(() => {
+    historyAfterSeqRef.current = preloadedHistory?.afterSeq ?? null;
+  }, [preloadedHistory]);
+
+  // The planner has its own log: reset its cursor when it is a different one.
+  const planningSocketConversationId = subConversations?.[0]?.id ?? null;
+  useEffect(() => {
+    planningCursorRef.current.clear();
+  }, [planningSocketConversationId]);
+
+  // Clear the (global, not conversation-scoped) event store when the active
+  // conversation changes, BEFORE the preloaded-history effect below re-seeds
+  // it. This MUST live here rather than in the route component: a parent's
+  // passive effect runs *after* this child's layout effects, so clearing from
+  // the route would wipe the freshly seeded history. On a conversation switch
+  // the history page is already cached, so `preloadedHistory` is available
+  // synchronously — without ordering the clear first, the user's already-echoed
+  // message gets seeded then immediately wiped, leaving only the `since`
+  // WebSocket resend (the agent's reply). Re-entering the same conversation is
+  // a no-op, so the store survives navigating away to Settings and back.
+  useLayoutEffect(() => {
+    const nextId = conversationId ?? null;
+    if (
+      useEventStore.getState().loadedConversationId === nextId &&
+      useEventStore.getState().loadedConversationScope === historyScope
+    ) {
+      return;
+    }
+    // Single atomic action: clears the previous conversation's events and
+    // records the new loaded id in one `set`, so no subscriber can observe a
+    // half-applied state (events gone but the old id still reported).
+    clearEventsForConversation(nextId, historyScope);
+    resetBrowserStore();
+    // The metrics store is conversation-scoped state too: without a reset the
+    // previous conversation's usage/cost keeps rendering in the new
+    // conversation's meter until fresh WS stats arrive — and a brand-new
+    // conversation sends none, so the stale figure stuck indefinitely.
+    useMetricsStore.getState().resetMetrics();
+  }, [
+    conversationId,
+    historyScope,
+    clearEventsForConversation,
+    resetBrowserStore,
+  ]);
+
+  useLayoutEffect(() => {
+    if (!visibleHistory) {
+      return;
+    }
+    addEvents(visibleHistory.events, {
+      nextPageId: visibleHistory.nextPageId,
+      hasMore: visibleHistory.hasMore,
+    });
+
+    // The first user message of a cloud start-task conversation is persisted
+    // server-side and reaches us via this REST preload, not over the WebSocket
+    // (which subscribes with resend_mode='since' after the latest preloaded
+    // timestamp). Consume any matching optimistic "Sending…" bubble here too —
+    // mirroring the WS handler — so it doesn't linger as a duplicate of the echo.
+    if (conversationId) {
+      // Rebuild inline "Switched to" messages from the REST-preloaded history.
+      // The live store writers (WS handler / user action) never see preloaded
+      // events, so without this past model switches wouldn't render on reload.
+      // Read the post-`addEvents` `uiEvents` (actions replaced by observations,
+      // Think/Finish observations dropped) — not the raw history — so anchors
+      // match the ids the renderer actually mounts.
+      seedModelSwitchesFromHistory(
+        conversationId,
+        useEventStore.getState().uiEvents,
+      );
+
+      for (const event of visibleHistory.events) {
+        if (isUserMessageEvent(event)) {
+          const confirmed = consumeMatchingPendingMessage(
+            conversationId,
+            extractMessageEventText(event),
+            event,
+          );
+          clearConfirmedConversationDraft(conversationId, confirmed);
+        }
+      }
+
+      // A start-task message this page did not echo lies in the older,
+      // unloaded history, where nothing can confirm it any more. Settle it
+      // here rather than let its watchdog report a delivered message as failed.
+      if (visibleHistory.hasMore) {
+        useOptimisticUserMessageStore
+          .getState()
+          .removeStartTaskMessages(conversationId);
+      }
+    }
+  }, [
+    visibleHistory,
+    addEvents,
+    conversationId,
+    consumeMatchingPendingMessage,
+  ]);
+
+  // Build WebSocket URL from props.
+  //
+  // We deliberately wait for the FIRST history load (`isPending`: no data for
+  // this query key yet) before opening the socket, so the WS subscription can
+  // use `resend_mode='since'` with a meaningful `after_timestamp` instead of
+  // falling back to `resend_mode='all'`. The gate is intentionally NOT on
+  // `isFetching`: background refetches (e.g. the `refetchOnMount` fired when
+  // returning to a conversation) must never tear a live socket down — on a
+  // flaky link that caused a refetch → teardown → reconnect → refetch loop
+  // that kept the conversation stuck at "Connecting" for minutes. Connecting
+  // during a background refetch anchors `since` to the cached tail; the
+  // overlap with the refetched page is deduped by the event store and the
+  // `isDuplicateEvent` guards in the message handlers. A query-key reset
+  // (backend swap / new session key) makes `isPending` true again, so a
+  // genuine reset still re-gates. If the initial load errors, `isPending`
+  // flips false and we fall through to connect with `resend_mode='all'` so
+  // the user still sees live events.
+  const wsUrl = useMemo(() => {
+    if (!conversationId || !conversationUrl) {
+      return null;
+    }
+    if (isPreloadingHistory) {
+      return null;
+    }
+    return buildWebSocketUrl(conversationId, conversationUrl);
+  }, [conversationId, conversationUrl, isPreloadingHistory]);
+
+  // Derived from `subConversationIds` (the pre-filtered, tag-verified id
+  // list) rather than the resolved `subConversations` entry, which lands a
+  // tick later — routing on it would leave a window where the first prompt
+  // sent in plan mode fell through to the parent (the code agent) instead of
+  // the planner.
+  const planningConversationId = useMemo(
+    () => subConversationIds?.[0] ?? null,
+    [subConversationIds],
+  );
+
+  const planningAgentWsUrl = useMemo(() => {
+    if (!conversationUrl || !subConversations?.length) {
+      return null;
+    }
+
+    // Currently, there is only one sub-conversation and it uses the planning agent.
+    const planningAgentConversation = subConversations[0];
+
+    if (
+      !planningAgentConversation?.id ||
+      !planningAgentConversation.conversation_url
+    ) {
+      return null;
+    }
+
+    return buildWebSocketUrl(
+      planningAgentConversation.id,
+      planningAgentConversation.conversation_url,
+    );
+  }, [conversationUrl, subConversations]);
+
+  // Merged connection state - reflects combined status of both connections
+  const connectionState = useMemo<WebSocketConnectionState>(() => {
+    // If planning agent connection doesn't exist, use main connection state
+    if (!planningAgentWsUrl) {
+      return mainConnectionState;
+    }
+
+    // If either is connecting, merged state is connecting
+    if (
+      mainConnectionState === "CONNECTING" ||
+      planningConnectionState === "CONNECTING"
+    ) {
+      return "CONNECTING";
+    }
+
+    // If both are open, merged state is open
+    if (mainConnectionState === "OPEN" && planningConnectionState === "OPEN") {
+      return "OPEN";
+    }
+
+    // If both are closed, merged state is closed
+    if (
+      mainConnectionState === "CLOSED" &&
+      planningConnectionState === "CLOSED"
+    ) {
+      return "CLOSED";
+    }
+
+    // If either is closing, merged state is closing
+    if (
+      mainConnectionState === "CLOSING" ||
+      planningConnectionState === "CLOSING"
+    ) {
+      return "CLOSING";
+    }
+
+    // Default to closed if states don't match expected patterns
+    return "CLOSED";
+  }, [mainConnectionState, planningConnectionState, planningAgentWsUrl]);
+
+  useEffect(() => {
+    if (
+      expectedEventCountPlanning !== null &&
+      receivedEventCountRefPlanning.current >= expectedEventCountPlanning &&
+      isLoadingHistoryPlanning
+    ) {
+      setIsLoadingHistoryPlanning(false);
+    }
+  }, [
+    expectedEventCountPlanning,
+    isLoadingHistoryPlanning,
+    receivedEventCountRefPlanning,
+  ]);
+
+  // Call API once after history loading completes if we tracked any PlanningFileEditorObservation events
+  useEffect(() => {
+    if (!isLoadingHistoryPlanning && latestPlanningFileEventRef.current) {
+      const { path, conversationId: currentPlanningConversationId } =
+        latestPlanningFileEventRef.current;
+
+      readConversationFile(
+        {
+          conversationId: currentPlanningConversationId,
+          filePath: path,
+        },
+        {
+          onSuccess: (fileContent) => {
+            setPlanContent(fileContent);
+          },
+          onError: (error) => {
+            console.warn("Failed to read conversation file:", error);
+          },
+        },
+      );
+
+      // Clear the ref after calling the API
+      latestPlanningFileEventRef.current = null;
+    }
+  }, [isLoadingHistoryPlanning, readConversationFile, setPlanContent]);
+
+  useEffect(() => {
+    hasConnectedRefMain.current = false;
+    setIsLoadingHistoryPlanning(!!subConversationIds?.length);
+    setExpectedEventCountPlanning(null);
+    receivedEventCountRefPlanning.current = 0;
+    // Reset the tracked event ref when sub-conversations change
+    latestPlanningFileEventRef.current = null;
+  }, [subConversationIds]);
+
+  // Reset hasConnected flags when the conversation changes.
+  useEffect(() => {
+    hasConnectedRefMain.current = false;
+    hasConnectedRefPlanning.current = false;
+    // A cursor is a position in one conversation's log; carrying it into the
+    // next would skip that conversation's events below it.
+    mainCursorRef.current.clear();
+    // Reset the tracked event ref when conversation changes
+    latestPlanningFileEventRef.current = null;
+  }, [conversationId, historyScope]);
+
+  // Drop buffered deltas on conversation switch/unmount: the store is cleared on
+  // switch, so flushing them would leak into the next conversation.
+  useEffect(() => {
+    const mainBatcher = mainDeltaBatcherRef.current;
+    const planningBatcher = planningDeltaBatcherRef.current;
+    return () => {
+      mainBatcher?.reset();
+      planningBatcher?.reset();
+    };
+  }, [conversationId]);
+
+  // Merged loading history state - true if either connection is still loading
+  const isLoadingHistory = useMemo(
+    () => isLoadingHistoryMain || isLoadingHistoryPlanning,
+    [isLoadingHistoryMain, isLoadingHistoryPlanning],
+  );
+
+  // Separate message handlers for each connection
+  const handleMainMessage = useCallback(
+    (messageEvent: MessageEvent) => {
+      mainServedRef.current = true;
+      try {
+        const routed = routeSessionFrame(
+          JSON.parse(messageEvent.data),
+          mainDeltaBatcherRef.current,
+          (seq) => {
+            const cursor = mainCursorRef.current;
+            const previousSeq = cursor.value ?? -1;
+            cursor.observe(seq);
+            const throughSeq = mainReplayThroughSeqRef.current;
+            if (
+              throughSeq !== null &&
+              previousSeq < throughSeq &&
+              (cursor.value ?? -1) >= throughSeq
+            ) {
+              setReadyHistoryConnectionKey(historyConnectionKey);
+            }
+          },
+          mainReplayThroughSeqRef.current,
+          (throughSeq) => {
+            mainReplayThroughSeqRef.current = throughSeq;
+            mainReplayStatusRef.current = null;
+            mainReplayOwnsStatusRef.current = false;
+            setReadyHistoryConnectionKey(
+              throughSeq === null ||
+                (mainCursorRef.current.value ?? -1) >= throughSeq
+                ? historyConnectionKey
+                : null,
+            );
+          },
+        );
+        if (!routed) return;
+        const { event, isReplay, isTransient } = routed;
+
+        // History loading for the main conversation is REST-driven now;
+        // every durable frame is a new event we add to the store.
+
+        // Use type guard to validate v1 event structure
+        if (isAgentServerEvent(event)) {
+          // A reconnect replays the backlog from a stale anchor. The store
+          // dedups by id, but the side-effects below aren't idempotent, so skip
+          // them for replayed events (#1656).
+          const isDuplicateEvent = useEventStore
+            .getState()
+            .eventIds.has(event.id ?? "");
+          const switchLLMObservation = isSwitchLLMObservationEvent(event)
+            ? event
+            : null;
+          const classifyAndSwitchLLMObservation =
+            isClassifyAndSwitchLLMObservationEvent(event) ? event : null;
+          addEvent(event);
+          if (isReplay) {
+            const replay = trackReplayStatus(
+              event,
+              mainReplayThroughSeqRef.current,
+              mainReplayStatusRef.current,
+            );
+            mainReplayStatusRef.current = replay.pending;
+            if (replay.apply && conversationId) {
+              // The replay's newest status is the current one; the connect
+              // snapshot that follows it is older.
+              setExecutionStatus(conversationId, replay.apply);
+              mainReplayOwnsStatusRef.current = true;
+            }
+          }
+          if (isDuplicateEvent) {
+            return;
+          }
+
+          // Handle displayable error events - show error banner
+          // AgentErrorEvent errors are displayed inline in the chat, not as banners
+          if (isDisplayableErrorEvent(event)) {
+            const errorEvent = event as
+              ConversationErrorEvent | ServerErrorEvent;
+            const classification =
+              "classification" in errorEvent ? errorEvent.classification : null;
+            trackError({
+              source: "conversation",
+              metadata: {
+                eventId: errorEvent.id,
+                errorCode: errorEvent.code,
+              },
+              classification,
+            });
+            setErrorMessage(
+              errorEvent.detail,
+              "conversation",
+              errorEvent.code,
+              classification,
+            );
+          } else {
+            handleNonErrorEvent();
+          }
+
+          // LLM errors render inline in the chat (see ErrorEventMessage); track
+          // them for analytics but keep them out of the banner above the chat box.
+          if (isAgentErrorEvent(event)) {
+            trackError({
+              source: "agent",
+              metadata: {
+                eventId: event.id,
+                toolName: event.tool_name,
+                toolCallId: event.tool_call_id,
+              },
+              classification: event.classification,
+            });
+          }
+
+          // Clear optimistic user message when a user message is confirmed.
+          // History and live delivery share the same timestamp/identity checks.
+          if (isUserMessageEvent(event)) {
+            if (conversationId) {
+              const confirmed = consumeMatchingPendingMessage(
+                conversationId,
+                extractMessageEventText(event),
+                event,
+              );
+              clearConfirmedConversationDraft(conversationId, confirmed);
+            }
+          }
+
+          // Handle cache invalidation for ActionEvent. The main WebSocket only
+          // opens when `conversationId` is present (see `wsUrl` below), so it
+          // is always defined for events arriving over this socket.
+          if (isActionEvent(event) && conversationId) {
+            handleActionEventCacheInvalidation(
+              event,
+              conversationId,
+              queryClient,
+            );
+          }
+
+          if (isConversationStateUpdateEvent(event)) {
+            const reportedStatus = reportedExecutionStatus(event);
+            // A replayed status is applied at the replay boundary instead
+            // (trackReplayStatus); a stale connect snapshot is dropped.
+            if (reportedStatus && conversationId && !isReplay) {
+              if (isTransient && mainReplayOwnsStatusRef.current) {
+                mainReplayOwnsStatusRef.current = false;
+              } else {
+                setExecutionStatus(conversationId, reportedStatus);
+              }
+            }
+            if (isStatsConversationStateUpdateEvent(event) && conversationId) {
+              updateMetricsFromStats(event, conversationId);
+            }
+            // Mirror goal status into the store. Intentionally duplicated across
+            // the main and planning WebSocket handlers (like the execution_status
+            // and stats branches above), not a merge artifact.
+            if (isGoalConversationStateUpdateEvent(event) && conversationId) {
+              useGoalStore.getState().setStatus(conversationId, event.value);
+            }
+          }
+
+          // Handle BrowserObservation events - update browser store with screenshot
+          if (isBrowserObservationEvent(event)) {
+            const { screenshot_data: screenshotData } = event.observation;
+            if (screenshotData) {
+              const screenshotSrc = screenshotData.startsWith("data:")
+                ? screenshotData
+                : `data:image/png;base64,${screenshotData}`;
+              useBrowserStore.getState().setScreenshotSrc(screenshotSrc);
+            }
+          }
+
+          // Handle BrowserNavigateAction events - update browser store with URL
+          if (isBrowserNavigateActionEvent(event)) {
+            useBrowserStore.getState().setUrl(event.action.url);
+          }
+
+          if (
+            conversationId &&
+            switchLLMObservation &&
+            !switchLLMObservation.observation.is_error
+          ) {
+            recordModelSwitchMessage(
+              conversationId,
+              switchLLMObservation.observation.profile_name,
+              undefined,
+              {
+                id: `history-switch:${switchLLMObservation.id}`,
+                initiator: "agent",
+                reason: switchLLMObservation.observation.reason,
+              },
+            );
+
+            // Mirror the user-driven `/model` path: persist the profile so the
+            // chat-header switcher shows the right name after a reload, even
+            // when several profiles share a model (#1082). Stamp with the
+            // observation's own timestamp so a later history seed of this same
+            // event can't roll it back (or needlessly rewrite it).
+            stampActiveLlmProfile(
+              conversationId,
+              switchLLMObservation.observation.profile_name,
+              switchLLMObservation.timestamp,
+            );
+
+            if (switchLLMObservation.observation.active_model) {
+              updateConversationLlmModelInCache(
+                queryClient,
+                conversationId,
+                switchLLMObservation.observation.active_model,
+              );
+            }
+
+            invalidateConversationQueries(queryClient, conversationId);
+          }
+
+          // Router-driven model switch (Router/meta-profile classifier).
+          // Same UI semantics as SwitchLLMObservation: update the combobox,
+          // stamp the active profile, record the inline "Switched to"
+          // message. Per the SDK wire contract, `model` is the saved LLM
+          // profile name that was activated and `active_model` is the
+          // underlying model string — so the profile stamp and inline
+          // message use `model` (mirroring SwitchLLMObservation.profile_name),
+          // while the combobox cache update uses `active_model`.
+          if (
+            conversationId &&
+            classifyAndSwitchLLMObservation &&
+            !classifyAndSwitchLLMObservation.observation.is_error &&
+            classifyAndSwitchLLMObservation.observation.model
+          ) {
+            const profileName =
+              classifyAndSwitchLLMObservation.observation.model;
+
+            recordModelSwitchMessage(conversationId, profileName, undefined, {
+              id: `history-classify-switch:${classifyAndSwitchLLMObservation.id}`,
+              initiator: "router",
+              reason: classifyAndSwitchLLMObservation.observation.chosen_class,
+            });
+
+            stampActiveLlmProfile(
+              conversationId,
+              profileName,
+              classifyAndSwitchLLMObservation.timestamp,
+            );
+
+            if (classifyAndSwitchLLMObservation.observation.active_model) {
+              updateConversationLlmModelInCache(
+                queryClient,
+                conversationId,
+                classifyAndSwitchLLMObservation.observation.active_model,
+              );
+            }
+
+            invalidateConversationQueries(queryClient, conversationId);
+          }
+
+          // Handle canvas_ui ActionEvents from both the legacy Python tool and
+          // the client-defined JSON tool. The server acknowledges immediately;
+          // the actual UI change happens here on the client.
+          if (isCanvasUIActionEvent(event)) {
+            handleCanvasUIAction(event.action, conversationId ?? null);
+          }
+
+          if (isAutomationFormUpdateActionEvent(event)) {
+            handleAutomationFormUpdateAction(
+              event.action,
+              conversationId ?? null,
+              event.id,
+              event.timestamp,
+            );
+          }
+
+          // Same client-tool pattern, but the work is a network call: launch
+          // the requested child conversation and post the outcome back so the
+          // agent learns the id the server-side acknowledgement can't carry.
+          if (conversationId && isLaunchChildConversationActionEvent(event)) {
+            void handleLaunchChildConversationAction(
+              event.action,
+              conversationId,
+              event.tool_call_id,
+            );
+          }
+
+          // Same pattern again: the user answers in a chat card, and the
+          // outcome is posted back once they save or cancel it.
+          if (conversationId && isRequestSecretActionEvent(event)) {
+            void handleRequestSecretAction(
+              event.action,
+              conversationId,
+              event.tool_call_id,
+            );
+          }
+        }
+      } catch (error) {
+        console.warn("Failed to parse WebSocket message as JSON:", error);
+      }
+    },
+    [
+      addEvent,
+      setErrorMessage,
+      consumeMatchingPendingMessage,
+      queryClient,
+      conversationId,
+      historyConnectionKey,
+      setExecutionStatus,
+      updateMetricsFromStats,
+      handleNonErrorEvent,
+    ],
+  );
+
+  const handlePlanningMessage = useCallback(
+    (messageEvent: MessageEvent) => {
+      try {
+        const routed = routeSessionFrame(
+          JSON.parse(messageEvent.data),
+          planningDeltaBatcherRef.current,
+          planningCursorRef.current.observe,
+          planningReplayThroughSeqRef.current,
+          (throughSeq) => {
+            planningReplayThroughSeqRef.current = throughSeq;
+            planningReplayStatusRef.current = null;
+            planningReplayOwnsStatusRef.current = false;
+          },
+          { isFromPlanningAgent: true },
+        );
+        if (!routed) return;
+        const { event, isReplay, isTransient } = routed;
+
+        // Track received events for history loading. Only events count:
+        // progress frames are not part of the replayed log.
+        if (isLoadingHistoryPlanning) {
+          receivedEventCountRefPlanning.current += 1;
+
+          if (
+            expectedEventCountPlanning !== null &&
+            receivedEventCountRefPlanning.current >= expectedEventCountPlanning
+          ) {
+            setIsLoadingHistoryPlanning(false);
+          }
+        }
+
+        // Use type guard to validate v1 event structure
+        if (isAgentServerEvent(event)) {
+          // Skip non-idempotent side-effects for replayed events, as in the
+          // main handler (#1656).
+          const isDuplicateEvent = useEventStore
+            .getState()
+            .eventIds.has(event.id ?? "");
+          // Mark this event as coming from the planning agent
+          const eventWithPlanningFlag = {
+            ...event,
+            isFromPlanningAgent: true,
+          };
+          addEvent(eventWithPlanningFlag);
+          if (isReplay) {
+            const replay = trackReplayStatus(
+              event,
+              planningReplayThroughSeqRef.current,
+              planningReplayStatusRef.current,
+            );
+            planningReplayStatusRef.current = replay.pending;
+            if (replay.apply && planningConversationId) {
+              // The replay's newest status is the current one; the connect
+              // snapshot that follows it is older.
+              setExecutionStatus(planningConversationId, replay.apply);
+              planningReplayOwnsStatusRef.current = true;
+            }
+          }
+          if (isDuplicateEvent) {
+            return;
+          }
+
+          // Handle displayable error events - show error banner
+          // AgentErrorEvent errors are displayed inline in the chat, not as banners
+          if (isDisplayableErrorEvent(event)) {
+            const errorEvent = event as
+              ConversationErrorEvent | ServerErrorEvent;
+            const classification =
+              "classification" in errorEvent ? errorEvent.classification : null;
+            trackError({
+              source: "planning_conversation",
+              metadata: {
+                eventId: errorEvent.id,
+                errorCode: errorEvent.code,
+              },
+              classification,
+            });
+            setErrorMessage(
+              errorEvent.detail,
+              "conversation",
+              errorEvent.code,
+              classification,
+            );
+          } else {
+            handleNonErrorEvent();
+          }
+
+          // LLM errors render inline in the chat (see ErrorEventMessage); track
+          // them for analytics but keep them out of the banner above the chat box.
+          if (isAgentErrorEvent(event)) {
+            trackError({
+              source: "planning_agent",
+              metadata: {
+                eventId: event.id,
+                toolName: event.tool_name,
+                toolCallId: event.tool_call_id,
+              },
+              classification: event.classification,
+            });
+          }
+
+          // Clear optimistic user message when a user message is confirmed.
+          // Always scope to the main `conversationId` (where the user types)
+          // and match on the echoed content so the planning sub-agent's own
+          // events can never consume a main-conversation pending entry.
+          if (isUserMessageEvent(event)) {
+            if (conversationId) {
+              const confirmed = consumeMatchingPendingMessage(
+                conversationId,
+                extractMessageEventText(event),
+                event,
+              );
+              clearConfirmedConversationDraft(conversationId, confirmed);
+            }
+          }
+
+          // Handle cache invalidation for ActionEvent. The planning socket only
+          // opens when the first sub-conversation has an id (see
+          // `planningAgentWsUrl` below), so it is always defined here.
+          if (isActionEvent(event)) {
+            const planningAgentConversation = subConversations?.[0];
+            if (planningAgentConversation?.id) {
+              handleActionEventCacheInvalidation(
+                event,
+                planningAgentConversation.id,
+                queryClient,
+              );
+            }
+          }
+
+          if (isConversationStateUpdateEvent(event)) {
+            // Scope to the planning agent's own conversation id, not the main
+            // `conversationId` — this socket reports the planning helper
+            // conversation's run/idle transitions, which must never overwrite
+            // the main conversation's status in the shared store.
+            const reportedStatus = reportedExecutionStatus(event);
+            // A replayed status is applied at the replay boundary instead
+            // (trackReplayStatus); a stale connect snapshot is dropped.
+            if (reportedStatus && planningConversationId && !isReplay) {
+              if (isTransient && planningReplayOwnsStatusRef.current) {
+                planningReplayOwnsStatusRef.current = false;
+              } else {
+                setExecutionStatus(planningConversationId, reportedStatus);
+              }
+            }
+            if (
+              isStatsConversationStateUpdateEvent(event) &&
+              planningConversationId
+            ) {
+              updateMetricsFromStats(event, planningConversationId);
+            }
+            // Mirror goal status into the store. Intentionally duplicated across
+            // the main and planning WebSocket handlers (like the execution_status
+            // and stats branches above), not a merge artifact.
+            if (isGoalConversationStateUpdateEvent(event) && conversationId) {
+              useGoalStore.getState().setStatus(conversationId, event.value);
+            }
+          }
+
+          // Handle PlanningFileEditorObservation - only update plan for Plan.md
+          if (isPlanningFileEditorObservationEvent(event)) {
+            const { path } = event.observation;
+            if (isPlanFilePath(path)) {
+              const planningAgentConversation = subConversations?.[0];
+              const planningConversationId = planningAgentConversation?.id;
+
+              if (planningConversationId && path) {
+                if (isLoadingHistoryPlanning) {
+                  latestPlanningFileEventRef.current = {
+                    path,
+                    conversationId: planningConversationId,
+                  };
+                } else {
+                  readConversationFile(
+                    {
+                      conversationId: planningConversationId,
+                      filePath: path,
+                    },
+                    {
+                      onSuccess: (fileContent) => {
+                        setPlanContent(fileContent);
+                      },
+                      onError: (error) => {
+                        console.warn(
+                          "Failed to read conversation file:",
+                          error,
+                        );
+                      },
+                    },
+                  );
+                }
+              }
+            }
+          }
+        }
+      } catch (error) {
+        console.warn("Failed to parse WebSocket message as JSON:", error);
+      }
+    },
+    [
+      addEvent,
+      isLoadingHistoryPlanning,
+      expectedEventCountPlanning,
+      setErrorMessage,
+      consumeMatchingPendingMessage,
+      queryClient,
+      subConversations,
+      planningConversationId,
+      conversationId,
+      setExecutionStatus,
+      readConversationFile,
+      setPlanContent,
+      updateMetricsFromStats,
+      handleNonErrorEvent,
+    ],
+  );
+
+  const mainConnectionError = useConnectionErrorGracePeriod(wsUrl);
+  const planningConnectionError =
+    useConnectionErrorGracePeriod(planningAgentWsUrl);
+
+  // Separate WebSocket options for main connection
+  const mainWebsocketOptions: WebSocketHookOptions = useMemo(() => {
+    // `after_seq` replaces the legacy resend_mode/after_timestamp pair, which
+    // compared naive local timestamps. Resolved lazily so a reconnect resumes
+    // from the newest `seq` this socket actually saw rather than from a value
+    // captured at render. The first connect has no cursor and asks for the
+    // whole log (`-1`); the REST preload (`useConversationHistory`) still
+    // renders instantly and the event store dedupes the overlap by id.
+    const queryParams = () => {
+      const cursor = mainCursorRef.current;
+      cursor.start(cursor.value ?? historyAfterSeqRef.current ?? -1);
+      return { after_seq: String(cursor.value) };
+    };
+
+    return {
+      queryParams,
+      sessionApiKey,
+      connectionKey: historyConnectionKey,
+      reconnect: { enabled: true },
+      onOpen: () => {
+        mainServedRef.current = false;
+        mainReplayThroughSeqRef.current = null;
+        setReadyHistoryConnectionKey(null);
+        mainConnectionError.cancel();
+        setMainConnectionState("OPEN");
+        hasConnectedRefMain.current = true; // Mark that we've successfully connected
+        clearConnectionError(); // Clear a previous connection error; keep sticky conversation errors
+        // Progress frames are never replayed, so any slot left open across the
+        // gap can never be retired. Discard and wait: the durable message is
+        // coming on the cursor regardless.
+        mainDeltaBatcherRef.current?.reset();
+        useEventStore.getState().clearStreamingSlots();
+      },
+      onClose: () => {
+        mainServedRef.current = false;
+        setReadyHistoryConnectionKey(null);
+        setMainConnectionState("CLOSED");
+        mainDeltaBatcherRef.current?.reset();
+        useEventStore.getState().clearStreamingSlots();
+      },
+      onError: () => {
+        setReadyHistoryConnectionKey(null);
+        setMainConnectionState("CLOSED");
+        mainConnectionError.report();
+      },
+      onMessage: handleMainMessage,
+    };
+  }, [
+    handleMainMessage,
+    mainConnectionError,
+    clearConnectionError,
+    sessionApiKey,
+    historyConnectionKey,
+  ]);
+
+  // Separate WebSocket options for planning agent connection
+  const planningWebsocketOptions: WebSocketHookOptions = useMemo(() => {
+    // The planner's history is not preloaded over REST, so it always replays
+    // from the start on a first connect and from its cursor after that.
+    const queryParams = () => {
+      const cursor = planningCursorRef.current;
+      cursor.start(cursor.value ?? -1);
+      return { after_seq: String(cursor.value) };
+    };
+
+    const planningAgentConversation = subConversations?.[0];
+    const planningApiKey =
+      planningAgentConversation?.session_api_key ?? sessionApiKey;
+
+    return {
+      queryParams,
+      sessionApiKey: planningApiKey,
+      reconnect: { enabled: true },
+      onOpen: async () => {
+        planningReplayThroughSeqRef.current = null;
+        planningConnectionError.cancel();
+        setPlanningConnectionState("OPEN");
+        hasConnectedRefPlanning.current = true; // Mark that we've successfully connected
+        clearConnectionError(); // Clear a previous connection error; keep sticky conversation errors
+        // See the main socket: an open slot cannot survive the gap.
+        planningDeltaBatcherRef.current?.reset();
+        useEventStore.getState().clearStreamingSlots(true);
+
+        // Fetch expected event count for history loading detection
+        if (
+          planningAgentConversation?.id &&
+          planningAgentConversation.conversation_url
+        ) {
+          try {
+            const count = await EventService.getEventCount(
+              planningAgentConversation.id,
+              planningAgentConversation.conversation_url,
+              planningAgentConversation.session_api_key,
+            );
+            setExpectedEventCountPlanning(count);
+
+            // If no events expected, mark as loaded immediately
+            if (count === 0) {
+              setIsLoadingHistoryPlanning(false);
+            }
+          } catch (error) {
+            // Fall back to marking as loaded to avoid infinite loading state
+            setIsLoadingHistoryPlanning(false);
+          }
+        }
+      },
+      onClose: () => {
+        setPlanningConnectionState("CLOSED");
+        planningDeltaBatcherRef.current?.reset();
+        useEventStore.getState().clearStreamingSlots(true);
+      },
+      onError: () => {
+        setPlanningConnectionState("CLOSED");
+        planningConnectionError.report();
+      },
+      onMessage: handlePlanningMessage,
+    };
+  }, [
+    handlePlanningMessage,
+    planningConnectionError,
+    clearConnectionError,
+    sessionApiKey,
+    subConversations,
+  ]);
+
+  // Only attempt WebSocket connection when we have a valid URL
+  // This prevents connection attempts during task polling phase
+  const websocketUrl = wsUrl;
+  const {
+    socket: mainSocket,
+    reconnect: reconnectMain,
+    disconnect: disconnectMain,
+  } = useWebSocket(websocketUrl || "", mainWebsocketOptions);
+
+  const {
+    socket: planningAgentSocket,
+    reconnect: reconnectPlanning,
+    disconnect: disconnectPlanning,
+  } = useWebSocket(planningAgentWsUrl || "", planningWebsocketOptions);
+
+  // Messages submitted on a cloud backend while the target conversation has
+  // no runtime URL (sandbox PAUSED/STARTING) have nowhere to go: the V1 agent
+  // server only exists once the sandbox is RUNNING. Hold them per target
+  // conversation and send them when that conversation's socket opens. The
+  // caller's optimistic bubble stays in "sending" until the echo lands.
+  const heldMessagesRef = useRef(new Map<string, HeldMessage[]>());
+
+  const hasSendingBubble = useCallback(
+    (targetConversationId: string, message: SendMessageRequest) => {
+      const text = heldMessageText(message).trim();
+      return useOptimisticUserMessageStore
+        .getState()
+        .pendingMessages.some(
+          (pending) =>
+            pending.status === "sending" &&
+            matchesPendingConversationId(
+              targetConversationId,
+              pending.conversationId,
+            ) &&
+            pending.content.trim() === text,
+        );
+    },
+    [],
+  );
+
+  const flushHeldMessages = useCallback(
+    (targetConversationId: string, socket: WebSocket) => {
+      if (socket.readyState !== WebSocket.OPEN) return;
+      const held = heldMessagesRef.current.get(targetConversationId);
+      if (!held?.length) return;
+      heldMessagesRef.current.delete(targetConversationId);
+      held.forEach(({ message, hadBubble }) => {
+        // A bubble the user stopped (or that timed out into Retry) withdraws
+        // its message; everything else goes out exactly as a live send would.
+        if (hadBubble && !hasSendingBubble(targetConversationId, message)) {
+          return;
+        }
+        socket.send(JSON.stringify({ ...message, run: true }));
+      });
+    },
+    [hasSendingBubble],
+  );
+
+  useEffect(() => {
+    if (mainConnectionState !== "OPEN" || !mainSocket || !conversationId) {
+      return;
+    }
+    flushHeldMessages(conversationId, mainSocket);
+  }, [mainConnectionState, mainSocket, conversationId, flushHeldMessages]);
+
+  useEffect(() => {
+    if (
+      planningConnectionState !== "OPEN" ||
+      !planningAgentSocket ||
+      !planningConversationId
+    ) {
+      return;
+    }
+    flushHeldMessages(planningConversationId, planningAgentSocket);
+  }, [
+    planningConnectionState,
+    planningAgentSocket,
+    planningConversationId,
+    flushHeldMessages,
+  ]);
+
+  const reconnect = useCallback(() => {
+    removeErrorMessage();
+    mainConnectionError.cancel();
+    planningConnectionError.cancel();
+    const currentMode = useConversationStore.getState().conversationMode;
+    if (currentMode === "plan" && planningAgentWsUrl) {
+      reconnectPlanning();
+      return;
+    }
+    reconnectMain();
+  }, [
+    planningAgentWsUrl,
+    reconnectMain,
+    reconnectPlanning,
+    removeErrorMessage,
+    mainConnectionError,
+    planningConnectionError,
+  ]);
+
+  // Mobile browsers freeze and discard backgrounded tabs, silently killing
+  // the socket; this pre-empts that with a clean close on the way out and an
+  // immediate, explicit reconnect on the way back — see
+  // `usePageVisibilityReconnect` for the full rationale. Both sockets are
+  // covered regardless of `conversationMode`: a mode switch while
+  // backgrounded must not leave the *other* one stale.
+  const disconnectForBackground = useCallback(() => {
+    disconnectMain();
+    disconnectPlanning();
+  }, [disconnectMain, disconnectPlanning]);
+
+  const reconnectStaleOnForeground = useCallback(() => {
+    // Drop any "Unable to connect" banner left over from a background-caused
+    // close the instant the tab is foregrounded, so the UI reads
+    // "Reconnecting" (via `hasConnectedOnce`) rather than a stale error while
+    // the reconnect below is in flight. `clearConnectionError` only clears
+    // the connection-classified message, leaving any unrelated sticky error
+    // (e.g. a misconfigured API key) untouched.
+    clearConnectionError();
+    if (websocketUrl && mainConnectionState !== "OPEN") {
+      reconnectMain();
+    }
+    if (planningAgentWsUrl && planningConnectionState !== "OPEN") {
+      reconnectPlanning();
+    }
+  }, [
+    websocketUrl,
+    mainConnectionState,
+    planningAgentWsUrl,
+    planningConnectionState,
+    reconnectMain,
+    reconnectPlanning,
+    clearConnectionError,
+  ]);
+
+  usePageVisibilityReconnect({
+    enabled: !!(websocketUrl || planningAgentWsUrl),
+    disconnect: disconnectForBackground,
+    reconnectIfStale: reconnectStaleOnForeground,
+  });
+
+  // V1 send message function via WebSocket.
+  // When the socket is not connected: on a cloud backend whose runtime has
+  // no URL yet, hold the message until the socket opens; otherwise post it
+  // straight to the runtime.
+  const sendMessage = useCallback(
+    async (message: SendMessageRequest): Promise<SendMessageResult> => {
+      const currentMode = useConversationStore.getState().conversationMode;
+      const currentSocket =
+        currentMode === "plan" ? planningAgentSocket : mainSocket;
+      const targetConversationId =
+        currentMode === "plan" ? planningConversationId : conversationId;
+
+      // An open socket the server has not served yet (no frame received)
+      // may never read what we send: the agent server subscribes a new
+      // session socket only after the running step releases the
+      // conversation lock, and a frame sent before that is lost if the tab
+      // navigates away first. Until the first frame arrives, deliver over
+      // HTTP like a closed socket.
+      const socketServed =
+        currentMode === "plan" ? true : mainServedRef.current;
+      if (currentSocket?.readyState !== WebSocket.OPEN || !socketServed) {
+        // WebSocket not connected, or not yet served.
+        if (!targetConversationId) {
+          // Never fall back to the parent in plan mode: without a planner
+          // target the message would run in the code agent, which is exactly
+          // the boundary plan mode exists to enforce.
+          const error = new Error(
+            currentMode === "plan"
+              ? "Planning conversation is not ready yet"
+              : "No conversation ID available",
+          );
+          setErrorMessage(error.message);
+          throw error;
+        }
+
+        // Runtime coordinates for the target. A cloud runtime only has a URL
+        // (and session key) while its sandbox is RUNNING.
+        const planningAgentConversation = subConversations?.[0];
+        const runtimeUrl =
+          currentMode === "plan"
+            ? planningAgentConversation?.conversation_url
+            : conversationUrl;
+        const runtimeApiKey =
+          currentMode === "plan"
+            ? planningAgentConversation?.session_api_key
+            : sessionApiKey;
+
+        if (getActiveBackend().backend.kind === "cloud" && !runtimeUrl) {
+          // Nothing to deliver to yet (sandbox PAUSED/STARTING). Hold the
+          // message for `flushHeldMessages`; the caller's bubble stays in
+          // "sending". Not an error, so no banner.
+          const held = heldMessagesRef.current.get(targetConversationId) ?? [];
+          const serialized = JSON.stringify(message);
+          if (
+            !held.some((entry) => JSON.stringify(entry.message) === serialized)
+          ) {
+            held.push({
+              message,
+              hadBubble: hasSendingBubble(targetConversationId, message),
+            });
+            heldMessagesRef.current.set(targetConversationId, held);
+          }
+          return { queued: true };
+        }
+
+        // The runtime is reachable: post the message to it directly. It is
+        // delivered immediately and shows up in the socket's history replay.
+        try {
+          await new ConversationClient(
+            getAgentServerClientOptions({
+              conversationUrl: runtimeUrl,
+              sessionApiKey: runtimeApiKey,
+            }),
+          ).sendEvent(
+            targetConversationId,
+            {
+              role: "user",
+              content: message.content,
+            },
+            { run: true },
+          );
+          // Return queued: true so the caller knows the socket did not carry it
+          return { queued: true };
+        } catch (error) {
+          const errorMessage =
+            error instanceof Error
+              ? error.message
+              : "Failed to queue message for delivery";
+          setErrorMessage(errorMessage);
+          throw error;
+        }
+      }
+
+      try {
+        // Send message through WebSocket as JSON with run: true so the
+        // agent loop starts automatically in async mode.
+        currentSocket.send(JSON.stringify({ ...message, run: true }));
+        return { queued: false };
+      } catch (error) {
+        const errorMessage =
+          error instanceof Error ? error.message : "Failed to send message";
+        setErrorMessage(errorMessage);
+        throw error;
+      }
+    },
+    [
+      mainSocket,
+      planningAgentSocket,
+      setErrorMessage,
+      conversationId,
+      planningConversationId,
+      conversationUrl,
+      sessionApiKey,
+      subConversations,
+      hasSendingBubble,
+    ],
+  );
+
+  // Track main socket state changes
+  useEffect(() => {
+    // Only process socket updates if we have a valid URL and socket
+    if (mainSocket && wsUrl) {
+      // Update state based on socket readyState
+      const updateState = () => {
+        switch (mainSocket.readyState) {
+          case WebSocket.CONNECTING:
+            setMainConnectionState("CONNECTING");
+            break;
+          case WebSocket.OPEN:
+            setMainConnectionState("OPEN");
+            break;
+          case WebSocket.CLOSING:
+            setMainConnectionState("CLOSING");
+            break;
+          case WebSocket.CLOSED:
+            setMainConnectionState("CLOSED");
+            break;
+          default:
+            setMainConnectionState("CLOSED");
+            break;
+        }
+      };
+
+      updateState();
+    }
+  }, [mainSocket, wsUrl]);
+
+  // Track planning agent socket state changes
+  useEffect(() => {
+    // Only process socket updates if we have a valid URL and socket
+    if (planningAgentSocket && planningAgentWsUrl) {
+      // Update state based on socket readyState
+      const updateState = () => {
+        switch (planningAgentSocket.readyState) {
+          case WebSocket.CONNECTING:
+            setPlanningConnectionState("CONNECTING");
+            break;
+          case WebSocket.OPEN:
+            setPlanningConnectionState("OPEN");
+            break;
+          case WebSocket.CLOSING:
+            setPlanningConnectionState("CLOSING");
+            break;
+          case WebSocket.CLOSED:
+            setPlanningConnectionState("CLOSED");
+            break;
+          default:
+            setPlanningConnectionState("CLOSED");
+            break;
+        }
+      };
+
+      updateState();
+    }
+  }, [planningAgentSocket, planningAgentWsUrl]);
+
+  const activeMode = useConversationStore((state) => state.conversationMode);
+  const recoveryConversationId =
+    activeMode === "plan" && planningAgentWsUrl
+      ? subConversations?.[0]?.id
+      : conversationId;
+  const recoveryState =
+    activeMode === "plan" && planningAgentWsUrl
+      ? planningConnectionError.state
+      : mainConnectionError.state;
+
+  const contextValue = useMemo(
+    () => ({
+      connectionState,
+      recoveryState,
+      recoveryConversationId,
+      mainConnectionState,
+      sendMessage,
+      isLoadingHistory,
+      isHistoryReady,
+      reconnect,
+      hasConnectedOnce:
+        hasConnectedRefMain.current || hasConnectedRefPlanning.current,
+    }),
+    [
+      connectionState,
+      recoveryState,
+      recoveryConversationId,
+      mainConnectionState,
+      planningConnectionState,
+      sendMessage,
+      isLoadingHistory,
+      isHistoryReady,
+      reconnect,
+    ],
+  );
+
+  return (
+    <ConversationWebSocketContext.Provider value={contextValue}>
+      {children}
+    </ConversationWebSocketContext.Provider>
+  );
+}
+
+export const useConversationWebSocket =
+  (): ConversationWebSocketContextType | null => {
+    const context = useContext(ConversationWebSocketContext);
+    // Return null instead of throwing when not in provider
+    // This allows the hook to be called conditionally based on conversation version
+    return context || null;
+  };

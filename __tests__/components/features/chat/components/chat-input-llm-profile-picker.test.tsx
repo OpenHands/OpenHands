@@ -1,0 +1,195 @@
+import { act, fireEvent, screen } from "@testing-library/react";
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import { renderWithProviders } from "test-utils";
+
+const useChatInputLlmProfileStateMock = vi.fn();
+
+vi.mock("#/hooks/use-chat-input-llm-profile-state", () => ({
+  useChatInputLlmProfileState: () => useChatInputLlmProfileStateMock(),
+}));
+
+import { useFreeModelsStore } from "#/stores/free-models-store";
+import { ChatInputLlmProfilePicker } from "#/components/features/chat/components/chat-input-llm-profile-picker";
+
+const PROFILES = [
+  {
+    name: "Fast",
+    model: "openai/gpt-4o-mini",
+    base_url: null,
+    api_key_set: true,
+  },
+  {
+    name: "Smart",
+    model: "anthropic/claude-opus",
+    base_url: null,
+    api_key_set: true,
+  },
+];
+
+const selectProfile = vi.fn();
+
+function state(overrides = {}) {
+  return {
+    profiles: PROFILES,
+    currentProfileName: "Fast",
+    currentProfileModel: "openai/gpt-4o-mini",
+    isLoading: false,
+    isSwitching: false,
+    canSwitchProfile: true,
+    selectProfile,
+    ...overrides,
+  };
+}
+
+describe("ChatInputLlmProfilePicker", () => {
+  beforeEach(() => {
+    selectProfile.mockReset();
+    useChatInputLlmProfileStateMock.mockReset();
+    useChatInputLlmProfileStateMock.mockReturnValue(state());
+    useFreeModelsStore.setState({
+      freeModels: new Set(),
+      defaultModel: null,
+      defaultModelReady: false,
+    });
+  });
+
+  it("renders nothing while loading or when there are no profiles", () => {
+    useChatInputLlmProfileStateMock.mockReturnValue(
+      state({ profiles: [], isLoading: false }),
+    );
+    const { container } = renderWithProviders(<ChatInputLlmProfilePicker />);
+    expect(container).toBeEmptyDOMElement();
+  });
+
+  it("labels the pill with the current profile name", () => {
+    renderWithProviders(<ChatInputLlmProfilePicker />);
+    expect(screen.getByTestId("chat-input-llm-profile")).toHaveTextContent(
+      "Fast",
+    );
+  });
+
+  it("fits the upward menu above its trigger and follows scrolling", () => {
+    renderWithProviders(<ChatInputLlmProfilePicker />);
+    const trigger = screen.getByTestId("chat-input-llm-profile");
+    const rect = vi.spyOn(trigger, "getBoundingClientRect");
+    rect.mockReturnValue({ top: 200 } as DOMRect);
+    fireEvent.click(trigger);
+    const menu = screen.getByTestId("chat-input-llm-profile-popover");
+    expect(menu).toHaveStyle({ maxHeight: "184px" });
+
+    rect.mockReturnValue({ top: 100 } as DOMRect);
+    act(() => window.dispatchEvent(new Event("scroll")));
+    expect(menu).toHaveStyle({ maxHeight: "84px" });
+    rect.mockRestore();
+  });
+
+  it("live-switches to the picked profile", () => {
+    renderWithProviders(<ChatInputLlmProfilePicker />);
+    fireEvent.click(screen.getByTestId("chat-input-llm-profile"));
+    fireEvent.click(screen.getByTestId("chat-input-llm-profile-option-Smart"));
+
+    expect(selectProfile).toHaveBeenCalledWith("Smart");
+  });
+
+  it.each(["pill", "option"])(
+    "closes on Escape with focus on the %s and returns focus to the pill",
+    (focusTarget) => {
+      renderWithProviders(<ChatInputLlmProfilePicker />);
+      const pill = screen.getByTestId("chat-input-llm-profile");
+      pill.focus();
+      fireEvent.click(pill);
+      const option = screen.getByTestId("chat-input-llm-profile-option-Smart");
+      const focused = focusTarget === "option" ? option : pill;
+      focused.focus();
+      fireEvent.keyDown(focused, { key: "Escape" });
+
+      expect(
+        screen.queryByTestId("chat-input-llm-profile-popover"),
+      ).not.toBeInTheDocument();
+      expect(pill).toHaveAttribute("aria-expanded", "false");
+      expect(pill).toHaveFocus();
+      expect(selectProfile).not.toHaveBeenCalled();
+    },
+  );
+
+  it("does not switch when the current profile is re-selected", () => {
+    renderWithProviders(<ChatInputLlmProfilePicker />);
+    fireEvent.click(screen.getByTestId("chat-input-llm-profile"));
+    fireEvent.click(screen.getByTestId("chat-input-llm-profile-option-Fast"));
+
+    expect(selectProfile).not.toHaveBeenCalled();
+  });
+
+  it("names the current profile without selectable options when switching is unavailable", () => {
+    useChatInputLlmProfileStateMock.mockReturnValue(
+      state({ canSwitchProfile: false }),
+    );
+
+    renderWithProviders(<ChatInputLlmProfilePicker />);
+    fireEvent.click(screen.getByTestId("chat-input-llm-profile"));
+
+    expect(
+      screen.getByTestId("chat-input-llm-profile-current"),
+    ).toHaveTextContent("Fast");
+    expect(
+      screen.queryByTestId("chat-input-llm-profile-option-Smart"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("labels a backend-flagged free OpenHands route in the profile menu", () => {
+    useFreeModelsStore.getState().setFlags({
+      freeModels: new Set(["openhands/deepseek-v4-flash"]),
+      defaultModel: null,
+    });
+    useChatInputLlmProfileStateMock.mockReturnValue(
+      state({
+        profiles: [
+          {
+            name: "Free",
+            model: "openhands/deepseek-v4-flash",
+            base_url: null,
+            api_key_set: true,
+          },
+        ],
+        currentProfileName: "Free",
+        currentProfileModel: "openhands/deepseek-v4-flash",
+      }),
+    );
+
+    renderWithProviders(<ChatInputLlmProfilePicker />);
+    fireEvent.click(screen.getByTestId("chat-input-llm-profile"));
+
+    expect(
+      screen.getByText("OpenHands DeepSeek V4 Flash (free)"),
+    ).toBeInTheDocument();
+  });
+
+  it("labels a backend-flagged free OpenHands route in the read-only profile menu", () => {
+    useFreeModelsStore.getState().setFlags({
+      freeModels: new Set(["openhands/deepseek-v4-flash"]),
+      defaultModel: null,
+    });
+    useChatInputLlmProfileStateMock.mockReturnValue(
+      state({
+        canSwitchProfile: false,
+        currentProfileModel: "openhands/deepseek-v4-flash",
+      }),
+    );
+
+    renderWithProviders(<ChatInputLlmProfilePicker />);
+    fireEvent.click(screen.getByTestId("chat-input-llm-profile"));
+
+    expect(
+      screen.getByTestId("chat-input-llm-profile-current"),
+    ).toHaveTextContent("OpenHands DeepSeek V4 Flash (free)");
+  });
+
+  it("links to the LLM profiles settings page", () => {
+    const { container } = renderWithProviders(<ChatInputLlmProfilePicker />);
+    fireEvent.click(screen.getByTestId("chat-input-llm-profile"));
+
+    expect(
+      container.ownerDocument.querySelector('a[href="/settings/llm"]'),
+    ).not.toBeNull();
+  });
+});

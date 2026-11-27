@@ -1,0 +1,191 @@
+import React, { CSSProperties, ReactNode } from "react";
+import { CircleX } from "lucide-react";
+import toast, { ToastOptions } from "react-hot-toast";
+import { calculateToastDuration } from "./toast-duration";
+import { cn } from "#/utils/utils";
+import i18n from "#/i18n";
+import { I18nKey } from "#/i18n/declaration";
+import {
+  isBackendRequestTimeoutMessage,
+  isCorsOrNetworkErrorMessage,
+} from "./user-facing-error";
+import { buildAgentCanvasPath } from "#/utils/base-path";
+import {
+  getApiOrConnectionErrorMessage,
+  hasApiErrorResponse,
+} from "./api-error-message";
+
+// react-hot-toast accepts only CSSProperties via the style option — cannot use className
+// @spec TN-001 — Every toast uses the theme's high-emphasis ink on its surface
+const TOAST_STYLE: CSSProperties = {
+  background: "var(--oh-color-tertiary)",
+  border: "1px solid var(--oh-border-input)",
+  color: "var(--oh-contrast)",
+  borderRadius: "var(--oh-radius)",
+  maxWidth: "400px",
+  wordBreak: "break-word",
+  overflowWrap: "anywhere",
+  whiteSpace: "pre-wrap",
+};
+
+export const TOAST_OPTIONS: ToastOptions = {
+  position: "top-right",
+  style: TOAST_STYLE,
+};
+
+/** Icon + message row; center icon for single-line text, top-align when wrapped. */
+export function ErrorToastContent({ message }: { message: ReactNode }) {
+  const contentRef = React.useRef<HTMLSpanElement>(null);
+  const [isMultiLine, setIsMultiLine] = React.useState(false);
+
+  React.useLayoutEffect(() => {
+    const content = contentRef.current;
+    if (!content) {
+      return undefined;
+    }
+
+    const updateIsMultiLine = () => {
+      const lineHeight = Number.parseFloat(
+        getComputedStyle(content).lineHeight,
+      );
+      if (!Number.isFinite(lineHeight) || lineHeight <= 0) {
+        setIsMultiLine(false);
+        return;
+      }
+
+      setIsMultiLine(content.getBoundingClientRect().height > lineHeight * 1.5);
+    };
+
+    updateIsMultiLine();
+
+    const observer = new ResizeObserver(updateIsMultiLine);
+    observer.observe(content);
+
+    return () => observer.disconnect();
+  }, [message]);
+
+  return (
+    <div
+      className={cn(
+        "flex min-w-0 gap-2",
+        isMultiLine ? "items-start" : "items-center",
+      )}
+    >
+      <CircleX
+        aria-hidden
+        className="h-4 w-4 shrink-0 text-status-error"
+        strokeWidth={2}
+      />
+      <span
+        ref={contentRef}
+        className="min-w-0 flex-1 text-sm leading-5 message-word-break wrap-anywhere"
+      >
+        {message}
+      </span>
+    </div>
+  );
+}
+
+export const ERROR_TOAST_OPTIONS: ToastOptions = {
+  ...TOAST_OPTIONS,
+  icon: null,
+};
+
+function showErrorToast(message: string) {
+  const duration = calculateToastDuration(message, 4000);
+  toast(<ErrorToastContent message={message} />, {
+    ...ERROR_TOAST_OPTIONS,
+    duration,
+  });
+}
+
+export const displayErrorToast = (error: string | null | undefined) => {
+  let errorMessage = error || i18n.t(I18nKey.STATUS$ERROR);
+  if (isCorsOrNetworkErrorMessage(errorMessage)) {
+    errorMessage = i18n.t(I18nKey.ERROR$CORS_OR_NETWORK);
+  } else if (isBackendRequestTimeoutMessage(errorMessage)) {
+    errorMessage = i18n.t(I18nKey.ERROR$BACKEND_REQUEST_TIMEOUT);
+  }
+  showErrorToast(errorMessage);
+};
+
+/**
+ * Toast a failed API call. When the server answered, its own reason (see
+ * `getApiErrorMessage`) is shown as sent, even if it happens to mention
+ * "Failed to fetch"; only a failure with no response (network, CORS, timeout)
+ * gets the shared "Disconnected" wording.
+ */
+export const displayApiErrorToast = (error: unknown, fallback: string) => {
+  const message = getApiOrConnectionErrorMessage(error, fallback);
+  if (hasApiErrorResponse(error)) {
+    showErrorToast(message);
+  } else {
+    displayErrorToast(message);
+  }
+};
+
+export const displaySuccessToast = (message: string) => {
+  const duration = calculateToastDuration(message, 5000);
+  toast.success(
+    <span className="message-word-break wrap-anywhere">{message}</span>,
+    { ...TOAST_OPTIONS, duration },
+  );
+};
+
+/**
+ * Toast a success with an action link.
+ *
+ * When `onOpen` is given the link runs through the caller's navigation owner
+ * (an embedded Canvas routes via its host), so following it stays inside the
+ * app. Without it the link is a plain `<a>` that the browser follows itself —
+ * right for a reader who genuinely left Canvas, wrong for an embedding host.
+ */
+export const displaySuccessToastWithLink = (
+  message: string,
+  linkLabel: string,
+  href: string,
+  onOpen?: () => void,
+) => {
+  const duration = calculateToastDuration(`${message} ${linkLabel}`, 5000);
+  const toastId = toast.success(
+    <span className="message-word-break wrap-anywhere">
+      {message}{" "}
+      {onOpen ? (
+        <button
+          type="button"
+          className="underline hover:no-underline"
+          onClick={() => {
+            // Dismiss only this toast; a bare `toast.dismiss()` clears every
+            // active toast, including unrelated ones.
+            toast.dismiss(toastId);
+            onOpen();
+          }}
+        >
+          {linkLabel}
+        </button>
+      ) : (
+        <a
+          className="underline hover:no-underline"
+          href={buildAgentCanvasPath(href)}
+        >
+          {linkLabel}
+        </a>
+      )}
+    </span>,
+    { ...TOAST_OPTIONS, duration },
+  );
+};
+
+/**
+ * Neutral, non-success notice — used when an action completed but the outcome
+ * is qualified (e.g. a secret was saved but the active backend can't consume it
+ * yet). Renders without the success checkmark so it doesn't read as "all good".
+ */
+export const displayWarningToast = (message: string) => {
+  const duration = calculateToastDuration(message, 6000);
+  toast(<span className="message-word-break wrap-anywhere">{message}</span>, {
+    ...TOAST_OPTIONS,
+    icon: "⚠️",
+    duration,
+  });
+};

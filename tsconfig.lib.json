@@ -1,0 +1,34 @@
+{
+  "extends": "./tsconfig.json",
+  "include": [
+    "src/index.ts",
+    "src/**/*.d.ts",
+    "src/lib/**/*.ts",
+    "src/lib/**/*.tsx",
+    "src/components/**/*.ts",
+    "src/components/**/*.tsx",
+    "src/query-client-config.ts",
+    "src/i18n/**/*.ts",
+    "src/i18n/**/*.tsx",
+    "src/routes/conversation.tsx",
+    "src/routes/app-settings.tsx",
+    "src/routes/llm-settings.tsx",
+    "src/routes/mcp-settings.tsx",
+    "src/routes/secrets-settings.tsx"
+  ],
+  "exclude": ["src/**/*.test.ts", "src/**/*.test.tsx"],
+  "compilerOptions": {
+    "noEmit": false,
+    "declaration": true,
+    "emitDeclarationOnly": true,
+    "declarationMap": false,
+    "outDir": "dist",
+    "rootDir": "src",
+    "types": [
+      "@react-router/node",
+      "vite/client",
+      "vite-plugin-svgr/client",
+      "node"
+    ]
+  }
+}

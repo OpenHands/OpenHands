@@ -1,0 +1,135 @@
+name: Bug Report
+description: Report a bug or unexpected behavior in Agent Canvas.
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug! Please fill out the sections below so we can reproduce and fix the issue.
+
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating System
+      options:
+        - macOS
+        - Windows
+        - Linux
+    validations:
+      required: true
+
+  - type: dropdown
+    id: install-method
+    attributes:
+      label: Installation Method
+      description: How did you install / run Agent Canvas?
+      options:
+        - npm (`npx @openhands/agent-canvas` or `npm install -g @openhands/agent-canvas`)
+        - Docker (`ghcr.io/openhands/agent-canvas`)
+        - From source (`npm run dev` / `npm run dev:minimal`)
+        - Other
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Agent Canvas Version
+      description: "npm: `agent-canvas --version` · Docker: the image tag you pulled (e.g. `ghcr.io/openhands/agent-canvas:latest`)"
+      placeholder: "e.g. 1.0.0-alpha.6"
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Bug Description
+      description: A clear and concise description of what the bug is.
+      placeholder: What happened?
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to Reproduce
+      description: |
+        Step-by-step instructions to reproduce the behavior. To qualify for the
+        `ready-for-dev` label, include how you ran Agent Canvas using one of
+        these supported methods:
+          - `npx @openhands/agent-canvas` (or `agent-canvas` if installed globally)
+          - `npm run dev` / `npm run dev:minimal` (from a source checkout)
+          - The hosted canvas at `app.all-hands.dev/canvas`
+      placeholder: |
+        Run method: `npm run dev`
+
+        1. npm install && npm run dev
+        2. Open http://localhost:8000
+        3. …
+        4. See error
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual Behavior
+      description: |
+        Describe what happened. For functional Canvas bugs, include a screenshot
+        or video of the failure in the running app. Logs, API output, and
+        reproducers can supplement it. Say if you have not reproduced it.
+        Links in comments count; no after-fix evidence is needed for triage.
+      placeholder: |
+        The button moved to the next step unexpectedly.
+
+        The attached screenshot shows the observed error.
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected Behavior
+      description: What did you expect to happen?
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant Logs
+      description: Paste any error messages or console output. Content is auto-wrapped in a code block.
+      render: shell
+    validations:
+      required: false
+
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance Criteria
+      description: |
+        For `ready-for-dev`, list observable fixed outcomes, not PR artifacts.
+        Tests and before/after fix evidence are not needed for triage.
+      placeholder: |
+        - [ ] Following the reproduction steps produces the expected result.
+        - [ ] The affected mode handles the failure without losing user state.
+        - [ ] …
+    validations:
+      required: false
+
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: Screenshots
+      description: Drag and drop or paste any screenshots that help explain the issue.
+    validations:
+      required: false
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional Context
+      description: Anything else that might be helpful (config, workarounds tried, etc.).
+    validations:
+      required: false

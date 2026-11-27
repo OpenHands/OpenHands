@@ -1,0 +1,778 @@
+import type { AppConversation } from "#/api/conversation-service/agent-server-conversation-service.types";
+import type { BackendKind } from "#/api/backend-registry/types";
+import type { LocalWorkspace } from "#/types/workspace";
+import type { Provider } from "#/types/settings";
+import type { I18nKey } from "#/i18n/declaration";
+import {
+  AUTOMATION_NAME_TAG_KEY,
+  AUTOMATION_TAG_KEYS,
+  getDisplayConversationTags,
+} from "#/api/agent-server-adapter";
+import {
+  getConversationTagLabel,
+  getConversationTagValueLabel,
+} from "./conversation-card/conversation-tag-display";
+import {
+  AUTOMATION_SETUP_TAG_KEY,
+  AUTOMATION_SETUP_TAG_VALUE,
+} from "#/utils/automation-draft-tags";
+
+export type ConversationSortField = "created" | "updated";
+export type ThreadScope = "all" | "relevant";
+export type OrganizeMode = "grouped" | "chronological";
+export type AutomationFilterMode =
+  "all" | "hide-automations" | "only-automations";
+export type OlderConversationCutoff = "1h" | "1d" | "7d" | "30d";
+
+export const OLDER_CONVERSATION_CUTOFFS = [
+  "1h",
+  "1d",
+  "7d",
+  "30d",
+] as const satisfies readonly OlderConversationCutoff[];
+
+export const DEFAULT_OLDER_CONVERSATION_CUTOFF: OlderConversationCutoff = "7d";
+
+export const OLDER_CONVERSATION_CUTOFF_MS: Record<
+  OlderConversationCutoff,
+  number
+> = {
+  "1h": 60 * 60 * 1000,
+  "1d": 24 * 60 * 60 * 1000,
+  "7d": 7 * 24 * 60 * 60 * 1000,
+  "30d": 30 * 24 * 60 * 60 * 1000,
+};
+
+export function isOlderConversationCutoff(
+  value: unknown,
+): value is OlderConversationCutoff {
+  return (
+    typeof value === "string" &&
+    (OLDER_CONVERSATION_CUTOFFS as readonly string[]).includes(value)
+  );
+}
+
+/**
+ * Splits conversations by last update relative to `nowMs`. Missing or
+ * unparseable timestamps stay in `recent` so they are never hidden by the
+ * hide-older toggle.
+ */
+export function partitionByCutoff<T extends { updated_at: string }>(
+  items: readonly T[],
+  cutoffMs: number,
+  nowMs: number = Date.now(),
+): { recent: T[]; older: T[] } {
+  const cutoff = nowMs - cutoffMs;
+  const recent: T[] = [];
+  const older: T[] = [];
+  for (const item of items) {
+    const updatedAt = item.updated_at ? Date.parse(item.updated_at) : NaN;
+    if (Number.isFinite(updatedAt) && updatedAt < cutoff) {
+      older.push(item);
+    } else {
+      recent.push(item);
+    }
+  }
+  return { recent, older };
+}
+
+/** Max conversations shown under a workspace/repo folder before "View more". */
+export const GROUP_CONVERSATIONS_PREVIEW_LIMIT = 5;
+
+interface GroupConversationPreviewOptions {
+  limit?: number;
+  expanded: boolean;
+  activeConversationId?: string | null;
+  /**
+   * When set, the collapsed preview is drawn only from these conversation IDs
+   * (plus the active conversation when it belongs to the group). Expanding
+   * still reveals every loaded conversation in `conversations`.
+   */
+  discoveryConversationIds?: ReadonlySet<string>;
+}
+
+/**
+ * Builds the frozen collapsed-preview pool for a folder.
+ *
+ * Global "Load more" may fetch later pages that add conversations to an
+ * already-visible folder; those rows stay out of the collapsed preview so the
+ * folder's first impression stays stable until the user expands it.
+ */
+function resolveCollapsedPreviewPool(
+  conversations: readonly AppConversation[],
+  discoveryConversationIds: ReadonlySet<string> | undefined,
+  activeConversationId: string | null | undefined,
+): AppConversation[] {
+  if (!discoveryConversationIds) {
+    return [...conversations];
+  }
+
+  const pool = conversations.filter((conversation) =>
+    discoveryConversationIds.has(conversation.id),
+  );
+
+  // The load-bearing active-conversation guarantee lives in
+  // `getGroupDiscoveryConversationIds` (`forceIncludeConversationId`); this
+  // fallback only covers callers that pass a discovery set built without it.
+  if (
+    activeConversationId != null &&
+    !pool.some((conversation) => conversation.id === activeConversationId)
+  ) {
+    const activeConversation = conversations.find(
+      (conversation) => conversation.id === activeConversationId,
+    );
+    if (activeConversation) {
+      pool.push(activeConversation);
+    }
+  }
+
+  return pool;
+}
+
+export function getGroupConversationPreview(
+  conversations: readonly AppConversation[],
+  options: GroupConversationPreviewOptions,
+): {
+  visibleConversations: AppConversation[];
+  isPreviewTruncated: boolean;
+  isShowingAll: boolean;
+} {
+  const limit = options.limit ?? GROUP_CONVERSATIONS_PREVIEW_LIMIT;
+  const pool = resolveCollapsedPreviewPool(
+    conversations,
+    options.discoveryConversationIds,
+    options.activeConversationId,
+  );
+
+  let collapsedVisible: AppConversation[];
+  if (pool.length <= limit) {
+    collapsedVisible = pool;
+  } else {
+    const activeIndex =
+      options.activeConversationId != null
+        ? pool.findIndex(
+            (conversation) => conversation.id === options.activeConversationId,
+          )
+        : -1;
+
+    if (activeIndex >= limit) {
+      collapsedVisible = [...pool.slice(0, limit - 1), pool[activeIndex]];
+    } else {
+      collapsedVisible = pool.slice(0, limit);
+    }
+  }
+
+  const collapsedHidesSomething =
+    collapsedVisible.length < conversations.length;
+
+  if (options.expanded) {
+    return {
+      visibleConversations: [...conversations],
+      isPreviewTruncated: collapsedHidesSomething,
+      isShowingAll: true,
+    };
+  }
+
+  return {
+    visibleConversations: collapsedVisible,
+    isPreviewTruncated: collapsedHidesSomething,
+    isShowingAll: !collapsedHidesSomething,
+  };
+}
+
+export function resolvePinnedConversations(
+  pinnedIds: readonly string[],
+  conversations: readonly AppConversation[],
+): AppConversation[] {
+  const byId = new Map(
+    conversations.map((conversation) => [conversation.id, conversation]),
+  );
+  return pinnedIds
+    .map((id) => byId.get(id))
+    .filter(
+      (conversation): conversation is AppConversation => conversation != null,
+    );
+}
+
+export function filterOutPinnedConversations(
+  conversations: readonly AppConversation[],
+  pinnedIds: readonly string[],
+): AppConversation[] {
+  if (pinnedIds.length === 0) {
+    return [...conversations];
+  }
+
+  const pinnedSet = new Set(pinnedIds);
+  return conversations.filter(
+    (conversation) => !pinnedSet.has(conversation.id),
+  );
+}
+
+/**
+ * Facet bucket for automation-born conversations that carry no
+ * `automationname` tag (double-underscore prefix mirrors the
+ * `__none_workspace` group-id idiom).
+ */
+export const UNNAMED_AUTOMATION_FACET = "__unnamed__";
+
+/**
+ * Whether a conversation was created by an automation run: the cloud backend
+ * stamps `trigger: "automation"`, while local agent-server conversations are
+ * recognized by the automation tags the SDK workspace attaches at creation.
+ */
+export function isAutomationConversation(
+  conversation: AppConversation,
+): boolean {
+  if (conversation.trigger === "automation") {
+    return true;
+  }
+  const tags = conversation.tags;
+  if (!tags) {
+    return false;
+  }
+  return AUTOMATION_TAG_KEYS.some((key) => Boolean(tags[key]));
+}
+
+export function getAutomationNameFacet(conversation: AppConversation): string {
+  const name = conversation.tags?.[AUTOMATION_NAME_TAG_KEY]?.trim();
+  return name || UNNAMED_AUTOMATION_FACET;
+}
+
+/**
+ * Unique automation names among the given conversations, sorted for stable
+ * menu order; the unnamed bucket (if present) is appended last.
+ */
+export function collectAutomationNameFacets(
+  conversations: readonly AppConversation[],
+): string[] {
+  const names = new Set<string>();
+  let hasUnnamed = false;
+  for (const conversation of conversations) {
+    if (!isAutomationConversation(conversation)) {
+      continue;
+    }
+    const facet = getAutomationNameFacet(conversation);
+    if (facet === UNNAMED_AUTOMATION_FACET) {
+      hasUnnamed = true;
+    } else {
+      names.add(facet);
+    }
+  }
+  const sorted = [...names].sort((a, b) => a.localeCompare(b));
+  if (hasUnnamed) {
+    sorted.push(UNNAMED_AUTOMATION_FACET);
+  }
+  return sorted;
+}
+
+export function applyAutomationConversationFilter(
+  conversations: readonly AppConversation[],
+  mode: AutomationFilterMode,
+  selectedNames: readonly string[],
+  availableFacets: readonly string[],
+): AppConversation[] {
+  if (mode === "all") {
+    return [...conversations];
+  }
+  if (mode === "hide-automations") {
+    return conversations.filter(
+      (conversation) => !isAutomationConversation(conversation),
+    );
+  }
+  // "only-automations": an empty selection means every automation run, and a
+  // selection that no longer intersects the available facets (stale names
+  // persisted from another backend, renamed automations) degrades the same
+  // way instead of yielding an unfillable empty list.
+  const facetSet = new Set(availableFacets);
+  const effectiveNames = selectedNames.filter((name) => facetSet.has(name));
+  const narrowing = effectiveNames.length > 0 ? new Set(effectiveNames) : null;
+  return conversations.filter((conversation) => {
+    if (!isAutomationConversation(conversation)) {
+      return false;
+    }
+    return (
+      narrowing === null || narrowing.has(getAutomationNameFacet(conversation))
+    );
+  });
+}
+
+/**
+ * Distinct user-facing `key=value` facets among the given conversations,
+ * sorted A–Z for stable menu order. Reserved/internal tag keys are excluded
+ * via `getDisplayConversationTags`; unlike the automation filter there is no
+ * unnamed bucket — a conversation with no user tags simply yields no facet.
+ */
+export function collectTagFacets(
+  conversations: readonly AppConversation[],
+): string[] {
+  const facets = new Set<string>();
+  for (const conversation of conversations) {
+    for (const [key, value] of getDisplayConversationTags(conversation.tags)) {
+      facets.add(`${key}=${value}`);
+    }
+  }
+  return [...facets].sort((a, b) => a.localeCompare(b));
+}
+
+/**
+ * Display form of a stored facet: a bare tag (empty value, stored as `key=`)
+ * renders as just the key. Matching keeps the raw `key=value` form — this is
+ * label-only.
+ */
+export function formatTagFacetLabel(
+  facet: string,
+  t?: (key: I18nKey) => string,
+): string {
+  const separatorIndex = facet.indexOf("=");
+  const key = separatorIndex === -1 ? facet : facet.slice(0, separatorIndex);
+  const value = separatorIndex === -1 ? "" : facet.slice(separatorIndex + 1);
+  if (
+    key.trim().toLowerCase() === AUTOMATION_SETUP_TAG_KEY &&
+    value === AUTOMATION_SETUP_TAG_VALUE
+  ) {
+    const label = t ? getConversationTagLabel(key, t) : "Automation setup";
+    const valueLabel = t
+      ? getConversationTagValueLabel(key, value, t)
+      : "Draft";
+    return `${label}: ${valueLabel}`;
+  }
+  return facet.endsWith("=") ? facet.slice(0, -1) : facet;
+}
+
+/**
+ * Union semantics: a conversation matches when it carries ANY selected
+ * facet, mirroring the automation multi-select. An empty selection — or one
+ * that no longer intersects the available facets (tags edited away, stale
+ * selections persisted from another backend) — leaves the list unfiltered
+ * instead of yielding an unfillable empty list.
+ */
+export function applyTagConversationFilter(
+  conversations: readonly AppConversation[],
+  selectedFacets: readonly string[],
+  availableFacets: readonly string[],
+): AppConversation[] {
+  const facetSet = new Set(availableFacets);
+  const effectiveFacets = selectedFacets.filter((facet) => facetSet.has(facet));
+  if (effectiveFacets.length === 0) {
+    return [...conversations];
+  }
+  const narrowing = new Set(effectiveFacets);
+  return conversations.filter((conversation) =>
+    getDisplayConversationTags(conversation.tags).some(([key, value]) =>
+      narrowing.has(`${key}=${value}`),
+    ),
+  );
+}
+
+/** Subset of `useCreateConversation` variables for launching from a group row */
+export type ConversationGroupLaunch = {
+  workingDir?: string;
+  repository?: {
+    name: string;
+    gitProvider: Provider;
+    branch?: string;
+  };
+};
+
+function buildGroupLaunch(
+  id: string,
+  backendKind: BackendKind,
+  conversations: AppConversation[],
+): ConversationGroupLaunch {
+  if (backendKind === "local") {
+    if (id === "__none_workspace") {
+      return {};
+    }
+    if (id.startsWith("ws:")) {
+      return { workingDir: id.slice(3) };
+    }
+    return {};
+  }
+
+  if (id === "__none_repo") {
+    return {};
+  }
+  if (id.startsWith("repo:")) {
+    const name = id.slice(5);
+    const sample = conversations[0];
+    const gitProvider = (sample?.git_provider ?? "github") as Provider;
+    const branch = sample?.selected_branch ?? undefined;
+    return {
+      repository: {
+        name,
+        gitProvider,
+        branch,
+      },
+    };
+  }
+
+  return {};
+}
+
+export function parseConversationTimeMs(iso: string | undefined): number {
+  if (!iso) return 0;
+  const t = Date.parse(iso);
+  return Number.isFinite(t) ? t : 0;
+}
+
+export function sortConversationsByField(
+  items: readonly AppConversation[],
+  field: ConversationSortField,
+): AppConversation[] {
+  const key = field === "created" ? "created_at" : "updated_at";
+  return [...items].sort(
+    (a, b) => parseConversationTimeMs(b[key]) - parseConversationTimeMs(a[key]),
+  );
+}
+
+/** A conversation row plus its recursively nested children. */
+export interface NestedConversationRow {
+  conversation: AppConversation;
+  children: NestedConversationRow[];
+}
+
+/**
+ * Builds the parent → children rows for the conversation panel.
+ *
+ * A conversation is nested only when its server-owned
+ * `parent_conversation_id` points at another conversation that is currently
+ * loaded. Orphans (parent on a page that is not loaded yet) stay at the top
+ * level, so pagination never makes a conversation silently disappear. Cycles
+ * are defensive-only — the agent-server creates parents before children — and
+ * fall back to a flat list rather than dropping rows.
+ */
+export function nestSubConversations(
+  conversations: readonly AppConversation[],
+  field: ConversationSortField,
+): NestedConversationRow[] {
+  const loadedIds = new Set(
+    conversations.map((conversation) => conversation.id),
+  );
+  const childrenByParentId = new Map<string, AppConversation[]>();
+  const topLevel: AppConversation[] = [];
+
+  for (const conversation of conversations) {
+    const parentId = conversation.parent_conversation_id ?? null;
+    if (parentId && parentId !== conversation.id && loadedIds.has(parentId)) {
+      const siblings = childrenByParentId.get(parentId);
+      if (siblings) {
+        siblings.push(conversation);
+      } else {
+        childrenByParentId.set(parentId, [conversation]);
+      }
+    } else {
+      topLevel.push(conversation);
+    }
+  }
+
+  // Every row was treated as a child (a malformed cycle). Keep the list
+  // usable instead of rendering an empty panel.
+  if (topLevel.length === 0 && conversations.length > 0) {
+    return conversations.map((conversation) => ({
+      conversation,
+      children: [],
+    }));
+  }
+
+  const buildRow = (
+    conversation: AppConversation,
+    ancestors: ReadonlySet<string>,
+  ): NestedConversationRow | null => {
+    // A malformed parent cycle must not recurse forever. The repeated node is
+    // omitted from this branch; the cycle's entry point still renders once.
+    if (ancestors.has(conversation.id)) {
+      return null;
+    }
+    const nextAncestors = new Set(ancestors).add(conversation.id);
+    const children = sortConversationsByField(
+      childrenByParentId.get(conversation.id) ?? [],
+      field,
+    )
+      .map((child) => buildRow(child, nextAncestors))
+      .filter((row): row is NestedConversationRow => row !== null);
+    return { conversation, children };
+  };
+
+  return topLevel
+    .map((conversation) => buildRow(conversation, new Set()))
+    .filter((row): row is NestedConversationRow => row !== null);
+}
+
+function workspaceGroup(conversation: AppConversation): {
+  id: string;
+  label: string;
+} {
+  // Group by the user-selected workspace (a stable identifier shared by
+  // every conversation launched from the same picker selection), not
+  // `workspace.working_dir` — that field holds the per-conversation
+  // worktree path the agent-server creates, which is unique per
+  // conversation and would fragment the grouping.
+  //
+  // Normalize first, then check emptiness: inputs like "/", "///", or
+  // "   ///" trim+strip to "" and must fall back to the "no workspace"
+  // bucket rather than producing a stray `ws:` group with no label.
+  const normalized = conversation.selected_workspace
+    ?.trim()
+    .replace(/\/+$/, "");
+  if (!normalized) {
+    return { id: "__none_workspace", label: "" };
+  }
+  const label = normalized.split("/").filter(Boolean).pop() ?? normalized;
+  return { id: `ws:${normalized}`, label };
+}
+
+function repositoryGroup(conversation: AppConversation): {
+  id: string;
+  label: string;
+} {
+  // Mirror `workspaceGroup`'s normalize-then-check order so "/", "///",
+  // and trailing-slash variants of the same repo all collapse to one
+  // group instead of producing a stray `repo:/` bucket.
+  const normalized = conversation.selected_repository
+    ?.trim()
+    .replace(/\/+$/, "");
+  if (!normalized) {
+    return { id: "__none_repo", label: "" };
+  }
+  const parts = normalized.split("/").filter(Boolean);
+  const label = parts.length
+    ? (parts[parts.length - 1] ?? normalized).replace(/\.git$/, "")
+    : normalized.replace(/\.git$/, "");
+  return { id: `repo:${normalized}`, label };
+}
+
+/**
+ * Resolves the stable folder identity used by grouped conversation views.
+ *
+ * Keeping this shared with `groupConversations` lets pagination reason about
+ * folder discovery without duplicating workspace/repository normalization.
+ */
+function getConversationGroupIdentity(
+  conversation: AppConversation,
+  backendKind: BackendKind,
+): { id: string; label: string } {
+  return backendKind === "local"
+    ? workspaceGroup(conversation)
+    : repositoryGroup(conversation);
+}
+
+/**
+ * Max backend pages fetched for a single grouped "Load more" click. The
+ * driver walks past pages that only deepen already-visible folders looking
+ * for a new folder, and this cap prevents one click from walking the entire
+ * remaining cursor when no undiscovered folder exists. Chronological mode is
+ * not capped — it keeps its pre-existing fetch-until-visible behavior.
+ */
+export const MAX_PAGES_PER_LOAD_MORE_CLICK = 3;
+
+/**
+ * Conversation IDs that belong on each folder's discovery page — the first
+ * backend page where that folder appeared.
+ *
+ * Global "Load more" still discovers folders from later pages, but the
+ * collapsed preview for an already-visible folder stays frozen to this set.
+ * Expanding the folder reads the full grouped `conversations` array instead.
+ * `forceIncludeConversationId` keeps the active thread in the preview even
+ * when it landed on a non-discovery page.
+ */
+export function getGroupDiscoveryConversationIds(
+  items: readonly AppConversation[],
+  pageByConversationId: ReadonlyMap<string, number>,
+  backendKind: BackendKind,
+  options?: { forceIncludeConversationId?: string | null },
+): Set<string> {
+  // Resolve each conversation's folder identity exactly once; both passes
+  // below (finding each folder's discovery page, then collecting the ids on
+  // that page) read from this record instead of re-running the
+  // workspace/repository normalization.
+  const resolved = items.map((conversation) => ({
+    conversationId: conversation.id,
+    groupId: getConversationGroupIdentity(conversation, backendKind).id,
+    page: pageByConversationId.get(conversation.id) ?? 0,
+  }));
+
+  const discoveryPageByGroupId = new Map<string, number>();
+  for (const { groupId, page } of resolved) {
+    const currentDiscoveryPage = discoveryPageByGroupId.get(groupId);
+    if (currentDiscoveryPage === undefined || page < currentDiscoveryPage) {
+      discoveryPageByGroupId.set(groupId, page);
+    }
+  }
+
+  const discoveryIds = new Set<string>();
+  for (const { conversationId, groupId, page } of resolved) {
+    if (page === discoveryPageByGroupId.get(groupId)) {
+      discoveryIds.add(conversationId);
+    }
+  }
+
+  const forceIncludeId = options?.forceIncludeConversationId;
+  if (
+    forceIncludeId != null &&
+    items.some((conversation) => conversation.id === forceIncludeId)
+  ) {
+    discoveryIds.add(forceIncludeId);
+  }
+
+  return discoveryIds;
+}
+
+export function groupConversations(
+  items: readonly AppConversation[],
+  backendKind: BackendKind,
+  sortField: ConversationSortField,
+  labels: { emptyWorkspace: string; emptyRepository: string },
+  knownWorkspaces?: readonly LocalWorkspace[],
+): {
+  id: string;
+  label: string;
+  conversations: AppConversation[];
+  launch: ConversationGroupLaunch;
+}[] {
+  const byId = new Map<
+    string,
+    { label: string; conversations: AppConversation[] }
+  >();
+
+  // Index the registered workspace folders by normalized path so legacy
+  // conversations created before workspace tags existed can be recovered by
+  // matching their runtime `working_dir` against a known workspace (#17386).
+  const knownWorkspacePaths = new Map<string, string>();
+  if (backendKind === "local" && knownWorkspaces) {
+    for (const ws of knownWorkspaces) {
+      const normalized = ws.path.trim().replace(/\/+$/, "");
+      if (normalized) {
+        knownWorkspacePaths.set(normalized, ws.name);
+        byId.set(`ws:${normalized}`, { label: ws.name, conversations: [] });
+      }
+    }
+  }
+
+  // A `local_repo` conversation runs directly in its workspace folder, so its
+  // `working_dir` equals a registered workspace path and can be recovered. A
+  // `new_worktree` conversation runs in a unique generated worktree that never
+  // matches a registered path, so only its server tag (read in
+  // `toAppConversation`) can regroup it — pre-tag worktree conversations stay
+  // under "No workspace".
+  const recoverWorkspaceGroup = (
+    c: AppConversation,
+  ): { id: string; label: string } | null => {
+    if (backendKind !== "local" || knownWorkspacePaths.size === 0) return null;
+    const runtimeDir = c.workspace?.working_dir?.trim().replace(/\/+$/, "");
+    if (!runtimeDir) return null;
+    const name = knownWorkspacePaths.get(runtimeDir);
+    return name ? { id: `ws:${runtimeDir}`, label: name } : null;
+  };
+
+  for (const c of items) {
+    let { id, label: rawLabel } = getConversationGroupIdentity(c, backendKind);
+    if (id === "__none_workspace") {
+      const recovered = recoverWorkspaceGroup(c);
+      if (recovered) {
+        id = recovered.id;
+        rawLabel = recovered.label;
+      }
+    }
+    const label =
+      id === "__none_workspace"
+        ? labels.emptyWorkspace
+        : id === "__none_repo"
+          ? labels.emptyRepository
+          : rawLabel;
+    const bucket = byId.get(id);
+    if (bucket) {
+      bucket.conversations.push(c);
+    } else {
+      byId.set(id, { label, conversations: [c] });
+    }
+  }
+
+  const groups = [...byId.entries()].map(([id, g]) => {
+    const conversations = sortConversationsByField(g.conversations, sortField);
+    return {
+      id,
+      label: g.label,
+      conversations,
+      launch: buildGroupLaunch(id, backendKind, conversations),
+    };
+  });
+
+  // Use reduce instead of `Math.max(...arr)` — the spread form would push
+  // every conversation onto the call stack as a separate argument, which
+  // hits JS engines' ~100k-arg limit on very large buckets.
+  const groupOrderKey = (g: (typeof groups)[number]) =>
+    g.conversations.reduce(
+      (max, c) =>
+        Math.max(
+          max,
+          parseConversationTimeMs(
+            sortField === "created" ? c.created_at : c.updated_at,
+          ),
+        ),
+      0,
+    );
+
+  groups.sort((a, b) => groupOrderKey(b) - groupOrderKey(a));
+  return groups;
+}
+
+export function applyGroupFolderOrder<T extends { id: string }>(
+  groups: readonly T[],
+  order: readonly string[],
+): T[] {
+  if (order.length === 0) {
+    return [...groups];
+  }
+
+  const byId = new Map(groups.map((group) => [group.id, group]));
+  const ordered: T[] = [];
+  const seen = new Set<string>();
+
+  for (const id of order) {
+    const group = byId.get(id);
+    if (group) {
+      ordered.push(group);
+      seen.add(id);
+    }
+  }
+
+  for (const group of groups) {
+    if (!seen.has(group.id)) {
+      ordered.push(group);
+    }
+  }
+
+  return ordered;
+}
+
+export type GroupFolderDropPosition = "before" | "after";
+
+export function moveGroupFolderOrder(
+  order: readonly string[],
+  groupIds: readonly string[],
+  activeGroupId: string,
+  targetGroupId: string,
+  position: GroupFolderDropPosition = "after",
+): string[] {
+  if (activeGroupId === targetGroupId) {
+    return [...order];
+  }
+
+  const effectiveOrder = applyGroupFolderOrder(
+    groupIds.map((id) => ({ id })),
+    order,
+  ).map((group) => group.id);
+  const fromIndex = effectiveOrder.indexOf(activeGroupId);
+  const toIndex = effectiveOrder.indexOf(targetGroupId);
+  if (fromIndex < 0 || toIndex < 0) {
+    return [...order];
+  }
+
+  const nextOrder = [...effectiveOrder];
+  nextOrder.splice(fromIndex, 1);
+  const adjustedTargetIndex = nextOrder.indexOf(targetGroupId);
+  const insertIndex =
+    position === "before" ? adjustedTargetIndex : adjustedTargetIndex + 1;
+  nextOrder.splice(insertIndex, 0, activeGroupId);
+  return nextOrder;
+}

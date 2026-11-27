@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="980" height="502" viewBox="0 0 980 502" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="16">
+<rect width="980" height="502" rx="8" fill="#0d1117"/>
+<text x="26" y="42" fill="#7d8590" xml:space="preserve"># BEFORE - both files restored from a073648</text>
+<text x="26" y="67" fill="#58a6ff" xml:space="preserve">$ npx vitest run \</text>
+<text x="26" y="92" fill="#58a6ff" xml:space="preserve">    __tests__/hooks/query/use-automations-backend-switch.test.tsx \</text>
+<text x="26" y="117" fill="#58a6ff" xml:space="preserve">    __tests__/components/backends/backend-selector.test.tsx</text>
+<text x="26" y="167" fill="#3fb950" font-weight="600" xml:space="preserve"> Test Files  2 passed (2)</text>
+<text x="26" y="192" fill="#3fb950" font-weight="600" xml:space="preserve">      Tests  38 passed (38)</text>
+<text x="26" y="217" fill="#f85149" font-weight="600" xml:space="preserve">   Duration  14.64s (transform 2.42s, setup 1.62s, import 7.00s, tests 14.91s, environment 1.92s)</text>
+<text x="26" y="292" fill="#7d8590" xml:space="preserve"># AFTER - this branch</text>
+<text x="26" y="317" fill="#58a6ff" xml:space="preserve">$ npx vitest run \</text>
+<text x="26" y="342" fill="#58a6ff" xml:space="preserve">    __tests__/hooks/query/use-automations-backend-switch.test.tsx \</text>
+<text x="26" y="367" fill="#58a6ff" xml:space="preserve">    __tests__/components/backends/backend-selector.test.tsx</text>
+<text x="26" y="417" fill="#3fb950" font-weight="600" xml:space="preserve"> Test Files  2 passed (2)</text>
+<text x="26" y="442" fill="#3fb950" font-weight="600" xml:space="preserve">      Tests  38 passed (38)</text>
+<text x="26" y="467" fill="#3fb950" font-weight="600" xml:space="preserve">   Duration  13.24s (transform 2.45s, setup 1.55s, import 6.93s, tests 6.54s, environment 1.89s)</text>
+</svg>

@@ -1,0 +1,166 @@
+import { useTranslation } from "react-i18next";
+import {
+  OpenHandsEvent,
+  ActionEvent,
+  ObservationEvent,
+} from "#/types/agent-server/core";
+import { InvokeSkillObservation } from "#/types/agent-server/core/base/observation";
+import { I18nKey } from "#/i18n/declaration";
+import { GenericEventMessage } from "../../../features/chat/generic-event-message";
+import { useStandaloneEventRowClass } from "../../../features/chat/is-in-event-group-context";
+import { getEventContent } from "../event-content-helpers/get-event-content";
+import {
+  getACPToolCallResult,
+  getObservationResult,
+  ObservationResultStatus,
+} from "../event-content-helpers/get-observation-result";
+import {
+  isACPToolCallEvent,
+  isObservationEvent,
+  isUserRejectObservation,
+} from "#/types/agent-server/type-guards";
+import {
+  SkillReadyEvent,
+  SkillReadyItem,
+  isSkillReadyEvent,
+} from "../event-content-helpers/create-skill-ready-event";
+import { getInvokeSkillItems } from "../event-content-helpers/get-invoke-skill-items";
+import { SkillReadyContentList } from "./skill-ready-content-list";
+import SkillsIcon from "#/icons/skills.svg?react";
+import { isMarkdownFileEditorEvent } from "#/components/features/chat/tool-visualizers/primitives/markdown-file-preview";
+import { CollapsibleThinking, StepThinking } from "./collapsible-thinking";
+import { MarkdownRenderer } from "../../../features/markdown/markdown-renderer";
+
+interface GenericEventMessageWrapperProps {
+  event: OpenHandsEvent | SkillReadyEvent;
+  isLastMessage: boolean;
+  correspondingAction?: ActionEvent;
+  /** The model's reasoning for this step, shown inside the step's details. */
+  reasoning?: string;
+}
+
+/**
+ * Resolves the expandable skill-knowledge list shared by Skill Ready events and
+ * invoke-skill tool observations. Returns the list items and their header
+ * label, or null when the event carries no skill knowledge (so the caller keeps
+ * the default details body). Additional skill-knowledge sources slot in as one
+ * more branch here.
+ */
+function getSkillKnowledge(
+  event: OpenHandsEvent | SkillReadyEvent,
+): { items: SkillReadyItem[]; titleKey: I18nKey } | null {
+  if (isSkillReadyEvent(event)) {
+    return event._skillReadyItems.length > 0
+      ? {
+          items: event._skillReadyItems,
+          titleKey: I18nKey.SKILLS$TRIGGERED_SKILL_KNOWLEDGE,
+        }
+      : null;
+  }
+  if (
+    isObservationEvent(event) &&
+    event.observation.kind === "InvokeSkillObservation"
+  ) {
+    const items = getInvokeSkillItems(
+      event as ObservationEvent<InvokeSkillObservation>,
+    );
+    return items.length > 0
+      ? { items, titleKey: I18nKey.SKILLS$INVOKED_SKILL_KNOWLEDGE }
+      : null;
+  }
+  return null;
+}
+
+export function GenericEventMessageWrapper({
+  event,
+  correspondingAction,
+  reasoning = "",
+}: GenericEventMessageWrapperProps) {
+  const { t } = useTranslation("openhands");
+  const standaloneRowClass = useStandaloneEventRowClass();
+  const { title, details } = getEventContent(event, correspondingAction);
+
+  // TaskTrackerObservation has its own rendering
+  if (
+    !isSkillReadyEvent(event) &&
+    isObservationEvent(event) &&
+    event.observation.kind === "TaskTrackerObservation"
+  ) {
+    return (
+      <>
+        <CollapsibleThinking
+          content={reasoning}
+          expansionId={`reasoning-${event.id}`}
+        />
+        <div>{details}</div>
+      </>
+    );
+  }
+
+  // Determine success status
+  let success: ObservationResultStatus | undefined;
+  if (isSkillReadyEvent(event)) {
+    success = "success";
+  } else if (isObservationEvent(event)) {
+    success = getObservationResult(event);
+  } else if (isACPToolCallEvent(event)) {
+    success = getACPToolCallResult(event);
+  }
+
+  // Skill Ready events and invoke-skill tool observations both render the
+  // expandable skill-knowledge list (with the skills icon); they differ only in
+  // the header label.
+  const skillKnowledge = getSkillKnowledge(event);
+  const stepDetails = skillKnowledge ? (
+    <SkillReadyContentList
+      items={skillKnowledge.items}
+      titleKey={skillKnowledge.titleKey}
+    />
+  ) : (
+    details
+  );
+  const bodyDetails = reasoning.trim() ? (
+    <div className="flex flex-col gap-2">
+      <StepThinking content={reasoning} />
+      {typeof stepDetails === "string" ? (
+        <MarkdownRenderer>{stepDetails}</MarkdownRenderer>
+      ) : (
+        stepDetails
+      )}
+    </div>
+  ) : (
+    stepDetails
+  );
+
+  // Markdown file-editor cards carry a clipped preview; expand them by
+  // default so the artifact is visible without an extra chevron click.
+  const initiallyExpanded =
+    !isSkillReadyEvent(event) &&
+    isMarkdownFileEditorEvent(event, correspondingAction);
+
+  return (
+    <GenericEventMessage
+      title={title}
+      details={bodyDetails}
+      success={success}
+      initiallyExpanded={initiallyExpanded}
+      timestamp={event.timestamp}
+      className={standaloneRowClass}
+      titleTrailing={
+        !isSkillReadyEvent(event) && isUserRejectObservation(event) ? (
+          <span
+            data-testid="rejected-indicator"
+            className="ml-2 flex-shrink-0 text-danger"
+          >
+            {t(I18nKey.EVENT$REJECTED)}
+          </span>
+        ) : undefined
+      }
+      titleIcon={
+        skillKnowledge ? (
+          <SkillsIcon className="h-4 w-4 stroke-muted flex-shrink-0 mr-2" />
+        ) : undefined
+      }
+    />
+  );
+}

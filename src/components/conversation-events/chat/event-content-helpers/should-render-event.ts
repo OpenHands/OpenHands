@@ -1,0 +1,240 @@
+import { CHILD_CONVERSATION_RESULT_PREFIX } from "#/constants/child-conversation";
+import { SECRET_REQUEST_RESULT_PREFIX } from "#/constants/secret-request";
+import { ASK_USER_ANSWER_PREFIX } from "#/utils/decision-closures";
+import { MessageEvent, OpenHandsEvent } from "#/types/agent-server/core";
+import {
+  isActionEvent,
+  isObservationEvent,
+  isMessageEvent,
+  isAgentErrorEvent,
+  isConversationStateUpdateEvent,
+  isGoalConversationStateUpdateEvent,
+  isHookExecutionEvent,
+  isACPToolCallEvent,
+  isStreamingDeltaEvent,
+  isUserRejectObservation,
+} from "#/types/agent-server/type-guards";
+
+// Prefixes of the SDK goal-loop re-prompts (FOLLOWUP_PROMPT / RESUME_PROMPT in
+// openhands.sdk .../conversation/goal/prompts.py). The goal loop injects these
+// as `user` messages each round to steer the agent, and FOLLOWUP_PROMPT embeds
+// the judge's verdict — which the goal banner already surfaces. The persisted
+// event carries no marker distinguishing them from real user input, so we match
+// the prompt text to keep this machinery out of the chat. Brittle by design;
+// keep in sync with the SDK prompts (the durable fix is a persisted goal-loop
+// flag on the event).
+const GOAL_REPROMPT_PREFIXES = [
+  "The goal is NOT yet complete (audit iteration",
+  "Resuming a goal that was paused or interrupted.",
+];
+
+const userMessageText = (event: MessageEvent): string | null => {
+  if (event.llm_message?.role !== "user") return null;
+  const content = event.llm_message.content;
+  return Array.isArray(content)
+    ? content
+        .filter((c) => c.type === "text")
+        .map((c) => c.text)
+        .join("\n")
+    : "";
+};
+
+const isGoalLoopReprompt = (event: MessageEvent): boolean => {
+  const text = userMessageText(event);
+  if (text === null) return false;
+  return GOAL_REPROMPT_PREFIXES.some((prefix) => text.startsWith(prefix));
+};
+
+// SDK empty-response nudge (`_send_corrective_nudge`); keep in sync with the SDK.
+const CORRECTIVE_NUDGE_PREFIX =
+  "Your last response did not include a function call or a message.";
+
+const environmentMessageStartsWith = (
+  event: MessageEvent,
+  prefix: string,
+): boolean =>
+  event.source === "environment" &&
+  (userMessageText(event)?.startsWith(prefix) ?? false);
+
+export const isCorrectiveNudge = (event: MessageEvent): boolean =>
+  environmentMessageStartsWith(event, CORRECTIVE_NUDGE_PREFIX);
+
+// Feedback a blocked Stop hook sends back to the agent
+// (`ACP_STOP_HOOK_FEEDBACK_PREFIX` in the SDK; keep in sync). The hook's own
+// row already shows it as the blocked reason or context, so the message does
+// not repeat it in the chat.
+const STOP_HOOK_FEEDBACK_PREFIX = "[Stop hook feedback]";
+
+const isStopHookFeedback = (event: MessageEvent): boolean =>
+  environmentMessageStartsWith(event, STOP_HOOK_FEEDBACK_PREFIX);
+
+// Tool results that reach the agent as `user` messages. The frontend posts the
+// outcome of a `launch_child_conversation` or `request_secret` call this way
+// because client tools have no result channel (see
+// `services/child-conversation-launch.ts` and `services/secret-request.ts`);
+// the agent relays the outcome in its own reply. The server saves an answer
+// picked on a decision card the same way, and the card shows that answer.
+// None of these raw messages belong in the chat.
+const TOOL_RESULT_PREFIXES = [
+  CHILD_CONVERSATION_RESULT_PREFIX,
+  SECRET_REQUEST_RESULT_PREFIX,
+  ASK_USER_ANSWER_PREFIX,
+];
+
+const isToolResult = (event: MessageEvent): boolean => {
+  const text = userMessageText(event);
+  return (
+    text !== null &&
+    TOOL_RESULT_PREFIXES.some((prefix) => text.startsWith(prefix))
+  );
+};
+
+/**
+ * A react / unreact call that succeeded. The reaction shows as a chip on its
+ * message (MessageReactions), so groupEvents drops the tool card but keeps the
+ * agent's narration on the call (its thought and reasoning). While pending,
+ * the call itself shows, so the user sees what they are asked to confirm;
+ * a failed reaction shows like any failed tool.
+ */
+export const isReactionResult = (event: OpenHandsEvent): boolean =>
+  isObservationEvent(event) &&
+  (event.observation.kind as string) === "ReactionObservation" &&
+  !(event.observation as { is_error?: boolean }).is_error;
+
+/**
+ * An edit_message call that succeeded. The edit shows in place on its message
+ * (useMessageEdit), so, like a reaction, groupEvents drops the tool card but
+ * keeps the agent's narration; a failed edit shows like any failed tool.
+ */
+export const isMessageEditResult = (event: OpenHandsEvent): boolean =>
+  isObservationEvent(event) &&
+  (event.observation.kind as string) === "EditMessageObservation" &&
+  !(event.observation as { is_error?: boolean }).is_error;
+
+export const shouldRenderEvent = (event: OpenHandsEvent) => {
+  if (isConversationStateUpdateEvent(event)) {
+    // A finished `/goal` loop renders inline so it settles into the
+    // conversation; the live (active) banner is shown separately by
+    // GoalStatusBanner, and all other state updates (and the in-progress goal
+    // events) stay hidden.
+    return isGoalConversationStateUpdateEvent(event) && !event.value.active;
+  }
+
+  // Render action events (with filtering)
+  if (isActionEvent(event)) {
+    // For V1, action is an object with kind property
+    const actionType = event.action.kind;
+
+    if (!actionType) {
+      return false;
+    }
+
+    // Hide user commands from the chat interface
+    if (actionType === "ExecuteBashAction" && event.source === "user") {
+      return false;
+    }
+
+    // Hide PlanningFileEditorAction - handled separately with PlanPreview component
+    if (actionType === "PlanningFileEditorAction") {
+      return false;
+    }
+
+    // A react / unreact call stays visible while it has no observation (the
+    // UI list swaps an action for its observation), so the user sees the
+    // emoji and message they are asked to confirm (see isReactionResult).
+
+    // The model switch tool reuses the same inline model message UI as
+    // `/model <profile>` once the observation arrives.
+    if (actionType === "SwitchLLMAction") {
+      return false;
+    }
+
+    return true;
+  }
+
+  // Render observation events
+  if (isObservationEvent(event)) {
+    // A successful reaction passes so the agent's narration on the call
+    // still shows; groupEvents drops its tool card (see isReactionResult).
+
+    // Successful model switches are rendered through ModelMessages so they
+    // look identical to `/model <profile>` confirmations. Failed switches
+    // still render as observations so the error remains visible in chat.
+    // Same treatment for the router-driven classifier switch — its success
+    // path produces the same inline "Switched to" message via the
+    // model-store seam, so it must not render as a raw observation card.
+    if (
+      (event.observation.kind === "SwitchLLMObservation" ||
+        event.observation.kind === "ClassifyAndSwitchLLMObservation") &&
+      !event.observation.is_error
+    ) {
+      return false;
+    }
+
+    return true;
+  }
+
+  // Render the rejection that replaced a rejected action, so the action stays
+  // in the chat marked as rejected instead of vanishing
+  if (isUserRejectObservation(event)) {
+    return true;
+  }
+
+  // Render message events (user and assistant messages), except the goal loop's
+  // injected re-prompts — the judge feedback they carry is shown in the goal
+  // banner, so otherwise they leak into the chat as fake user turns — the
+  // client tool results, which are machine payloads the agent relays in its
+  // own reply, and Stop hook feedback, which the hook row already shows.
+  if (isMessageEvent(event)) {
+    return (
+      !isGoalLoopReprompt(event) &&
+      !isToolResult(event) &&
+      !isStopHookFeedback(event)
+    );
+  }
+
+  // Render agent error events
+  if (isAgentErrorEvent(event)) {
+    return true;
+  }
+
+  // Render hook execution events
+  if (isHookExecutionEvent(event)) {
+    return true;
+  }
+
+  // Render ACP sub-agent tool call events at every lifecycle stage. The SDK
+  // now persists exactly two events per ``tool_call_id`` — one early
+  // ``started`` event (``pending`` / ``in_progress``) and one terminal
+  // (``completed`` / ``failed``) event — the action->observation pair for a
+  // tool call. The ``started`` event renders the card as "running" (no check
+  // mark; see ``getACPToolCallResult``) and ``handleEventForUI`` replaces it
+  // in place by ``tool_call_id`` once the terminal event arrives, mirroring
+  // how an ObservationEvent supersedes its ActionEvent. The old terminal-only
+  // gate existed because the source fanned out one cumulative-output frame per
+  // ``ToolCallProgress``, which flashed half-formed cards mid-stream; that
+  // fan-out is gone, so the running card is now a single clean event.
+  if (isACPToolCallEvent(event)) {
+    return true;
+  }
+
+  if (isStreamingDeltaEvent(event)) {
+    return event.content !== null || event.reasoning_content !== null;
+  }
+
+  // Don't render any other event types (system events, etc.)
+  return false;
+};
+
+export const hasUserEvent = (events: OpenHandsEvent[]) =>
+  events.some((event) => event.source === "user");
+
+/**
+ * Whether a rendered event can anchor something placed after it (a /model
+ * message). A reaction or message edit result renders no item of its own,
+ * so it cannot.
+ */
+export const canAnchorAfterEvent = (event: OpenHandsEvent): boolean =>
+  shouldRenderEvent(event) &&
+  !isReactionResult(event) &&
+  !isMessageEditResult(event);

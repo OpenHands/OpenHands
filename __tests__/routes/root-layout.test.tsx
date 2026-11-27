@@ -1,0 +1,632 @@
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { act, fireEvent, render, screen } from "@testing-library/react";
+import { type ReactNode } from "react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { createRoutesStub, data, Link } from "react-router";
+import MainApp, { ErrorBoundary } from "#/routes/root-layout";
+import { ActiveBackendProvider } from "#/contexts/active-backend-context";
+import { I18nKey } from "#/i18n/declaration";
+
+const useConfigMock = vi.fn();
+const useSettingsMock = vi.fn();
+const changeLanguageMock = vi.fn();
+const ensureActiveProfileMock = vi.fn();
+const migrateEnabledSkillsMock = vi.fn();
+const migrateDefaultAgentProfileMock = vi.fn();
+const syncTelemetryConsentMock = vi.fn();
+const syncAutomationTelemetryConsentMock = vi.fn();
+const telemetryIdentityMock = vi.fn();
+const syncDocumentLanguageMock = vi.fn();
+
+vi.mock("#/hooks/query/use-config", () => ({
+  useConfig: () => useConfigMock(),
+}));
+
+vi.mock("#/hooks/query/use-settings", () => ({
+  useSettings: () => useSettingsMock(),
+}));
+
+vi.mock("#/hooks/use-migrate-enabled-skills", () => ({
+  useMigrateEnabledSkills: () => migrateEnabledSkillsMock(),
+}));
+
+vi.mock("#/hooks/use-migrate-default-agent-profile", () => ({
+  useMigrateDefaultAgentProfile: () => migrateDefaultAgentProfileMock(),
+}));
+
+vi.mock("#/hooks/use-sync-telemetry-consent", () => ({
+  useSyncTelemetryConsent: () => syncTelemetryConsentMock(),
+}));
+
+vi.mock("#/hooks/use-sync-automation-telemetry-consent", () => ({
+  useSyncAutomationTelemetryConsent: () => syncAutomationTelemetryConsentMock(),
+}));
+
+vi.mock("#/hooks/use-telemetry-identity", () => ({
+  useTelemetryIdentity: () => telemetryIdentityMock(),
+}));
+
+vi.mock("#/hooks/use-sync-document-language", () => ({
+  useSyncDocumentLanguage: () => syncDocumentLanguageMock(),
+}));
+
+vi.mock("#/hooks/use-ensure-active-profile", () => ({
+  useEnsureActiveProfile: () => ensureActiveProfileMock(),
+}));
+
+vi.mock(
+  "#/components/features/canvas-extensions/canvas-extensions-runtime",
+  () => ({
+    CanvasExtensionsRuntimeProvider: ({ children }: { children: ReactNode }) =>
+      children,
+  }),
+);
+
+vi.mock("#/hooks/use-app-title", () => ({
+  useAppTitle: () => "OpenHands",
+}));
+
+vi.mock("#/components/features/sidebar/sidebar", () => ({
+  Sidebar: () => <div data-testid="sidebar" />,
+}));
+
+vi.mock("#/components/features/sidebar/sidebar-mobile-menu-bar", async () => {
+  const { useSidebarMobileNav } = await vi.importActual<
+    typeof import("#/components/features/sidebar/sidebar-mobile-nav-context")
+  >("#/components/features/sidebar/sidebar-mobile-nav-context");
+
+  return {
+    SidebarMobileMenuBar: () => {
+      const { open } = useSidebarMobileNav();
+      return (
+        <button type="button" data-testid="mobile-menu-bar" onClick={open}>
+          Open mobile nav
+        </button>
+      );
+    },
+  };
+});
+
+vi.mock("#/components/features/alerts/alert-banner", () => ({
+  AlertBanner: ({
+    errorMessage,
+  }: {
+    errorMessage: string | null | undefined;
+  }) => <div data-testid="alert-banner">{errorMessage}</div>,
+}));
+
+vi.mock("#/components/features/backends/environment-switch-overlay", () => ({
+  default: () => <div data-testid="environment-switch-overlay" />,
+}));
+
+vi.mock("#/components/features/command-menu/command-menu", () => ({
+  CommandMenu: () => <div data-testid="command-menu" />,
+}));
+
+vi.mock("#/components/features/onboarding", () => ({
+  OnboardingHost: () => <div data-testid="onboarding-host" />,
+}));
+
+vi.mock("react-i18next", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("react-i18next")>();
+  return {
+    ...actual,
+    useTranslation: (namespace?: string) => ({
+      t: (key: string) =>
+        namespace === "openhands" ? key : `missing-namespace:${key}`,
+    }),
+  };
+});
+
+vi.mock("#/i18n", () => ({
+  default: {
+    changeLanguage: (...args: unknown[]) => changeLanguageMock(...args),
+  },
+}));
+
+const RouterStub = createRoutesStub([
+  {
+    path: "/",
+    Component: MainApp,
+    children: [
+      {
+        path: "/",
+        Component: () => (
+          <>
+            <div data-testid="outlet-content" />
+            <Link to="/settings" data-testid="rerender-link">
+              Settings
+            </Link>
+          </>
+        ),
+      },
+      {
+        path: "/automations",
+        Component: () => <div data-testid="outlet-content" />,
+      },
+      {
+        path: "/automations/:id",
+        Component: () => <div data-testid="outlet-content" />,
+      },
+      {
+        path: "/conversations",
+        Component: () => <div data-testid="outlet-content" />,
+      },
+      {
+        path: "/conversations/:id",
+        Component: () => <div data-testid="outlet-content" />,
+      },
+      {
+        path: "/settings",
+        Component: () => <div data-testid="outlet-content" />,
+      },
+      {
+        path: "*",
+        Component: () => <div data-testid="outlet-content" />,
+      },
+    ],
+  },
+]);
+
+function renderMainApp(path = "/") {
+  const queryClient = new QueryClient();
+  return render(
+    <QueryClientProvider client={queryClient}>
+      <ActiveBackendProvider>
+        <RouterStub initialEntries={[path]} />
+      </ActiveBackendProvider>
+    </QueryClientProvider>,
+  );
+}
+
+function setViewportWidth(width: number) {
+  Object.defineProperty(window, "innerWidth", {
+    configurable: true,
+    writable: true,
+    value: width,
+  });
+  act(() => {
+    window.dispatchEvent(new Event("resize"));
+  });
+}
+
+function renderRouteError(thrown: unknown) {
+  const ErrorRouterStub = createRoutesStub([
+    {
+      path: "/",
+      Component: () => null,
+      ErrorBoundary,
+      loader: () => {
+        throw thrown;
+      },
+    },
+  ]);
+
+  return render(<ErrorRouterStub initialEntries={["/"]} />);
+}
+
+describe("root layout", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    useConfigMock.mockReturnValue({
+      isLoading: false,
+      data: {
+        maintenance_start_time: null,
+        faulty_models: [],
+        error_message: null,
+        updated_at: new Date().toISOString(),
+      },
+    });
+    useSettingsMock.mockReturnValue({
+      data: {
+        language: "en",
+        user_consents_to_analytics: true,
+      },
+    });
+  });
+
+  it("shows a loading spinner while config is loading", () => {
+    useConfigMock.mockReturnValue({ isLoading: true, data: null });
+
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <ActiveBackendProvider>
+          <RouterStub initialEntries={["/"]} />
+        </ActiveBackendProvider>
+      </QueryClientProvider>,
+    );
+
+    expect(screen.getByTestId("loading-spinner")).toBeInTheDocument();
+  });
+
+  it("does not render the analytics consent modal when analytics consent is missing", async () => {
+    useSettingsMock.mockReturnValue({
+      data: {
+        language: "en",
+        user_consents_to_analytics: null,
+      },
+    });
+
+    renderMainApp();
+
+    expect(screen.getByTestId("sidebar")).toBeInTheDocument();
+    expect(screen.getByTestId("outlet-content")).toBeInTheDocument();
+    // The analytics consent popup was removed from onboarding: a missing
+    // (null) consent value must no longer surface the consent form.
+    expect(
+      screen.queryByTestId("user-capture-consent-form"),
+    ).not.toBeInTheDocument();
+    expect(await screen.findByTestId("command-menu")).toBeInTheDocument();
+  });
+
+  it("renders an identical root-layout className across routes so navigation never shifts the outer container", () => {
+    const paths = [
+      "/",
+      "/automations/abc-123",
+      "/conversations/abc-123",
+      "/settings",
+    ];
+
+    const classNames = paths.map((path) => {
+      const { unmount } = render(
+        <QueryClientProvider client={new QueryClient()}>
+          <ActiveBackendProvider>
+            <RouterStub initialEntries={[path]} />
+          </ActiveBackendProvider>
+        </QueryClientProvider>,
+      );
+      const { className } = screen.getByTestId("root-layout");
+      unmount();
+      return className;
+    });
+
+    expect(new Set(classNames).size).toBe(1);
+  });
+
+  it("initializes layout services and renders the lazy global chrome", async () => {
+    renderMainApp();
+
+    expect(changeLanguageMock).toHaveBeenCalledWith("en");
+    expect(migrateEnabledSkillsMock).toHaveBeenCalledOnce();
+    expect(migrateDefaultAgentProfileMock).toHaveBeenCalledOnce();
+    expect(syncTelemetryConsentMock).toHaveBeenCalledOnce();
+    expect(syncAutomationTelemetryConsentMock).toHaveBeenCalledOnce();
+    expect(telemetryIdentityMock).toHaveBeenCalledOnce();
+    expect(ensureActiveProfileMock).toHaveBeenCalledOnce();
+    expect(syncDocumentLanguageMock).toHaveBeenCalledOnce();
+    expect(document.title).toBe("OpenHands");
+    expect(
+      await screen.findByTestId("environment-switch-overlay"),
+    ).toBeInTheDocument();
+    expect(await screen.findByTestId("command-menu")).toBeInTheDocument();
+    expect(screen.queryByTestId("alert-banner")).not.toBeInTheDocument();
+  });
+
+  it("updates the active language when the setting changes", () => {
+    renderMainApp();
+    expect(changeLanguageMock).toHaveBeenCalledWith("en");
+    changeLanguageMock.mockClear();
+    useSettingsMock.mockReturnValue({
+      data: {
+        language: "fr",
+        user_consents_to_analytics: true,
+      },
+    });
+
+    fireEvent.click(screen.getByTestId("rerender-link"));
+
+    expect(changeLanguageMock).toHaveBeenCalledOnce();
+    expect(changeLanguageMock).toHaveBeenCalledWith("fr");
+  });
+
+  it("leaves the current language unchanged when no language is configured", () => {
+    useSettingsMock.mockReturnValue({
+      data: {
+        language: null,
+        user_consents_to_analytics: true,
+      },
+    });
+
+    renderMainApp();
+
+    expect(changeLanguageMock).not.toHaveBeenCalled();
+    expect(ensureActiveProfileMock).toHaveBeenCalledOnce();
+  });
+
+  it("renders while settings are loading without changing the language", () => {
+    useSettingsMock.mockReturnValue({ data: undefined });
+
+    renderMainApp();
+
+    expect(screen.getByTestId("root-layout")).toBeInTheDocument();
+    expect(changeLanguageMock).not.toHaveBeenCalled();
+  });
+
+  it("shows the mobile menu outside a conversation and hides it inside one", () => {
+    const { unmount } = renderMainApp("/settings");
+
+    expect(screen.getByTestId("mobile-menu-bar")).toBeInTheDocument();
+    unmount();
+
+    renderMainApp("/conversations/abc-123");
+
+    expect(screen.queryByTestId("mobile-menu-bar")).not.toBeInTheDocument();
+  });
+
+  it("clears background inert state when an open mobile nav crosses the desktop breakpoint", () => {
+    const originalWidth = window.innerWidth;
+    try {
+      setViewportWidth(767);
+      renderMainApp();
+      const background = screen.getByTestId("mobile-nav-background-content");
+      expect(background).not.toHaveAttribute("inert");
+      expect(background).not.toHaveAttribute("aria-hidden");
+
+      fireEvent.click(screen.getByTestId("mobile-menu-bar"));
+      expect(background).toHaveAttribute("inert");
+      expect(background).toHaveAttribute("aria-hidden", "true");
+
+      setViewportWidth(768);
+      expect(background).not.toHaveAttribute("inert");
+      expect(background).not.toHaveAttribute("aria-hidden");
+    } finally {
+      setViewportWidth(originalWidth);
+    }
+  });
+
+  it("bounds conversation routes inside the dynamic safe-area viewport", () => {
+    renderMainApp("/conversations/abc-123");
+
+    expect(screen.getByTestId("root-layout")).toHaveClass(
+      "h-dvh",
+      "app-shell-safe-area",
+    );
+    expect(document.getElementById("root-outlet")).toHaveClass(
+      "min-h-0",
+      "overflow-hidden",
+    );
+  });
+
+  it("keeps non-conversation routes scrollable in the app outlet", () => {
+    renderMainApp("/settings");
+
+    expect(document.getElementById("root-outlet")).toHaveClass("overflow-auto");
+  });
+
+  it("does not hide the mobile menu for a nested non-conversation route", () => {
+    renderMainApp("/settings/conversations/abc-123");
+
+    expect(screen.getByTestId("mobile-menu-bar")).toBeInTheDocument();
+  });
+
+  it("renders the onboarding host only when preview mode is requested", () => {
+    const { unmount } = renderMainApp("/settings");
+
+    expect(screen.queryByTestId("onboarding-host")).not.toBeInTheDocument();
+    unmount();
+
+    renderMainApp("/settings?previewOnboardingStep=2");
+
+    expect(screen.getByTestId("onboarding-host")).toBeInTheDocument();
+  });
+
+  it("renders the lazy alert banner when the backend reports an error", async () => {
+    useConfigMock.mockReturnValue({
+      isLoading: false,
+      data: {
+        maintenance_start_time: null,
+        faulty_models: [],
+        error_message: "Backend degraded",
+        updated_at: new Date().toISOString(),
+      },
+    });
+
+    renderMainApp();
+
+    expect(await screen.findByTestId("alert-banner")).toHaveTextContent(
+      "Backend degraded",
+    );
+  });
+
+  it.each([
+    {
+      label: "scheduled maintenance",
+      data: {
+        maintenance_start_time: "2030-01-02T03:04:05.000Z",
+        faulty_models: [],
+        error_message: null,
+        updated_at: "2030-01-01T00:00:00.000Z",
+      },
+    },
+    {
+      label: "a faulty model",
+      data: {
+        maintenance_start_time: null,
+        faulty_models: ["broken-model"],
+        error_message: null,
+        updated_at: "2030-01-01T00:00:00.000Z",
+      },
+    },
+  ])("renders the alert banner for $label", async ({ data: configData }) => {
+    useConfigMock.mockReturnValue({
+      isLoading: false,
+      data: configData,
+    });
+
+    renderMainApp();
+
+    expect(await screen.findByTestId("alert-banner")).toBeInTheDocument();
+  });
+
+  it("renders without an alert when config data is unavailable", async () => {
+    useConfigMock.mockReturnValue({ isLoading: false, data: null });
+
+    renderMainApp();
+
+    expect(await screen.findByTestId("command-menu")).toBeInTheDocument();
+    expect(screen.queryByTestId("alert-banner")).not.toBeInTheDocument();
+  });
+
+  describe("macOS desktop title bar", () => {
+    afterEach(() => {
+      delete window.desktopShell;
+    });
+
+    it("reserves a draggable band for the traffic lights on the macOS desktop app", () => {
+      window.desktopShell = { platform: "darwin" };
+
+      renderMainApp();
+
+      expect(screen.getByTestId("titlebar-drag-region")).toHaveAttribute(
+        "aria-hidden",
+        "true",
+      );
+      expect(screen.getByTestId("root-layout")).toHaveClass(
+        "app-shell-titlebar-inset",
+      );
+    });
+
+    it("adds no band in a browser tab, where the shell owns no window chrome", () => {
+      renderMainApp();
+
+      expect(
+        screen.queryByTestId("titlebar-drag-region"),
+      ).not.toBeInTheDocument();
+      expect(screen.getByTestId("root-layout")).not.toHaveClass(
+        "app-shell-titlebar-inset",
+      );
+    });
+
+    it.each(["win32", "linux"])(
+      "adds no band on %s, which keeps the native title bar",
+      (platform) => {
+        window.desktopShell = { platform };
+
+        renderMainApp();
+
+        expect(
+          screen.queryByTestId("titlebar-drag-region"),
+        ).not.toBeInTheDocument();
+        expect(screen.getByTestId("root-layout")).not.toHaveClass(
+          "app-shell-titlebar-inset",
+        );
+      },
+    );
+
+    it("keeps a drag band on the loading screen, before config resolves", () => {
+      window.desktopShell = { platform: "darwin" };
+      useConfigMock.mockReturnValue({ isLoading: true, data: null });
+
+      renderMainApp();
+
+      expect(screen.getByTestId("titlebar-drag-region")).toBeInTheDocument();
+    });
+
+    it("keeps the band and the inset on the route error screen", async () => {
+      window.desktopShell = { platform: "darwin" };
+
+      renderRouteError(new Error("Kaboom"));
+
+      expect(await screen.findByText("Kaboom")).toBeInTheDocument();
+      expect(
+        screen.getByTestId("titlebar-drag-region").parentElement,
+      ).toHaveClass("app-shell-titlebar-inset");
+    });
+
+    it("drops the band once the window goes fullscreen, where macOS hides the traffic lights", async () => {
+      let isFullScreen = false;
+      let emit: ((value: boolean) => void) | undefined;
+      window.desktopShell = {
+        platform: "darwin",
+        isFullScreen: () => isFullScreen,
+        onFullScreenChange: (cb) => {
+          emit = (value) => {
+            isFullScreen = value;
+            cb(value);
+          };
+          return () => {};
+        },
+      };
+
+      renderMainApp();
+      expect(screen.getByTestId("titlebar-drag-region")).toBeInTheDocument();
+
+      await act(async () => emit?.(true));
+
+      expect(
+        screen.queryByTestId("titlebar-drag-region"),
+      ).not.toBeInTheDocument();
+      expect(screen.getByTestId("root-layout")).not.toHaveClass(
+        "app-shell-titlebar-inset",
+      );
+
+      await act(async () => emit?.(false));
+
+      expect(screen.getByTestId("titlebar-drag-region")).toBeInTheDocument();
+    });
+
+    it("never renders the band when the window is already fullscreen on load, as after a reload", () => {
+      window.desktopShell = {
+        platform: "darwin",
+        isFullScreen: () => true,
+        onFullScreenChange: () => () => {},
+      };
+
+      renderMainApp();
+
+      // Checked on the first commit: a band that is dropped later still flashes.
+      expect(
+        screen.queryByTestId("titlebar-drag-region"),
+      ).not.toBeInTheDocument();
+      expect(screen.getByTestId("root-layout")).not.toHaveClass(
+        "app-shell-titlebar-inset",
+      );
+    });
+  });
+});
+
+describe("root layout error boundary", () => {
+  it("renders an object route response with its HTTP details", async () => {
+    renderRouteError(
+      data(
+        { reason: "maintenance" },
+        { status: 503, statusText: "Service Unavailable" },
+      ),
+    );
+
+    expect(
+      await screen.findByRole("heading", { name: "503" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Service Unavailable")).toBeInTheDocument();
+    expect(screen.getByText('{"reason":"maintenance"}')).toBeInTheDocument();
+  });
+
+  it("renders primitive route-response data without serializing it", async () => {
+    renderRouteError(
+      data("plain failure", { status: 400, statusText: "Bad Request" }),
+    );
+
+    expect(
+      await screen.findByRole("heading", { name: "400" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Bad Request")).toBeInTheDocument();
+    expect(screen.getByText("plain failure")).toBeInTheDocument();
+  });
+
+  it("renders the generic translated heading and message for an Error", async () => {
+    renderRouteError(new Error("Kaboom"));
+
+    expect(
+      await screen.findByRole("heading", { name: I18nKey.ERROR$GENERIC }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Kaboom")).toBeInTheDocument();
+  });
+
+  it("renders the unknown translated heading for a non-Error value", async () => {
+    renderRouteError("mystery failure");
+
+    expect(
+      await screen.findByRole("heading", { name: I18nKey.ERROR$UNKNOWN }),
+    ).toBeInTheDocument();
+  });
+});

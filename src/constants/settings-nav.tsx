@@ -1,0 +1,101 @@
+import {
+  AppWindow,
+  Brain,
+  Container,
+  FlaskConical,
+  Route as RouteIcon,
+  Shield,
+} from "lucide-react";
+import KeyIcon from "#/icons/key.svg?react";
+import MemoryIcon from "#/icons/memory_icon.svg?react";
+import CircuitIcon from "#/icons/u-circuit.svg?react";
+import RobotIcon from "#/icons/u-robot.svg?react";
+
+export interface SettingsNavItem {
+  icon: React.ReactElement;
+  to: string;
+  text: string;
+  /** Short grey subline under the page title (`settings.tsx`). */
+  subtitle: string;
+}
+
+export const OSS_NAV_ITEMS: SettingsNavItem[] = [
+  {
+    // "Agent" is the Agent Profile library: it lists the user's agent profiles
+    // and its create/edit view is the reused Agent settings form plus a name.
+    // The active profile is the current agent (#1571). Replaces the old split
+    // of a global "Agent" form + a separate "Agent profiles" library.
+    icon: <RobotIcon width={16} height={16} />,
+    to: "/settings/agents",
+    text: "SETTINGS$NAV_AGENT",
+    subtitle: "SETTINGS$PAGE_AGENT_PROFILES_SUBLINE",
+  },
+  {
+    icon: <CircuitIcon width={16} height={16} />,
+    to: "/settings/llm",
+    text: "SETTINGS$NAV_LLM",
+    subtitle: "SETTINGS$PAGE_LLM_SUBLINE",
+  },
+  {
+    icon: <RouteIcon className="size-4" strokeWidth={2} aria-hidden />,
+    to: "/settings/meta-llm",
+    text: "SETTINGS$NAV_META_LLM",
+    subtitle: "SETTINGS$PAGE_META_LLM_SUBLINE",
+  },
+  {
+    icon: <MemoryIcon width={16} height={16} />,
+    to: "/settings/condenser",
+    text: "SETTINGS$NAV_CONDENSER",
+    subtitle: "SETTINGS$PAGE_CONDENSER_SUBLINE",
+  },
+  {
+    // The agent's ``agent_context`` section, whatever the schema exposes in it
+    // — today only persistent memory (``agent_context.load_memory``). Not
+    // ``disabledByAcp``: the agent-server stamps the stored flag onto every
+    // profile-resolved agent, ACP included.
+    icon: <Brain className="size-4" strokeWidth={2} aria-hidden />,
+    to: "/settings/agent-context",
+    text: "SETTINGS$NAV_AGENT_CONTEXT",
+    subtitle: "SETTINGS$PAGE_AGENT_CONTEXT_SUBLINE",
+  },
+  {
+    icon: <Shield className="size-4" strokeWidth={2} aria-hidden />,
+    to: "/settings/verification",
+    text: "SETTINGS$NAV_VERIFICATION",
+    subtitle: "SETTINGS$PAGE_VERIFICATION_SUBLINE",
+  },
+  {
+    icon: <Container className="size-4" strokeWidth={2} aria-hidden />,
+    to: "/settings/runtime",
+    text: "SETTINGS$NAV_RUNTIME",
+    subtitle: "SETTINGS$PAGE_RUNTIME_SUBLINE",
+  },
+  {
+    icon: <AppWindow className="size-4" strokeWidth={2} aria-hidden />,
+    to: "/settings/app",
+    text: "SETTINGS$NAV_APPLICATION",
+    subtitle: "SETTINGS$PAGE_APPLICATION_SUBLINE",
+  },
+  {
+    icon: <KeyIcon width={16} height={16} />,
+    to: "/settings/secrets",
+    text: "SETTINGS$NAV_SECRETS",
+    subtitle: "SETTINGS$PAGE_SECRETS_SUBLINE",
+  },
+  {
+    // Experimental features the user turns on or off, listed by the agent server.
+    icon: <FlaskConical className="size-4" strokeWidth={2} aria-hidden />,
+    to: "/settings/experimental",
+    text: "SETTINGS$NAV_EXPERIMENTAL",
+    subtitle: "SETTINGS$PAGE_EXPERIMENTAL_SUBLINE",
+  },
+];
+
+/**
+ * The only OSS nav entry listed when the canvas is locked to a Cloud host —
+ * i.e. deployed into SaaS / self-hosted OHE next to the OHE web app, whose own
+ * settings shell (reached via "All Cloud Settings") owns everything else
+ * (OHE-3168). The other pages are not reachable there either: the settings
+ * layout redirects them here (OHE-3457).
+ */
+export const LOCKED_CLOUD_SETTINGS_NAV_PATH = "/settings/app";

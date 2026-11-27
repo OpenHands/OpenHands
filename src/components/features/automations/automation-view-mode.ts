@@ -1,0 +1,29 @@
+export type AutomationViewMode = "grid" | "list";
+
+export const AUTOMATIONS_VIEW_MODE_STORAGE_KEY = "openhands-automations-view";
+
+export function readStoredAutomationViewMode(): AutomationViewMode {
+  if (typeof window === "undefined") {
+    return "grid";
+  }
+
+  const stored = window.localStorage.getItem(AUTOMATIONS_VIEW_MODE_STORAGE_KEY);
+  return stored === "list" ? "list" : "grid";
+}
+
+export function writeStoredAutomationViewMode(view: AutomationViewMode): void {
+  window.localStorage.setItem(AUTOMATIONS_VIEW_MODE_STORAGE_KEY, view);
+}
+
+/** Shared chrome for the dashboard list and the home activity list. */
+export const automationActivityListClassName =
+  "divide-y divide-border-subtle overflow-hidden rounded-xl border border-border-subtle bg-surface";
+
+// Paper keeps its established raised-row treatment; its low-hover token is
+// intentionally subtle and belongs to its existing settings/profile controls.
+export const automationActivityRowClassName =
+  "group relative flex items-stretch transition-colors hover:bg-interactive-hover-low has-[:focus-visible]:bg-interactive-hover-low dark:hover:bg-surface-raised dark:has-[:focus-visible]:bg-surface-raised [[data-agent-server-ui][data-color-theme=paper]_&]:hover:bg-surface-raised [[data-agent-server-ui][data-color-theme=paper]_&]:has-[:focus-visible]:bg-surface-raised";
+
+/** Inset last-run strip used under the trigger/sparkline row. */
+export const automationCardStatusStripClassName =
+  "mt-3 flex min-h-9 items-center justify-between gap-2 overflow-hidden rounded-md border border-border-subtle bg-surface px-3 py-2 text-xs";

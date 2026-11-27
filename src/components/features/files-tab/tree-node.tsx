@@ -1,0 +1,94 @@
+import { type CSSProperties, useState } from "react";
+import { ChevronDown, ChevronRight } from "lucide-react";
+
+import FileIcon from "#/icons/file.svg?react";
+import FolderIcon from "#/icons/folder.svg?react";
+import { FileTreeNode } from "#/utils/file-tree";
+import { cn } from "#/utils/utils";
+
+interface TreeNodeProps {
+  node: FileTreeNode;
+  depth: number;
+  selectedPath: string | null;
+  onSelectFile: (path: string) => void;
+}
+
+export function TreeNode({
+  node,
+  depth,
+  selectedPath,
+  onSelectFile,
+}: TreeNodeProps) {
+  const [isOpen, setIsOpen] = useState(false);
+  const indentPx = 8 + depth * 12;
+
+  if (node.isDirectory) {
+    return (
+      <li>
+        <button
+          type="button"
+          onClick={() => setIsOpen((prev) => !prev)}
+          aria-expanded={isOpen}
+          data-testid={`file-tree-dir-${node.path}`}
+          className={cn(
+            "flex w-full items-center gap-1.5 py-1 pr-2 pl-(--file-tree-row-indent) text-left text-sm text-contrast",
+            "hover:bg-tertiary cursor-pointer",
+          )}
+          // per-row indentation computed from tree depth at runtime
+          style={{ "--file-tree-row-indent": `${indentPx}px` } as CSSProperties}
+        >
+          <span
+            aria-hidden
+            className="inline-flex w-3.5 shrink-0 items-center justify-center text-muted"
+          >
+            {isOpen ? (
+              <ChevronDown className="w-3.5 h-3.5" />
+            ) : (
+              <ChevronRight className="w-3.5 h-3.5" />
+            )}
+          </span>
+          <FolderIcon className="w-3.5 h-3.5 shrink-0" />
+          <span className="truncate">{node.name}</span>
+        </button>
+        {isOpen && node.children.length > 0 && (
+          <ul>
+            {node.children.map((child) => (
+              <TreeNode
+                key={child.path}
+                node={child}
+                depth={depth + 1}
+                selectedPath={selectedPath}
+                onSelectFile={onSelectFile}
+              />
+            ))}
+          </ul>
+        )}
+      </li>
+    );
+  }
+
+  const isSelected = selectedPath === node.path;
+  return (
+    <li>
+      <button
+        type="button"
+        onClick={() => onSelectFile(node.path)}
+        data-testid={`file-tree-file-${node.path}`}
+        className={cn(
+          "flex w-full items-center gap-1.5 py-1 pr-2 pl-(--file-tree-row-indent) text-left text-sm",
+          "hover:bg-tertiary cursor-pointer",
+          isSelected
+            ? "bg-interactive-hover text-contrast"
+            : "text-text-tertiary",
+        )}
+        // per-row indentation computed from tree depth at runtime
+        style={
+          { "--file-tree-row-indent": `${indentPx + 16}px` } as CSSProperties
+        }
+      >
+        <FileIcon className="w-3.5 h-3.5 shrink-0" />
+        <span className="truncate">{node.name}</span>
+      </button>
+    </li>
+  );
+}

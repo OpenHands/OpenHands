@@ -1,0 +1,647 @@
+import { describe, it, expect, vi } from "vitest";
+import { I18nextProvider } from "react-i18next";
+import { translationResources } from "#/i18n/resources";
+
+vi.unmock("react-i18next");
+import i18next from "i18next";
+import { screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { renderWithProviders } from "test-utils";
+import { SessionActivityDetails } from "#/components/conversation-events/chat/event-message-components/session-activity";
+import type { SessionActivity } from "#/stores/session-activity-store";
+import { EventGroup } from "#/components/conversation-events/chat/event-message-components/event-group";
+import {
+  ActionEvent,
+  AgentErrorEvent,
+  HookExecutionEvent,
+  ObservationEvent,
+  SecurityRisk,
+  UserRejectObservation,
+} from "#/types/agent-server/core";
+import {
+  ExecuteBashAction,
+  FileEditorAction,
+} from "#/types/agent-server/core/base/action";
+import { ExecuteBashObservation } from "#/types/agent-server/core/base/observation";
+
+const makeBashAction = (
+  id: string,
+  command: string,
+): ActionEvent<ExecuteBashAction> => ({
+  id,
+  timestamp: new Date().toISOString(),
+  source: "agent",
+  thought: [],
+  thinking_blocks: [],
+  action: {
+    kind: "ExecuteBashAction",
+    command,
+    is_input: false,
+    timeout: null,
+    reset: false,
+  },
+  tool_name: "execute_bash",
+  tool_call_id: `call_${id}`,
+  tool_call: {
+    id: `call_${id}`,
+    type: "function",
+    function: {
+      name: "execute_bash",
+      arguments: JSON.stringify({ command }),
+    },
+  },
+  llm_response_id: `response_${id}`,
+  security_risk: SecurityRisk.UNKNOWN,
+});
+
+const makeBashObservation = (
+  id: string,
+  actionId: string,
+  command: string,
+): ObservationEvent<ExecuteBashObservation> => ({
+  id,
+  timestamp: new Date().toISOString(),
+  source: "environment",
+  tool_name: "execute_bash",
+  tool_call_id: `call_${actionId}`,
+  action_id: actionId,
+  observation: {
+    kind: "ExecuteBashObservation",
+    content: [{ type: "text", text: "ok" }],
+    command,
+    exit_code: 0,
+    error: false,
+    timeout: false,
+    metadata: {} as never,
+  },
+});
+
+const makeUserRejectObservation = (
+  id: string,
+  actionId: string,
+): UserRejectObservation => ({
+  id,
+  timestamp: new Date().toISOString(),
+  source: "environment",
+  tool_name: "execute_bash",
+  tool_call_id: `call_${actionId}`,
+  action_id: actionId,
+  rejection_reason: "User rejected the action",
+});
+
+const makeAgentErrorEvent = (
+  id: string,
+  actionId: string,
+): AgentErrorEvent => ({
+  id,
+  timestamp: new Date().toISOString(),
+  kind: "AgentErrorEvent",
+  source: "agent",
+  tool_name: "execute_bash",
+  tool_call_id: `call_${actionId}`,
+  error: "boom",
+});
+
+const createTranslations = async (lng = "en") => {
+  const instance = i18next.createInstance();
+  await instance.init({
+    lng,
+    fallbackLng: "en",
+    defaultNS: "openhands",
+    resources: Object.fromEntries(
+      Object.entries(translationResources).map(([language, values]) => [
+        language,
+        { openhands: values },
+      ]),
+    ),
+  });
+  return instance;
+};
+
+describe("EventGroup", () => {
+  it("returns null for an empty events array", () => {
+    const { container } = renderWithProviders(
+      <EventGroup events={[]}>
+        <div>child</div>
+      </EventGroup>,
+    );
+
+    expect(container).toBeEmptyDOMElement();
+  });
+
+  it("keeps reasoning-only groups on their existing summary", () => {
+    const thought: ActionEvent = {
+      ...makeBashAction("thinking", "unused"),
+      action: { kind: "ThinkAction", thought: "Review the approach" },
+    };
+    renderWithProviders(
+      <EventGroup events={[thought]}>
+        <div>Reasoning</div>
+      </EventGroup>,
+    );
+    expect(screen.getByTestId("event-group-toggle")).toHaveTextContent(
+      "THINKING$TITLE",
+    );
+  });
+
+  it("does not count a thinking action against a single command's descriptive title", () => {
+    const thought: ActionEvent = {
+      ...makeBashAction("thinking", "unused"),
+      action: { kind: "ThinkAction", thought: "Review the approach" },
+    };
+    const command = {
+      ...makeBashAction("command", "ls"),
+      summary: "Inspecting the workspace",
+    };
+    renderWithProviders(
+      <EventGroup events={[thought, command]}>
+        <div>Content</div>
+      </EventGroup>,
+    );
+    expect(screen.getByTestId("event-group-toggle")).toHaveTextContent(
+      "Inspecting the workspace",
+    );
+  });
+
+  it("summarizes a settled group by what its steps did", () => {
+    const events = [
+      makeBashObservation("o1", "a1", "ls"),
+      makeBashObservation("o2", "a2", "pwd"),
+      makeBashObservation("o3", "a3", "whoami"),
+    ];
+
+    renderWithProviders(
+      <EventGroup events={events}>
+        <div data-testid="child">child content</div>
+      </EventGroup>,
+    );
+
+    expect(screen.getByText("EVENT_GROUP$RAN_COMMANDS")).toBeInTheDocument();
+    // Children should not be visible in the collapsed state.
+    expect(screen.queryByTestId("child")).not.toBeInTheDocument();
+  });
+
+  it("keeps the summary when it is not the live stage", () => {
+    const events = [
+      makeBashObservation("o1", "a1", "ls"),
+      makeBashObservation("o2", "a2", "pwd"),
+      // Last action has NOT been replaced by an observation -> still running.
+      makeBashAction("a3", "echo hello"),
+    ];
+
+    renderWithProviders(
+      <EventGroup events={events}>
+        <div>child</div>
+      </EventGroup>,
+    );
+
+    expect(screen.getByText("EVENT_GROUP$RAN_COMMANDS")).toBeInTheDocument();
+    expect(screen.queryByText(/ACTION_MESSAGE\$RUN/)).not.toBeInTheDocument();
+    expect(screen.queryByTestId("spinner-icon")).not.toBeInTheDocument();
+  });
+
+  it("announces live status changes without moving focus or announcing settled history", async () => {
+    const user = userEvent.setup();
+    const action = {
+      ...makeBashAction("a1", "npm test"),
+      summary: "Checking tests",
+    };
+    const observation = makeBashObservation("o1", "a1", "npm test");
+    const { rerender } = renderWithProviders(
+      <EventGroup events={[action]}>
+        <div>child</div>
+      </EventGroup>,
+    );
+    const status = screen.getByRole("status");
+    expect(status).toBeEmptyDOMElement();
+    expect(status).toHaveAttribute("aria-live", "polite");
+    expect(status).toHaveAttribute("aria-atomic", "true");
+
+    rerender(
+      <EventGroup events={[action]} isLive>
+        <div>child</div>
+      </EventGroup>,
+    );
+    expect(status).toHaveTextContent("Checking tests");
+    const toggle = screen.getByRole("button");
+    await user.click(toggle);
+    expect(toggle).toHaveFocus();
+    expect(within(toggle).queryByRole("status")).not.toBeInTheDocument();
+
+    rerender(
+      <EventGroup events={[observation]} isLive>
+        <div>child</div>
+      </EventGroup>,
+    );
+    expect(status).toHaveTextContent("ACTION_MESSAGE$THINK");
+    expect(toggle).toHaveFocus();
+
+    rerender(
+      <EventGroup events={[observation]}>
+        <div>child</div>
+      </EventGroup>,
+    );
+    expect(status).toBeEmptyDOMElement();
+  });
+
+  it("shows the running step with a spinner while it is the live stage", () => {
+    const events = [
+      makeBashObservation("o1", "a1", "ls"),
+      makeBashAction("a2", "echo hello"),
+    ];
+
+    renderWithProviders(
+      <EventGroup events={events} isLive>
+        <div>child</div>
+      </EventGroup>,
+    );
+
+    expect(
+      within(screen.getByRole("button")).getByText(/ACTION_MESSAGE\$RUN/),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText("EVENT_GROUP$RAN_COMMANDS"),
+    ).not.toBeInTheDocument();
+    expect(screen.getByTestId("spinner-icon")).toBeInTheDocument();
+  });
+
+  it("shows Thinking with a spinner between steps of the live stage", () => {
+    const events = [
+      makeBashObservation("o1", "a1", "ls"),
+      makeBashObservation("o2", "a2", "pwd"),
+    ];
+
+    renderWithProviders(
+      <EventGroup events={events} isLive>
+        <div>child</div>
+      </EventGroup>,
+    );
+
+    expect(
+      within(screen.getByRole("button")).getByText("ACTION_MESSAGE$THINK"),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId("spinner-icon")).toBeInTheDocument();
+  });
+
+  it("does not treat an action resolved by an AgentErrorEvent as running", () => {
+    const events = [
+      makeBashObservation("o1", "a1", "ls"),
+      makeBashAction("a2", "pwd"),
+    ];
+    const allEvents = [...events, makeAgentErrorEvent("e2", "a2")];
+
+    renderWithProviders(
+      <EventGroup events={events} allEvents={allEvents} isLive>
+        <div>child</div>
+      </EventGroup>,
+    );
+
+    expect(
+      within(screen.getByRole("button")).getByText("ACTION_MESSAGE$THINK"),
+    ).toBeInTheDocument();
+  });
+
+  it("lists each kind of step as a sentence in order of first appearance", async () => {
+    const translations = await createTranslations();
+    const view: ActionEvent<FileEditorAction> = {
+      ...makeBashAction("a3", "unused"),
+      action: {
+        kind: "FileEditorAction",
+        command: "view",
+        path: "README.md",
+        file_text: null,
+        old_str: null,
+        new_str: null,
+        insert_line: null,
+        view_range: null,
+      },
+      tool_name: "file_editor",
+    } as ActionEvent<FileEditorAction>;
+    const events = [
+      makeBashObservation("o1", "a1", "ls"),
+      makeBashObservation("o2", "a2", "pwd"),
+      { ...makeBashObservation("o3", "a3", ""), tool_name: "file_editor" },
+    ];
+
+    renderWithProviders(
+      <I18nextProvider i18n={translations}>
+        <EventGroup events={events} allEvents={[view, ...events]}>
+          <div>child</div>
+        </EventGroup>
+      </I18nextProvider>,
+    );
+
+    expect(screen.getByText("Ran 2 commands, read a file")).toBeInTheDocument();
+  });
+
+  it("keeps natural singular summaries while a group grows and is opened", async () => {
+    const translations = await createTranslations();
+    const user = userEvent.setup();
+    const hook = {
+      id: "h1",
+      timestamp: new Date().toISOString(),
+      kind: "HookExecutionEvent",
+      source: "hook",
+      hook_event_type: "PostToolUse",
+      hook_command: "lint",
+      success: true,
+      blocked: false,
+      exit_code: 0,
+      reason: null,
+      tool_name: "execute_bash",
+      action_id: "a1",
+      message_id: null,
+      stdout: null,
+      stderr: null,
+      error: null,
+      additional_context: null,
+      hook_input: null,
+    } as HookExecutionEvent;
+    const events = [makeBashObservation("o1", "a1", "ls"), hook];
+
+    const group = (items: typeof events) => (
+      <I18nextProvider i18n={translations}>
+        <EventGroup events={items}>
+          <div>Hook details</div>
+        </EventGroup>
+      </I18nextProvider>
+    );
+    const { rerender } = renderWithProviders(group(events));
+    const toggle = screen.getByTestId("event-group-toggle");
+    expect(toggle).toHaveTextContent(/^Ran a command, ran a hook$/);
+    await user.click(toggle);
+    rerender(group([...events, { ...hook, id: "h2" }, { ...hook, id: "h3" }]));
+    expect(toggle).toHaveTextContent(/^Ran a command, ran 3 hooks$/);
+    expect(screen.getByText("Hook details")).toBeVisible();
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+  });
+
+  it("counts a rejected action as the kind of step it was", () => {
+    const events = [
+      makeBashObservation("o1", "a1", "ls"),
+      makeUserRejectObservation("r2", "a2"),
+    ];
+    const allEvents = [makeBashAction("a2", "pwd"), ...events];
+
+    renderWithProviders(
+      <EventGroup events={events} allEvents={allEvents}>
+        <div>child</div>
+      </EventGroup>,
+    );
+
+    expect(screen.getByText("EVENT_GROUP$RAN_COMMANDS")).toBeInTheDocument();
+  });
+
+  it("counts an action resolved by an AgentErrorEvent as a step it took", () => {
+    const events = [
+      makeBashObservation("o1", "a1", "ls"),
+      makeBashAction("a2", "pwd"),
+    ];
+    const allEvents = [...events, makeAgentErrorEvent("e2", "a2")];
+
+    renderWithProviders(
+      <EventGroup events={events} allEvents={allEvents}>
+        <div>child</div>
+      </EventGroup>,
+    );
+
+    expect(screen.getByText("EVENT_GROUP$RAN_COMMANDS")).toBeInTheDocument();
+  });
+
+  it("updates accessibility state while toggling the group", async () => {
+    const events = [
+      makeBashObservation("o1", "a1", "ls"),
+      makeBashObservation("o2", "a2", "pwd"),
+      makeBashObservation("o3", "a3", "whoami"),
+    ];
+    const user = userEvent.setup();
+
+    renderWithProviders(
+      <EventGroup events={events}>
+        <div data-testid="child">child content</div>
+      </EventGroup>,
+    );
+
+    const toggle = screen.getByTestId("event-group-toggle");
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    expect(toggle).toHaveAttribute("aria-label", "EVENT_GROUP$EXPAND");
+    expect(screen.queryByRole("region")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("child")).not.toBeInTheDocument();
+
+    await user.click(toggle);
+
+    const content = screen.getByRole("region");
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+    expect(toggle).toHaveAttribute("aria-label", "EVENT_GROUP$COLLAPSE");
+    expect(toggle).toHaveAttribute("aria-controls", content.id);
+    expect(content).toHaveAttribute("aria-labelledby", toggle.id);
+    expect(screen.getByTestId("child")).toBeInTheDocument();
+
+    await user.click(toggle);
+
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    expect(toggle).toHaveAttribute("aria-label", "EVENT_GROUP$EXPAND");
+    expect(screen.queryByRole("region")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("child")).not.toBeInTheDocument();
+  });
+
+  it("keeps grouped file-action titles non-interactive inside the toggle", () => {
+    const fileAction: ActionEvent<FileEditorAction> = {
+      id: "a-file",
+      timestamp: new Date().toISOString(),
+      source: "agent",
+      thought: [],
+      thinking_blocks: [],
+      action: {
+        kind: "FileEditorAction",
+        command: "str_replace",
+        path: "src/app.ts",
+        file_text: null,
+        old_str: "a",
+        new_str: "b",
+        insert_line: null,
+        view_range: null,
+      },
+      tool_name: "file_editor",
+      tool_call_id: "call_a-file",
+      tool_call: {
+        id: "call_a-file",
+        type: "function",
+        function: {
+          name: "file_editor",
+          arguments: JSON.stringify({
+            command: "str_replace",
+            path: "src/app.ts",
+          }),
+        },
+      },
+      llm_response_id: "response_a-file",
+      security_risk: SecurityRisk.UNKNOWN,
+    };
+
+    renderWithProviders(
+      <EventGroup events={[fileAction]}>
+        <div>child</div>
+      </EventGroup>,
+    );
+
+    const toggle = screen.getByTestId("event-group-toggle");
+    expect(
+      toggle.querySelector('[data-testid="path-component-link"]'),
+    ).toBeNull();
+    expect(toggle.querySelectorAll("button")).toHaveLength(0);
+  });
+});
+
+describe("EventGroup summary plurals", () => {
+  const groupKeys = [
+    "EVENT_GROUP$RAN_COMMANDS",
+    "EVENT_GROUP$READ_FILES",
+    "EVENT_GROUP$MADE_EDITS",
+    "EVENT_GROUP$RAN_SEARCHES",
+    "EVENT_GROUP$RAN_HOOKS",
+    "EVENT_GROUP$USED_TOOLS",
+  ];
+
+  it("uses natural English singulars and lowercase continuation for each activity type", async () => {
+    const translations = await createTranslations();
+    const expected = [
+      "Ran a command",
+      "Read a file",
+      "Made an edit",
+      "Ran a search",
+      "Ran a hook",
+      "Used a tool",
+    ];
+    groupKeys.forEach((key, index) => {
+      expect(translations.t(key, { count: 1, context: "single" })).toBe(
+        expected[index],
+      );
+      expect(
+        translations.t(key, { count: 1, context: "single_continuation" }),
+      ).toBe(expected[index].toLowerCase());
+    });
+  });
+
+  it.each(["uk", "ar"])(
+    "renders %s summaries in that language for multi-step counts",
+    async (lng) => {
+      const translations = (await import("#/i18n/translation.json"))
+        .default as Record<string, Record<string, string>>;
+      const toResources = (language: string) =>
+        Object.fromEntries(
+          Object.entries(translations).map(([key, values]) => [
+            key,
+            values[language],
+          ]),
+        );
+      const i18n = i18next.createInstance();
+      await i18n.init({
+        lng,
+        fallbackLng: "en",
+        resources: {
+          en: { translation: toResources("en") },
+          [lng]: { translation: toResources(lng) },
+        },
+      });
+
+      for (const key of groupKeys) {
+        for (const count of [2, 5, 11, 21]) {
+          const text = i18n.t(key, { count });
+          expect(text).toContain(String(count));
+          expect(text).not.toBe(i18n.t(key, { count, lng: "en" }));
+          const continuation = i18n.t(key, { count, context: "continuation" });
+          expect(continuation).toContain(String(count));
+          expect(continuation).not.toBe(
+            i18n.t(key, { count, context: "continuation", lng: "en" }),
+          );
+        }
+      }
+    },
+  );
+});
+
+it("shows the current startup phase, then flat observed details after completion", () => {
+  const session: SessionActivity = {
+    id: "startup",
+    kind: "initialize",
+    startedAt: Date.now(),
+    phase: "pending",
+    open: true,
+    steps: ["WAITING_FOR_SANDBOX", "PREPARING_REPOSITORY"],
+  };
+  const renderSession = (value: SessionActivity) => (
+    <EventGroup events={[]} session={value} open>
+      <SessionActivityDetails session={value} nested={false} />
+    </EventGroup>
+  );
+  const { rerender } = renderWithProviders(renderSession(session));
+  expect(screen.getByTestId("event-group-toggle")).toHaveTextContent(
+    "EVENT_GROUP$PREPARING_WORKSPACE",
+  );
+  expect(screen.getByRole("list")).toHaveTextContent(
+    "EVENT_GROUP$WORKSPACE_PREPARATION",
+  );
+  expect(screen.getAllByRole("button")).toHaveLength(1);
+  rerender(
+    renderSession({
+      ...session,
+      phase: "connecting",
+      steps: [...session.steps, "READY"],
+    }),
+  );
+  expect(screen.getByTestId("event-group-toggle")).toHaveTextContent(
+    "EVENT_GROUP$CONNECTING_AGENT",
+  );
+  rerender(renderSession({ ...session, phase: "complete" }));
+  expect(screen.getByTestId("event-group-toggle")).toHaveTextContent(
+    "EVENT_GROUP$SESSION_INITIALIZED",
+  );
+  expect(screen.queryByTestId("spinner-icon")).not.toBeInTheDocument();
+  rerender(renderSession({ ...session, kind: "resume", phase: "complete" }));
+  expect(screen.getByTestId("event-group-toggle")).toHaveTextContent(
+    "EVENT_GROUP$SESSION_RESUMED",
+  );
+  rerender(renderSession({ ...session, phase: "failed" }));
+  expect(screen.getByTestId("event-group-toggle")).toHaveTextContent(
+    "COMMON$ERROR",
+  );
+  expect(screen.getByRole("list")).toBeVisible();
+});
+
+it("uses the session state while setup details are not yet available", () => {
+  const session: SessionActivity = {
+    id: "startup-without-details",
+    kind: "initialize",
+    startedAt: Date.now(),
+    phase: "pending",
+    open: true,
+    steps: ["WORKING"],
+  };
+  const { rerender } = renderWithProviders(
+    <SessionActivityDetails session={session} nested={false} />,
+  );
+  const details = screen.getByTestId("session-activity-details");
+  expect(details).toHaveTextContent("EVENT_GROUP$SESSION_INITIALIZING");
+  rerender(
+    <SessionActivityDetails
+      session={{ ...session, kind: "resume" }}
+      nested={false}
+    />,
+  );
+  expect(details).toHaveTextContent("EVENT_GROUP$SESSION_RESUMING");
+  rerender(
+    <SessionActivityDetails
+      session={{ ...session, phase: "connecting" }}
+      nested={false}
+    />,
+  );
+  expect(details).toHaveTextContent("EVENT_GROUP$CONNECTING_AGENT");
+  rerender(
+    <SessionActivityDetails
+      session={{ ...session, phase: "complete" }}
+      nested={false}
+    />,
+  );
+  expect(details).toHaveTextContent("EVENT_GROUP$SESSION_INITIALIZED");
+});

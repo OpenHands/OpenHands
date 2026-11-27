@@ -1,0 +1,64 @@
+import { useTranslation } from "react-i18next";
+import { I18nKey } from "#/i18n/declaration";
+import { fieldValues } from "#/manifests/manifest-local-validation";
+import type {
+  SetupBlock,
+  SetupFormFields,
+  SetupFormValues,
+} from "#/manifests/types";
+
+export interface SetupReviewStepProps {
+  setup: SetupBlock;
+  /** The fields the form showed, in the order it showed them. */
+  fields: SetupFormFields;
+  values: SetupFormValues;
+  selectedAction?: string | null;
+}
+
+/**
+ * Stage 7 — the plain-language summary the user confirms.
+ *
+ * The last cheap moment to catch a wrong answer, and the last point at which
+ * nothing has been created yet. A manifest declares no summary of its own: one
+ * row per field the form showed, labelled the way the field was labelled, says
+ * the same thing without asking every entry to restate it.
+ */
+export function SetupReviewStep({
+  setup,
+  fields,
+  values,
+  selectedAction,
+}: SetupReviewStepProps) {
+  const { t } = useTranslation("openhands");
+
+  return (
+    <div className="flex flex-col gap-4" data-testid="setup-review">
+      <dl className="flex flex-col gap-3">
+        {selectedAction &&
+          setup.actions?.[selectedAction as keyof typeof setup.actions] && (
+            <div className="flex flex-col gap-0.5">
+              <dt className="text-xs text-muted">
+                {t(I18nKey.SETUP$ACTION_LABEL)}
+              </dt>
+              <dd className="text-sm break-words">
+                {
+                  setup.actions[selectedAction as keyof typeof setup.actions]
+                    ?.label
+                }
+              </dd>
+            </div>
+          )}
+        {Object.entries(fields).map(([name, field]) => (
+          <div key={name} className="flex flex-col gap-0.5">
+            <dt className="text-xs text-muted">{field.label}</dt>
+            <dd className="text-sm break-words">
+              {/* A field collecting several values reads as a list of them. */}
+              {fieldValues(values[name]).join(", ") ||
+                t(I18nKey.SETUP$EMPTY_VALUE)}
+            </dd>
+          </div>
+        ))}
+      </dl>
+    </div>
+  );
+}

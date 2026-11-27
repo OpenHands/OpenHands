@@ -1,0 +1,1677 @@
+import type {
+  AutomationUpdate,
+  Automation,
+  AutomationRunAsFilter,
+  AutomationRun,
+  AutomationScriptBundle,
+  AutomationSpec,
+  AutomationTagCount,
+  AutomationKvBatchResponse,
+  AutomationKvEntry,
+  AutomationKvKeysResponse,
+  AutomationTrigger,
+  Factory,
+  FactoryListResponse,
+  AutomationsResponse,
+  AutomationRunsResponse,
+  ChangeRunAsRequest,
+} from "#/types/automation";
+import axios from "axios";
+import {
+  clearPendingLocalTelemetryRevocation,
+  getTelemetryConsent,
+  getTelemetryDistinctId,
+  getTelemetryDistinctIdForConsentSync,
+  type TelemetryConsent,
+} from "#/services/telemetry";
+import type {
+  GitSyncCheckResponse,
+  GitSyncConfigUpdateRequest,
+  GitSyncStatus,
+  GitSyncTriggerResponse,
+} from "#/types/git-sync";
+import {
+  automationCreateEndpoint,
+  automationUploadEndpoint,
+} from "#/manifests/automation-setup";
+import {
+  getAutomationEndpoint,
+  getAutomationIdEndpoint,
+  getImportExportSpec,
+} from "#/manifests/automation-interface";
+import type {
+  DeploymentCapabilities,
+  SetupEntry,
+  SetupRequestBody,
+  ValidateDraftResponse,
+  AutomationDraftEndpoint,
+  CreateAutomationDraftApiRequest,
+  UpdateAutomationDraftApiRequest,
+  AutomationDraftApiResponse,
+  AutomationDraftListResponse,
+  DraftValidationError,
+} from "#/manifests/types";
+import { withPresetSources } from "#/utils/automation-preset-sources";
+import { base64ToBytes } from "#/utils/base64";
+import { downloadBlob } from "#/utils/utils";
+import type { Backend, ResolvedActiveBackend } from "../backend-registry/types";
+import {
+  getActiveBackend,
+  getEffectiveLocalBackend,
+} from "../backend-registry/active-store";
+import { NoBackendAvailableError } from "../agent-server-client-options";
+import { callCloudProxy } from "../cloud/proxy";
+import {
+  AGENT_CANVAS_CLIENT_HEADERS,
+  OPENHANDS_TELEMETRY_DISTINCT_ID_HEADER,
+} from "../client-source";
+import {
+  AUTOMATION_DRAFTS_FEATURE,
+  FACTORIES_FEATURE,
+} from "#/constants/automation-form";
+import { randomUUID } from "#/utils/random-uuid";
+
+const AUTOMATION_BASE_PATH = "/api/automation";
+const AUTOMATION_KV_PATH = `${AUTOMATION_BASE_PATH}/v1/kv`;
+
+type AutomationDraftCreateTarget = SetupEntry | "prompt" | "plugin" | "custom";
+
+export interface CustomWebhookCreateRequest {
+  name: string;
+  source: string;
+  event_key_expr?: string;
+  signature_header?: string;
+  signature_scheme?: string;
+  webhook_secret?: string;
+}
+
+export interface CustomWebhook {
+  id: string;
+  org_id: string;
+  name: string;
+  source: string;
+  webhook_url: string;
+  event_key_expr: string;
+  signature_header: string;
+  signature_scheme: string;
+  enabled: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CustomWebhookListResponse {
+  webhooks: CustomWebhook[];
+  total: number;
+}
+
+export interface CustomWebhookCreateResponse extends CustomWebhook {
+  webhook_secret?: string | null;
+}
+
+function automationCreateEndpointForTarget(
+  target?: AutomationDraftCreateTarget,
+  selectedAction?: string | null,
+): string {
+  if (target === "plugin") return getAutomationEndpoint("createPlugin");
+  if (target === "custom") {
+    const endpoint = getAutomationEndpoint("createBundle");
+    if (!endpoint) {
+      throw new Error(
+        "This deployment does not support creating custom automation bundles.",
+      );
+    }
+    return endpoint;
+  }
+  if (!target || target === "prompt") return automationCreateEndpoint();
+  return automationCreateEndpoint(target, selectedAction);
+}
+
+export interface AutomationHealthResponse {
+  status: "ok" | "error";
+  message?: string;
+}
+
+/**
+ * Request body of POST /api/automation/v1/plugin-spec
+ * (CreatePluginSpecAutomationRequest in OpenHands/automation). `trigger` and
+ * `timeout` are optional: the service falls back to the manifest's
+ * `suggested_trigger` when no trigger is given. `template` dedupes repeated
+ * installs: the service returns an existing automation (HTTP 200) when one
+ * already carries the same template id.
+ */
+export interface CreatePluginSpecAutomationRequest {
+  name: string;
+  plugin: {
+    source: string;
+    ref?: string | null;
+    repo_path?: string | null;
+  };
+  config?: Record<string, unknown>;
+  trigger?: unknown;
+  timeout?: number;
+  enabled?: boolean;
+  /** Factory to create the automation in (OpenHands/automation#751). */
+  factory_id?: string;
+  template?: {
+    id: string;
+    version?: number | string;
+    config?: Record<string, unknown>;
+  };
+}
+
+/**
+ * Response of GET /api/automation/v1/plugin-spec/preflight
+ * (PluginSpecPreflightResponse in OpenHands/automation#630): the parsed
+ * manifest plus the trigger an install would default to, with no side
+ * effects. Absent on older backends — callers must degrade gracefully.
+ */
+export interface PluginSpecPreflightResponse {
+  manifest: {
+    name: string;
+    description?: string | null;
+    config_schema?: {
+      type: "object";
+      properties?: Record<string, Record<string, unknown>>;
+      required?: string[];
+    };
+    runtime?: {
+      agent_profile?: Record<string, unknown> | null;
+      llm_profile?: Record<string, unknown> | null;
+    };
+    entrypoint?: Record<string, unknown>;
+  };
+  resolved_ref?: string | null;
+  suggested_trigger?: {
+    type: string;
+    schedule?: string;
+    timezone?: string;
+    [key: string]: unknown;
+  } | null;
+}
+
+type AutomationSdkVersionResponse =
+  | string
+  | {
+      sdk_version?: unknown;
+      version?: unknown;
+    };
+
+// Local automation calls go to the automation sidecar that
+// `scripts/dev-with-automation.mjs` mounts behind the local agent-server.
+// Both backends use the same session API key and the same `X-Session-API-Key`
+// header for consistency.
+const localAutomationAxios = axios.create();
+
+async function buildAutomationRequestHeaders(
+  extraHeaders: Record<string, string> = {},
+): Promise<Record<string, string>> {
+  const telemetryDistinctId = await getTelemetryDistinctId();
+  return {
+    ...AGENT_CANVAS_CLIENT_HEADERS,
+    ...(telemetryDistinctId
+      ? { [OPENHANDS_TELEMETRY_DISTINCT_ID_HEADER]: telemetryDistinctId }
+      : {}),
+    ...extraHeaders,
+  };
+}
+
+localAutomationAxios.interceptors.request.use(async (config) => {
+  const requestHeaders = await buildAutomationRequestHeaders();
+  Object.entries(requestHeaders).forEach(([name, value]) => {
+    config.headers.set(name, value);
+  });
+
+  // Import uses an explicit baseURL/header pair so its POST, PATCH, and
+  // cleanup stay pinned to the backend selected when the mutation started.
+  if (config.baseURL) return config;
+
+  // Resolve the local backend on every call so it tracks the
+  // currently-active local backend (and any host/key edits made via the
+  // manage-backends UI), rather than freezing whatever value the
+  // agent-server-config produced at module load time.
+  // Using the backend registry (rather than the build-time VITE_SESSION_API_KEY
+  // env var) ensures the published npm package picks up the runtime-injected
+  // session key that scripts/static-server.mjs seeds into localStorage, fixing
+  // the 401 errors reported in issue #829.
+  const backend = getEffectiveLocalBackend();
+  if (!backend) throw new NoBackendAvailableError();
+  // eslint-disable-next-line no-param-reassign
+  config.baseURL = backend.host;
+
+  const apiKey = backend.apiKey?.trim();
+  if (apiKey) {
+    config.headers.set("X-Session-API-Key", apiKey);
+  }
+  return config;
+});
+
+function normalizeAutomationSdkVersion(version: unknown): string | null {
+  if (typeof version !== "string") return null;
+  const trimmed = version.trim();
+  return trimmed || null;
+}
+
+function getAutomationSdkVersionFromResponse(
+  response: AutomationSdkVersionResponse,
+): string | null {
+  if (typeof response === "string") {
+    return normalizeAutomationSdkVersion(response);
+  }
+  return (
+    normalizeAutomationSdkVersion(response.sdk_version) ??
+    normalizeAutomationSdkVersion(response.version)
+  );
+}
+
+/**
+ * The query string for a paged list request. `extra` adds params such as
+ * filters; keys whose value is undefined are left out.
+ */
+function buildListQuery(
+  limit: number,
+  offset: number,
+  extra: Record<string, string | undefined> = {},
+): string {
+  const params = new URLSearchParams();
+  params.set("limit", String(limit));
+  params.set("offset", String(offset));
+  for (const [key, value] of Object.entries(extra)) {
+    if (value !== undefined) params.set(key, value);
+  }
+  return params.toString();
+}
+
+const DRAFT_ENDPOINTS: readonly AutomationDraftEndpoint[] = [
+  "/v1",
+  "/v1/preset/prompt",
+  "/v1/preset/plugin",
+];
+
+function isDraftEndpoint(value: unknown): value is AutomationDraftEndpoint {
+  return (
+    typeof value === "string" &&
+    DRAFT_ENDPOINTS.includes(value as AutomationDraftEndpoint)
+  );
+}
+
+function normalizeValidationErrors(
+  value: unknown,
+): DraftValidationError[] | null {
+  if (!Array.isArray(value)) return null;
+  if (value.length === 0) return null;
+  const errors: DraftValidationError[] = [];
+  for (const entry of value) {
+    if (
+      typeof entry === "object" &&
+      entry !== null &&
+      !Array.isArray(entry) &&
+      typeof (entry as Record<string, unknown>).code === "string" &&
+      typeof (entry as Record<string, unknown>).message === "string"
+    ) {
+      const record = entry as Record<string, unknown>;
+      errors.push({
+        code: record.code as string,
+        message: record.message as string,
+        field:
+          typeof record.field === "string" ? (record.field as string) : null,
+      });
+    }
+  }
+  return errors.length > 0 ? errors : null;
+}
+
+/**
+ * The service returns snake_case field names; the frontend reads camelCase.
+ * Normalize defensively so a malformed payload never crashes the form.
+ */
+function normalizeDraftResponse(value: unknown): AutomationDraftApiResponse {
+  const record = (value ?? {}) as Record<string, unknown>;
+  const validationErrors = normalizeValidationErrors(
+    record.validation_errors ?? record.validationErrors,
+  );
+  return {
+    id: String(record.id ?? ""),
+    endpoint: isDraftEndpoint(record.endpoint)
+      ? (record.endpoint as AutomationDraftEndpoint)
+      : "/v1/preset/prompt",
+    name: typeof record.name === "string" && record.name ? record.name : null,
+    draft: (record.draft ?? {}) as SetupRequestBody,
+    validationErrors,
+    dispatchable: record.dispatchable === true,
+    sourceAutomationId:
+      typeof (record.source_automation_id ?? record.sourceAutomationId) ===
+      "string"
+        ? String(record.source_automation_id ?? record.sourceAutomationId)
+        : null,
+    materializedAutomationId:
+      typeof (
+        record.materialized_automation_id ?? record.materializedAutomationId
+      ) === "string"
+        ? String(
+            record.materialized_automation_id ??
+              record.materializedAutomationId,
+          )
+        : null,
+    lastTestRunId:
+      typeof (record.last_test_run_id ?? record.lastTestRunId) === "string"
+        ? String(record.last_test_run_id ?? record.lastTestRunId)
+        : null,
+    createdAt: String(record.created_at ?? record.createdAt ?? ""),
+    updatedAt: String(record.updated_at ?? record.updatedAt ?? ""),
+  };
+}
+
+function normalizeDraftListResponse(
+  value: unknown,
+): AutomationDraftListResponse {
+  const record = (value ?? {}) as Record<string, unknown>;
+  const drafts = Array.isArray(record.drafts) ? record.drafts : [];
+  return {
+    drafts: drafts.map(normalizeDraftResponse),
+    total: typeof record.total === "number" ? record.total : 0,
+  };
+}
+
+function buildImportedTrigger(spec: AutomationSpec): AutomationTrigger {
+  if (spec.trigger.type === "event") {
+    return {
+      type: "event",
+      source: spec.trigger.source,
+      on: spec.trigger.on,
+      ...(spec.trigger.filter && { filter: spec.trigger.filter }),
+    };
+  }
+
+  return {
+    type: "cron",
+    schedule: spec.trigger.schedule,
+    timezone: spec.timezone ?? spec.trigger.timezone ?? "UTC",
+  };
+}
+
+function generatePendingImportEvent(): string {
+  return `pending.${randomUUID()}`;
+}
+
+function buildCreateAutomationRequest(
+  spec: AutomationSpec,
+  factoryId?: string,
+) {
+  if (!spec.prompt) {
+    throw new Error("An automation prompt is required for import.");
+  }
+
+  const { importDefaults } = getImportExportSpec();
+  const repos = spec.repository
+    ? [
+        {
+          url: spec.repository,
+          ...(spec.branch && { ref: spec.branch }),
+          ...(!spec.repository.includes("://") &&
+            !spec.repository.startsWith("git@") && {
+              provider: importDefaults.repoProvider,
+            }),
+        },
+      ]
+    : undefined;
+
+  return {
+    path: `${AUTOMATION_BASE_PATH}${getAutomationEndpoint(
+      spec.plugins?.length ? "createPlugin" : "createPrompt",
+    )}`,
+    body: {
+      name: spec.name,
+      prompt: spec.prompt,
+      // Preset creation defaults to enabled. A unique event trigger keeps the
+      // new record inert until the real trigger and disabled state are applied
+      // together in the follow-up PATCH.
+      trigger: {
+        type: "event",
+        source: importDefaults.placeholderEventSource,
+        on: generatePendingImportEvent(),
+      },
+      ...(spec.model && { model: spec.model }),
+      ...(repos && { repos }),
+      ...(spec.plugins?.length && {
+        plugins: spec.plugins.map((source) => ({ source })),
+      }),
+      ...(spec.timeout != null && { timeout: spec.timeout }),
+      ...(factoryId && { factory_id: factoryId }),
+    },
+  };
+}
+
+/**
+ * The bundle endpoint takes the real trigger and the disabled state in one
+ * call, unlike the preset endpoints the prompt import goes through, and
+ * forbids fields it does not declare (no prompt, repositories or plugins).
+ */
+function buildCreateScriptAutomationBody(
+  spec: AutomationSpec,
+  script: AutomationScriptBundle,
+  tarballPath: string,
+  factoryId?: string,
+) {
+  return {
+    name: spec.name,
+    trigger: buildImportedTrigger(spec),
+    enabled: false,
+    tarball_path: tarballPath,
+    entrypoint: script.entrypoint,
+    ...(script.setup_script_path && {
+      setup_script_path: script.setup_script_path,
+    }),
+    ...(spec.model && { model: spec.model }),
+    ...(spec.timeout != null && { timeout: spec.timeout }),
+    ...(factoryId && { factory_id: factoryId }),
+  };
+}
+
+async function buildPinnedLocalConfig(backend: Backend) {
+  const apiKey = backend.apiKey.trim();
+  return {
+    baseURL: backend.host,
+    headers: await buildAutomationRequestHeaders(
+      apiKey ? { "X-Session-API-Key": apiKey } : {},
+    ),
+  };
+}
+
+async function buildPinnedCloudHeaders(active: ResolvedActiveBackend) {
+  return buildAutomationRequestHeaders(
+    active.orgId ? { "X-Org-Id": active.orgId } : {},
+  );
+}
+
+class AutomationService {
+  static async syncTelemetryConsent(
+    consent: TelemetryConsent = getTelemetryConsent(),
+  ): Promise<void> {
+    const active = getActiveBackend();
+    if (active.backend.kind !== "local") return;
+
+    const frontendDistinctId = await getTelemetryDistinctIdForConsentSync();
+    await localAutomationAxios.post(
+      `${AUTOMATION_BASE_PATH}/v1/telemetry/consent`,
+      {
+        consent_granted: consent === "granted",
+        frontend_distinct_id: frontendDistinctId,
+      },
+      { timeout: 5000 },
+    );
+    if (consent !== "granted" && frontendDistinctId) {
+      clearPendingLocalTelemetryRevocation(frontendDistinctId);
+    }
+  }
+
+  static async getSdkVersion(): Promise<string | null> {
+    const active = getActiveBackend();
+    const path = `${AUTOMATION_BASE_PATH}/sdk-version`;
+
+    try {
+      let response: AutomationSdkVersionResponse;
+      if (active.backend.kind === "cloud") {
+        response = await callCloudProxy<AutomationSdkVersionResponse>({
+          backend: active.backend,
+          method: "GET",
+          path,
+          headers: await buildPinnedCloudHeaders(active),
+          timeoutSeconds: 5,
+        });
+      } else {
+        const { data } =
+          await localAutomationAxios.get<AutomationSdkVersionResponse>(path, {
+            timeout: 5000,
+          });
+        response = data;
+      }
+
+      return getAutomationSdkVersionFromResponse(response);
+    } catch {
+      return null;
+    }
+  }
+
+  static async listAutomations(
+    params: {
+      limit?: number;
+      offset?: number;
+      /** Only automations that run as the caller, another person, or a service account. */
+      runAs?: AutomationRunAsFilter;
+      /** Only automations carrying this tag. */
+      tag?: string;
+      /** Only automations in this factory. */
+      factoryId?: string;
+    } = {},
+  ): Promise<AutomationsResponse> {
+    const { limit = 50, offset = 0, runAs, tag, factoryId } = params;
+    const active = getActiveBackend().backend;
+
+    let response: AutomationsResponse;
+    if (active.kind === "cloud") {
+      response = await callCloudProxy<AutomationsResponse>({
+        backend: active,
+        method: "GET",
+        path: `${AUTOMATION_BASE_PATH}${getAutomationEndpoint("list")}?${buildListQuery(limit, offset, { run_as: runAs, tag, factory_id: factoryId })}`,
+        headers: await buildAutomationRequestHeaders(),
+      });
+    } else {
+      const { data } = await localAutomationAxios.get<AutomationsResponse>(
+        `${AUTOMATION_BASE_PATH}${getAutomationEndpoint("list")}`,
+        {
+          params: { limit, offset, run_as: runAs, tag, factory_id: factoryId },
+        },
+      );
+      response = data;
+    }
+
+    return {
+      ...response,
+      automations: response.automations.map(withPresetSources),
+    };
+  }
+
+  /**
+   * One page of the org's automations. `runAs` narrows it on the server; an
+   * automation service that predates the param ignores it.
+   */
+  static async getAutomations(
+    limit = 50,
+    offset = 0,
+    runAs?: AutomationRunAsFilter,
+    tag?: string,
+    factoryId?: string,
+  ): Promise<AutomationsResponse> {
+    return AutomationService.listAutomations({
+      limit,
+      offset,
+      runAs,
+      tag,
+      factoryId,
+    });
+  }
+
+  /**
+   * The org's factories, newest first. Factories live under the automation
+   * list path (`/v1/factories`), so they follow it rather than adding a
+   * manifest endpoint of their own.
+   */
+  static async listFactories(
+    params: { limit?: number; offset?: number } = {},
+  ): Promise<FactoryListResponse> {
+    const { limit = 100, offset = 0 } = params;
+    const active = getActiveBackend().backend;
+    const path = `${AUTOMATION_BASE_PATH}${getAutomationEndpoint("list")}/factories`;
+
+    if (active.kind === "cloud") {
+      return callCloudProxy<FactoryListResponse>({
+        backend: active,
+        method: "GET",
+        path: `${path}?${buildListQuery(limit, offset)}`,
+        headers: await buildAutomationRequestHeaders(),
+      });
+    }
+
+    const { data } = await localAutomationAxios.get<FactoryListResponse>(path, {
+      params: { limit, offset },
+    });
+    return data;
+  }
+
+  /** The org's tags, each with how many live automations carry it. */
+  static async listAutomationTags(): Promise<AutomationTagCount[]> {
+    const active = getActiveBackend().backend;
+    const path = `${AUTOMATION_BASE_PATH}${getAutomationEndpoint("tags")}`;
+
+    if (active.kind === "cloud") {
+      const data = await callCloudProxy<{ tags: AutomationTagCount[] }>({
+        backend: active,
+        method: "GET",
+        path,
+        headers: await buildAutomationRequestHeaders(),
+      });
+      return data.tags;
+    }
+
+    const { data } = await localAutomationAxios.get<{
+      tags: AutomationTagCount[];
+    }>(path);
+    return data.tags;
+  }
+
+  static async getAutomation(id: string): Promise<Automation> {
+    const active = getActiveBackend().backend;
+    const path = `${AUTOMATION_BASE_PATH}${getAutomationIdEndpoint("detail", id)}`;
+
+    let automation: Automation;
+    if (active.kind === "cloud") {
+      automation = await callCloudProxy<Automation>({
+        backend: active,
+        method: "GET",
+        path,
+        headers: await buildAutomationRequestHeaders(),
+      });
+    } else {
+      const { data } = await localAutomationAxios.get<Automation>(path);
+      automation = data;
+    }
+
+    return withPresetSources(automation);
+  }
+
+  static async createAutomation(
+    spec: AutomationSpec,
+    /** Create the automation in this factory (OpenHands/automation#751). */
+    factoryId?: string,
+  ): Promise<Automation> {
+    const active = getActiveBackend();
+    if (spec.script) {
+      return AutomationService.createScriptAutomation(
+        active,
+        spec,
+        spec.script,
+        factoryId,
+      );
+    }
+    const { path, body } = buildCreateAutomationRequest(spec, factoryId);
+
+    let created: Automation;
+    if (active.backend.kind === "cloud") {
+      created = await callCloudProxy<Automation>({
+        backend: active.backend,
+        method: "POST",
+        path,
+        body,
+        headers: await buildPinnedCloudHeaders(active),
+      });
+    } else {
+      const { data } = await localAutomationAxios.post<Automation>(
+        path,
+        body,
+        await buildPinnedLocalConfig(active.backend),
+      );
+      created = data;
+    }
+
+    const updatePath = `${AUTOMATION_BASE_PATH}${getAutomationIdEndpoint("detail", created.id)}`;
+    const updateBody: Partial<Automation> = {
+      trigger: buildImportedTrigger(spec),
+      enabled: false,
+    };
+
+    try {
+      if (active.backend.kind === "cloud") {
+        return await callCloudProxy<Automation>({
+          backend: active.backend,
+          method: "PATCH",
+          path: updatePath,
+          body: updateBody,
+          headers: await buildPinnedCloudHeaders(active),
+        });
+      }
+
+      const { data } = await localAutomationAxios.patch<Automation>(
+        updatePath,
+        updateBody,
+        await buildPinnedLocalConfig(active.backend),
+      );
+      return data;
+    } catch (updateError) {
+      try {
+        if (active.backend.kind === "cloud") {
+          await callCloudProxy<unknown>({
+            backend: active.backend,
+            method: "DELETE",
+            path: updatePath,
+            headers: await buildPinnedCloudHeaders(active),
+          });
+        } else {
+          await localAutomationAxios.delete(
+            updatePath,
+            await buildPinnedLocalConfig(active.backend),
+          );
+        }
+      } catch (cleanupError) {
+        throw new AggregateError(
+          [updateError, cleanupError],
+          "Failed to disable the imported automation and clean it up.",
+        );
+      }
+      throw updateError;
+    }
+  }
+
+  /**
+   * Import a script automation: upload the bundle the file carries, then
+   * create against the path the upload returned, the way the custom setup
+   * flow does.
+   */
+  private static async createScriptAutomation(
+    active: ResolvedActiveBackend,
+    spec: AutomationSpec,
+    script: AutomationScriptBundle,
+    factoryId?: string,
+  ): Promise<Automation> {
+    // Resolve the endpoint before uploading, so a deployment without bundle
+    // support fails without leaving an upload behind.
+    const path = `${AUTOMATION_BASE_PATH}${automationCreateEndpointForTarget("custom")}`;
+    const tarballPath = await AutomationService.uploadAutomationTarball(
+      spec.name.slice(0, 255),
+      base64ToBytes(script.tarball_base64),
+    );
+    const body = buildCreateScriptAutomationBody(
+      spec,
+      script,
+      tarballPath,
+      factoryId,
+    );
+
+    if (active.backend.kind === "cloud") {
+      return callCloudProxy<Automation>({
+        backend: active.backend,
+        method: "POST",
+        path,
+        body,
+        headers: await buildPinnedCloudHeaders(active),
+      });
+    }
+
+    const { data } = await localAutomationAxios.post<Automation>(
+      path,
+      body,
+      await buildPinnedLocalConfig(active.backend),
+    );
+    return data;
+  }
+
+  static async updateAutomation(
+    id: string,
+    body: AutomationUpdate,
+  ): Promise<Automation> {
+    const active = getActiveBackend().backend;
+    const path = `${AUTOMATION_BASE_PATH}${getAutomationIdEndpoint("detail", id)}`;
+
+    if (active.kind === "cloud") {
+      return callCloudProxy<Automation>({
+        backend: active,
+        method: "PATCH",
+        path,
+        body: body as Record<string, unknown>,
+        headers: await buildAutomationRequestHeaders(),
+      });
+    }
+
+    const { data } = await localAutomationAxios.patch<Automation>(path, body);
+    return data;
+  }
+
+  /**
+   * Move an automation to a service account of the org, or back to the caller.
+   * The service leaves it turned off. Backend: POST /api/automation/v1/{id}/run-as
+   */
+  static async changeRunAs(
+    id: string,
+    body: ChangeRunAsRequest,
+  ): Promise<Automation> {
+    const active = getActiveBackend().backend;
+    const path = `${AUTOMATION_BASE_PATH}${getAutomationIdEndpoint("detail", id)}/run-as`;
+
+    if (active.kind === "cloud") {
+      return callCloudProxy<Automation>({
+        backend: active,
+        method: "POST",
+        path,
+        body,
+        headers: await buildAutomationRequestHeaders(),
+      });
+    }
+
+    const { data } = await localAutomationAxios.post<Automation>(path, body);
+    return data;
+  }
+
+  static async deleteAutomation(id: string): Promise<void> {
+    const active = getActiveBackend().backend;
+    const path = `${AUTOMATION_BASE_PATH}${getAutomationIdEndpoint("detail", id)}`;
+
+    if (active.kind === "cloud") {
+      await callCloudProxy<unknown>({
+        backend: active,
+        method: "DELETE",
+        path,
+        headers: await buildAutomationRequestHeaders(),
+      });
+      return;
+    }
+
+    await localAutomationAxios.delete(path);
+  }
+
+  static async dispatchAutomation(id: string): Promise<AutomationRun> {
+    const active = getActiveBackend().backend;
+    const path = `${AUTOMATION_BASE_PATH}${getAutomationIdEndpoint("dispatch", id)}`;
+
+    if (active.kind === "cloud") {
+      return callCloudProxy<AutomationRun>({
+        backend: active,
+        method: "POST",
+        path,
+        headers: await buildAutomationRequestHeaders(),
+      });
+    }
+
+    const { data } = await localAutomationAxios.post<AutomationRun>(path);
+    return data;
+  }
+
+  /**
+   * Cancel a pending or running automation run.
+   * Backend: POST /api/automation/v1/runs/{run_id}/cancel
+   */
+  static async cancelAutomationRun(runId: string): Promise<AutomationRun> {
+    const active = getActiveBackend().backend;
+    const path = `${AUTOMATION_BASE_PATH}/v1/runs/${encodeURIComponent(runId)}/cancel`;
+
+    if (active.kind === "cloud") {
+      return callCloudProxy<AutomationRun>({
+        backend: active,
+        method: "POST",
+        path,
+        headers: await buildAutomationRequestHeaders(),
+      });
+    }
+
+    const { data } = await localAutomationAxios.post<AutomationRun>(path);
+    return data;
+  }
+
+  /**
+   * Create an automation from a plugin's `.plugin/plugin.json` `automation`
+   * block. The automation service fetches the plugin, validates `config`
+   * against the manifest's `config_schema`, resolves the declared
+   * agent/LLM profile, and falls back to the manifest's suggested trigger.
+   * Backend: POST /api/automation/v1/plugin-spec (OpenHands/automation#580)
+   *
+   * When a `template` id is supplied and an automation with that template is
+   * already installed, the service returns the existing automation (HTTP 200)
+   * instead of creating a new one (HTTP 201). The `created` flag distinguishes
+   * the two so callers can surface a "already installed" state instead of
+   * pretending the install was fresh.
+   */
+  static async createPluginSpecAutomation(
+    body: CreatePluginSpecAutomationRequest,
+  ): Promise<{ automation: Automation; created: boolean }> {
+    const active = getActiveBackend().backend;
+    // Literal path (outside the interface manifest surface) like the drafts and
+    // run-cancel paths.
+    const path = `${AUTOMATION_BASE_PATH}/v1/plugin-spec`;
+
+    if (active.kind === "cloud") {
+      // The cloud proxy returns only the response body, not the HTTP status,
+      // so we cannot distinguish 201 (created) from 200 (existing) here.
+      // Optimistically report `created: true`; cloud dedupe detection is a
+      // follow-up that requires the proxy to surface status.
+      const automation = await callCloudProxy<Automation>({
+        backend: active,
+        method: "POST",
+        path,
+        body,
+        headers: await buildAutomationRequestHeaders(),
+      });
+      return { automation, created: true };
+    }
+
+    const response = await localAutomationAxios.post<Automation>(path, body);
+    return { automation: response.data, created: response.status === 201 };
+  }
+
+  /**
+   * Read-only preflight for a plugin spec: the parsed manifest (config
+   * schema, runtime profile requirements, suggested trigger) with no side
+   * effects. Absent on backends predating OpenHands/automation#630 — callers
+   * must treat any failure as "preflight unavailable" and degrade gracefully.
+   * Backend: GET /api/automation/v1/plugin-spec/preflight
+   */
+  static async pluginSpecPreflight(plugin: {
+    source: string;
+    ref?: string | null;
+    repo_path?: string | null;
+  }): Promise<PluginSpecPreflightResponse> {
+    const active = getActiveBackend().backend;
+    const query = new URLSearchParams({ source: plugin.source });
+    if (plugin.ref) query.set("ref", plugin.ref);
+    if (plugin.repo_path) query.set("repo_path", plugin.repo_path);
+    const path = `${AUTOMATION_BASE_PATH}/v1/plugin-spec/preflight?${query.toString()}`;
+
+    if (active.kind === "cloud") {
+      return callCloudProxy<PluginSpecPreflightResponse>({
+        backend: active,
+        method: "GET",
+        path,
+        headers: await buildAutomationRequestHeaders(),
+      });
+    }
+
+    const { data } =
+      await localAutomationAxios.get<PluginSpecPreflightResponse>(path);
+    return data;
+  }
+
+  static async listAutomationRuns(
+    id: string,
+    params: { limit?: number; offset?: number } = {},
+  ): Promise<AutomationRunsResponse> {
+    const { limit = 50, offset = 0 } = params;
+    const active = getActiveBackend().backend;
+    const basePath = `${AUTOMATION_BASE_PATH}${getAutomationIdEndpoint("runs", id)}`;
+
+    if (active.kind === "cloud") {
+      return callCloudProxy<AutomationRunsResponse>({
+        backend: active,
+        method: "GET",
+        path: `${basePath}?${buildListQuery(limit, offset)}`,
+        headers: await buildAutomationRequestHeaders(),
+      });
+    }
+
+    const { data } = await localAutomationAxios.get<AutomationRunsResponse>(
+      basePath,
+      { params: { limit, offset } },
+    );
+    return data;
+  }
+
+  static async getAutomationRuns(
+    id: string,
+    limit = 50,
+    offset = 0,
+  ): Promise<AutomationRunsResponse> {
+    return AutomationService.listAutomationRuns(id, { limit, offset });
+  }
+
+  static async toggleAutomation(
+    id: string,
+    enabled: boolean,
+  ): Promise<Automation> {
+    return AutomationService.updateAutomation(id, { enabled });
+  }
+
+  /** The automation's bundle as the service stores it: (gzipped) tar bytes. */
+  static async fetchTarballBytes(id: string): Promise<Uint8Array<ArrayBuffer>> {
+    const active = getActiveBackend().backend;
+    const path = `${AUTOMATION_BASE_PATH}${getAutomationIdEndpoint("tarball", id)}`;
+
+    if (active.kind === "cloud") {
+      const buffer = await callCloudProxy<ArrayBuffer>({
+        backend: active,
+        method: "GET",
+        path,
+        responseType: "arrayBuffer",
+        headers: await buildAutomationRequestHeaders(),
+      });
+      return new Uint8Array(buffer);
+    }
+
+    const { data } = await localAutomationAxios.get<ArrayBuffer>(path, {
+      responseType: "arraybuffer",
+    });
+    return new Uint8Array(data);
+  }
+
+  private static async getKv<T>(
+    path: string,
+    params: Record<string, string | number | boolean>,
+  ): Promise<T> {
+    const active = getActiveBackend().backend;
+
+    if (active.kind === "cloud") {
+      const query = new URLSearchParams(
+        Object.entries(params).map(([name, value]) => [name, String(value)]),
+      );
+      return callCloudProxy<T>({
+        backend: active,
+        method: "GET",
+        path: `${path}?${query}`,
+        headers: await buildAutomationRequestHeaders(),
+      });
+    }
+
+    const { data } = await localAutomationAxios.get<T>(path, { params });
+    return data;
+  }
+
+  static async listKvKeys(
+    automationId: string,
+    { limit, offset = 0 }: { limit: number; offset?: number },
+  ): Promise<AutomationKvKeysResponse> {
+    return AutomationService.getKv<AutomationKvKeysResponse>(
+      AUTOMATION_KV_PATH,
+      { automation_id: automationId, limit, offset },
+    );
+  }
+
+  static async getKvEntry(
+    automationId: string,
+    key: string,
+  ): Promise<AutomationKvEntry> {
+    return AutomationService.getKv<AutomationKvEntry>(
+      `${AUTOMATION_KV_PATH}/${encodeURIComponent(key)}`,
+      { automation_id: automationId, meta: true },
+    );
+  }
+
+  /**
+   * Overwrite existing keys in one transaction: every key is written or none
+   * is. The write is rejected with 409 when the store's version is no longer
+   * `ifVersion`, so a value a run stored meanwhile is not overwritten blindly.
+   */
+  static async setKvEntries(
+    automationId: string,
+    entries: Array<{ key: string; value: unknown }>,
+    ifVersion: number,
+  ): Promise<AutomationKvBatchResponse> {
+    const active = getActiveBackend().backend;
+    const path = `${AUTOMATION_KV_PATH}/batch`;
+    const body = {
+      if_version: ifVersion,
+      operations: entries.map(({ key, value }) => ({
+        op: "set",
+        key,
+        value,
+        xx: true,
+      })),
+    };
+
+    if (active.kind === "cloud") {
+      return callCloudProxy<AutomationKvBatchResponse>({
+        backend: active,
+        method: "POST",
+        path: `${path}?${new URLSearchParams({ automation_id: automationId })}`,
+        body,
+        headers: await buildAutomationRequestHeaders(),
+      });
+    }
+
+    const { data } = await localAutomationAxios.post<AutomationKvBatchResponse>(
+      path,
+      body,
+      { params: { automation_id: automationId } },
+    );
+    return data;
+  }
+
+  static async downloadTarball(id: string, name: string): Promise<void> {
+    const bytes = await AutomationService.fetchTarballBytes(id);
+    downloadBlob(
+      new Blob([bytes], { type: "application/x-tar" }),
+      `${name}.tar`,
+    );
+  }
+
+  /**
+   * Ask what this deployment supports, before a setup form renders.
+   *
+   * The setup endpoints answer a contract authored in `OpenHands/extensions`,
+   * so their bodies are camelCase where the rest of this service is snake_case.
+   */
+  static async getCapabilities(): Promise<DeploymentCapabilities> {
+    const active = getActiveBackend().backend;
+    const path = `${AUTOMATION_BASE_PATH}${getAutomationEndpoint("capabilities")}`;
+
+    if (active.kind === "cloud") {
+      return callCloudProxy<DeploymentCapabilities>({
+        backend: active,
+        method: "GET",
+        path,
+        headers: await buildAutomationRequestHeaders(),
+      });
+    }
+
+    const { data } =
+      await localAutomationAxios.get<DeploymentCapabilities>(path);
+    return data;
+  }
+
+  static async listCustomWebhooks(options: {
+    limit: number;
+    offset: number;
+  }): Promise<CustomWebhookListResponse> {
+    const active = getActiveBackend().backend;
+    const path = `${AUTOMATION_BASE_PATH}${getAutomationEndpoint("webhooks") || "/v1/webhooks"}`;
+    if (active.kind === "cloud") {
+      return callCloudProxy<CustomWebhookListResponse>({
+        backend: active,
+        method: "GET",
+        path: `${path}?limit=${options.limit}&offset=${options.offset}`,
+        headers: await buildAutomationRequestHeaders(),
+      });
+    }
+    const { data } = await localAutomationAxios.get<CustomWebhookListResponse>(
+      path,
+      { params: options },
+    );
+    return data;
+  }
+
+  static async createCustomWebhook(
+    body: CustomWebhookCreateRequest,
+  ): Promise<CustomWebhookCreateResponse> {
+    const active = getActiveBackend().backend;
+    const path = `${AUTOMATION_BASE_PATH}${getAutomationEndpoint("webhooks") || "/v1/webhooks"}`;
+
+    if (active.kind === "cloud") {
+      return callCloudProxy<CustomWebhookCreateResponse>({
+        backend: active,
+        method: "POST",
+        path,
+        headers: await buildAutomationRequestHeaders(),
+        body: body as unknown as Record<string, unknown>,
+      });
+    }
+
+    const { data } =
+      await localAutomationAxios.post<CustomWebhookCreateResponse>(path, body);
+    return data;
+  }
+
+  /**
+   * Whether the active deployment advertises server-backed automation drafts
+   * (the `automationDrafts` feature from `OpenHands/automation` PR #417). The
+   * persisted-draft form flow gates on this so older deployments keep working
+   * with the client-only draft store.
+   */
+  static supportsAutomationDrafts(
+    capabilities: DeploymentCapabilities | null | undefined,
+  ): boolean {
+    return Boolean(capabilities?.features?.includes(AUTOMATION_DRAFTS_FEATURE));
+  }
+
+  static async getFactory(id: string): Promise<Factory> {
+    const active = getActiveBackend().backend;
+    const path = `${AUTOMATION_BASE_PATH}${getAutomationEndpoint("list")}/factories/${encodeURIComponent(id)}`;
+
+    if (active.kind === "cloud") {
+      return callCloudProxy<Factory>({
+        backend: active,
+        method: "GET",
+        path,
+        headers: await buildAutomationRequestHeaders(),
+      });
+    }
+
+    const { data } = await localAutomationAxios.get<Factory>(path);
+    return data;
+  }
+
+  /** Create a factory. Needs `manage_automations`. */
+  static async createFactory(name: string): Promise<Factory> {
+    const active = getActiveBackend().backend;
+    const path = `${AUTOMATION_BASE_PATH}${getAutomationEndpoint("list")}/factories`;
+
+    if (active.kind === "cloud") {
+      return callCloudProxy<Factory>({
+        backend: active,
+        method: "POST",
+        path,
+        body: { name },
+        headers: await buildAutomationRequestHeaders(),
+      });
+    }
+
+    const { data } = await localAutomationAxios.post<Factory>(path, { name });
+    return data;
+  }
+
+  /** Rename a factory. Needs `manage_automations`. */
+  static async renameFactory(id: string, name: string): Promise<Factory> {
+    const active = getActiveBackend().backend;
+    const path = `${AUTOMATION_BASE_PATH}${getAutomationEndpoint("list")}/factories/${encodeURIComponent(id)}`;
+
+    if (active.kind === "cloud") {
+      return callCloudProxy<Factory>({
+        backend: active,
+        method: "PATCH",
+        path,
+        body: { name },
+        headers: await buildAutomationRequestHeaders(),
+      });
+    }
+
+    const { data } = await localAutomationAxios.patch<Factory>(path, { name });
+    return data;
+  }
+
+  /**
+   * Delete a factory. Needs `manage_automations`. The service answers 409
+   * while a live automation still belongs to the factory.
+   */
+  static async deleteFactory(id: string): Promise<void> {
+    const active = getActiveBackend().backend;
+    const path = `${AUTOMATION_BASE_PATH}${getAutomationEndpoint("list")}/factories/${encodeURIComponent(id)}`;
+
+    if (active.kind === "cloud") {
+      await callCloudProxy<unknown>({
+        backend: active,
+        method: "DELETE",
+        path,
+        headers: await buildAutomationRequestHeaders(),
+      });
+      return;
+    }
+
+    await localAutomationAxios.delete(path);
+  }
+
+  /** Whether the active deployment advertises factories. */
+  static supportsFactories(
+    capabilities: DeploymentCapabilities | null | undefined,
+  ): boolean {
+    return Boolean(capabilities?.features?.includes(FACTORIES_FEATURE));
+  }
+
+  /**
+   * Validate a draft without creating it. An invalid draft is a 200 carrying
+   * field-addressed errors; only a malformed envelope is a 4xx.
+   */
+  static async validateDraft(
+    body: SetupRequestBody,
+  ): Promise<ValidateDraftResponse> {
+    const active = getActiveBackend().backend;
+    const path = `${AUTOMATION_BASE_PATH}${getAutomationEndpoint("validate")}`;
+
+    if (active.kind === "cloud") {
+      return callCloudProxy<ValidateDraftResponse>({
+        backend: active,
+        method: "POST",
+        path,
+        body,
+        headers: await buildAutomationRequestHeaders(),
+      });
+    }
+
+    const { data } = await localAutomationAxios.post<ValidateDraftResponse>(
+      path,
+      body,
+    );
+    return data;
+  }
+
+  /**
+   * Create from a draft a setup form derived. Unlike {@link
+   * AutomationService.createAutomation}, which exists for import and has to
+   * park the record on a placeholder trigger, this sends the finished record in
+   * one request.
+   */
+  static async createAutomationDraft(
+    body: SetupRequestBody,
+    /** The entry/action or generic draft kind decides the create endpoint. */
+    target?: AutomationDraftCreateTarget,
+    selectedAction?: string | null,
+  ): Promise<Record<string, unknown>> {
+    const active = getActiveBackend().backend;
+    const path = `${AUTOMATION_BASE_PATH}${automationCreateEndpointForTarget(
+      target,
+      selectedAction,
+    )}`;
+
+    if (active.kind === "cloud") {
+      return callCloudProxy<Record<string, unknown>>({
+        backend: active,
+        method: "POST",
+        path,
+        body,
+        headers: await buildAutomationRequestHeaders(),
+      });
+    }
+
+    const { data } = await localAutomationAxios.post<Record<string, unknown>>(
+      path,
+      body,
+    );
+    return data;
+  }
+
+  // --- Server-backed automation drafts (PR OpenHands/automation#417) ---
+  //
+  // Draft rows are the source of truth while the user is in the setup form. A
+  // draft is materialized into a disabled automation only when it validates and
+  // the user dispatches it for a test run. These endpoints are literal
+  // (outside the interface manifest surface) like the git-sync paths.
+
+  static async createServerDraft(
+    body: CreateAutomationDraftApiRequest,
+  ): Promise<AutomationDraftApiResponse> {
+    const active = getActiveBackend().backend;
+    const path = `${AUTOMATION_BASE_PATH}/v1/drafts`;
+    const requestBody = {
+      endpoint: body.endpoint,
+      draft: body.draft,
+      ...(body.name ? { name: body.name } : {}),
+      ...(body.sourceAutomationId
+        ? { source_automation_id: body.sourceAutomationId }
+        : {}),
+    };
+
+    if (active.kind === "cloud") {
+      const data = await callCloudProxy<AutomationDraftApiResponse>({
+        backend: active,
+        method: "POST",
+        path,
+        body: requestBody,
+        headers: await buildAutomationRequestHeaders(),
+      });
+      return normalizeDraftResponse(data);
+    }
+
+    const { data } =
+      await localAutomationAxios.post<AutomationDraftApiResponse>(
+        path,
+        requestBody,
+      );
+    return normalizeDraftResponse(data);
+  }
+
+  static async getServerDraft(
+    draftId: string,
+  ): Promise<AutomationDraftApiResponse> {
+    const active = getActiveBackend().backend;
+    const path = `${AUTOMATION_BASE_PATH}/v1/drafts/${encodeURIComponent(draftId)}`;
+
+    if (active.kind === "cloud") {
+      const data = await callCloudProxy<AutomationDraftApiResponse>({
+        backend: active,
+        method: "GET",
+        path,
+        headers: await buildAutomationRequestHeaders(),
+      });
+      return normalizeDraftResponse(data);
+    }
+
+    const { data } =
+      await localAutomationAxios.get<AutomationDraftApiResponse>(path);
+    return normalizeDraftResponse(data);
+  }
+
+  static async updateServerDraft(
+    draftId: string,
+    body: UpdateAutomationDraftApiRequest,
+  ): Promise<AutomationDraftApiResponse> {
+    const active = getActiveBackend().backend;
+    const path = `${AUTOMATION_BASE_PATH}/v1/drafts/${encodeURIComponent(draftId)}`;
+    const requestBody: Record<string, unknown> = {};
+    if (body.endpoint !== undefined) requestBody.endpoint = body.endpoint;
+    if (body.draft !== undefined) requestBody.draft = body.draft;
+    if (body.name !== undefined) requestBody.name = body.name;
+
+    if (active.kind === "cloud") {
+      const data = await callCloudProxy<AutomationDraftApiResponse>({
+        backend: active,
+        method: "PATCH",
+        path,
+        body: requestBody,
+        headers: await buildAutomationRequestHeaders(),
+      });
+      return normalizeDraftResponse(data);
+    }
+
+    const { data } =
+      await localAutomationAxios.patch<AutomationDraftApiResponse>(
+        path,
+        requestBody,
+      );
+    return normalizeDraftResponse(data);
+  }
+
+  static async deleteServerDraft(draftId: string): Promise<void> {
+    const active = getActiveBackend().backend;
+    const path = `${AUTOMATION_BASE_PATH}/v1/drafts/${encodeURIComponent(draftId)}`;
+
+    if (active.kind === "cloud") {
+      await callCloudProxy<unknown>({
+        backend: active,
+        method: "DELETE",
+        path,
+        headers: await buildAutomationRequestHeaders(),
+      });
+      return;
+    }
+
+    await localAutomationAxios.delete(path);
+  }
+
+  static async listServerDrafts(
+    params: { limit?: number; offset?: number } = {},
+  ): Promise<AutomationDraftListResponse> {
+    const { limit = 50, offset = 0 } = params;
+    const active = getActiveBackend().backend;
+    const path = `${AUTOMATION_BASE_PATH}/v1/drafts?${buildListQuery(limit, offset)}`;
+
+    if (active.kind === "cloud") {
+      const data = await callCloudProxy<AutomationDraftListResponse>({
+        backend: active,
+        method: "GET",
+        path,
+        headers: await buildAutomationRequestHeaders(),
+      });
+      return normalizeDraftListResponse(data);
+    }
+
+    const { data } =
+      await localAutomationAxios.get<AutomationDraftListResponse>(path);
+    return normalizeDraftListResponse(data);
+  }
+
+  /**
+   * Test-dispatch a dispatchable draft. The service materializes the draft
+   * body into a disabled automation and starts a manual run; the draft row
+   * stays in place as the source of truth. Returns the created run.
+   *
+   * An undispatchable draft answers 422 with `{ message, errors }`; callers
+   * should surface those errors rather than treating them as transport errors.
+   */
+  static async dispatchServerDraft(
+    draftId: string,
+    options: { eventPayload?: Record<string, unknown> } = {},
+  ): Promise<AutomationRun> {
+    const active = getActiveBackend().backend;
+    const path = `${AUTOMATION_BASE_PATH}/v1/drafts/${encodeURIComponent(draftId)}/dispatch`;
+    const body = options.eventPayload
+      ? { event_payload: options.eventPayload }
+      : undefined;
+
+    if (active.kind === "cloud") {
+      return callCloudProxy<AutomationRun>({
+        backend: active,
+        method: "POST",
+        path,
+        headers: await buildAutomationRequestHeaders(),
+        body,
+      });
+    }
+
+    const { data } = body
+      ? await localAutomationAxios.post<AutomationRun>(path, body)
+      : await localAutomationAxios.post<AutomationRun>(path);
+    return data;
+  }
+
+  /**
+   * Upload a packed bundle, and return the `oh-internal://` path the create
+   * call references.
+   *
+   * The body is the archive itself rather than a multipart form - the service
+   * streams it and takes its metadata from the query string, so it never has
+   * to buffer the whole file to start writing.
+   */
+  static async uploadAutomationTarball(
+    name: string,
+    archive: Uint8Array,
+  ): Promise<string> {
+    const active = getActiveBackend().backend;
+    const path =
+      `${AUTOMATION_BASE_PATH}${automationUploadEndpoint()}` +
+      `?name=${encodeURIComponent(name)}`;
+    const headers = { "Content-Type": "application/gzip" };
+
+    let upload: Record<string, unknown>;
+    if (active.kind === "cloud") {
+      // Post the archive straight to the cloud host rather than through the
+      // cloud client: that client JSON-serializes any non-FormData body, which
+      // would turn the gzip `Uint8Array` into `{"0":31,...}` even though the
+      // header says `application/gzip`. Axios preserves the raw bytes (its
+      // `transformRequest` sends the underlying buffer), so the service still
+      // receives the archive as the stream it expects, with metadata in the
+      // query string. This upload sets no host override, so a direct call
+      // matches the cloud client's own direct-to-host path -- we just add the
+      // two headers that path would (`Bearer` auth and `X-Org-Id`).
+      const { orgId } = getActiveBackend();
+      upload = (
+        await axios.post<Record<string, unknown>>(
+          `${active.host.replace(/\/+$/, "")}${path}`,
+          archive,
+          {
+            headers: {
+              ...(await buildAutomationRequestHeaders()),
+              ...headers,
+              ...(active.apiKey
+                ? { Authorization: `Bearer ${active.apiKey}` }
+                : {}),
+              ...(orgId ? { "X-Org-Id": orgId } : {}),
+            },
+          },
+        )
+      ).data;
+    } else {
+      upload = (
+        await localAutomationAxios.post<Record<string, unknown>>(
+          path,
+          archive,
+          { headers },
+        )
+      ).data;
+    }
+
+    const tarballPath = upload.tarball_path;
+    if (typeof tarballPath !== "string" || !tarballPath) {
+      throw new Error("The upload returned no tarball path.");
+    }
+    return tarballPath;
+  }
+
+  // Git sync paths are literal rather than routed through
+  // `getAutomationEndpoint`. That manifest describes the automation surface a
+  // host may remap, and `InterfaceEndpoints` requires every key it declares --
+  // adding these would break existing manifests. Git sync is an org-admin
+  // feature outside that surface.
+  static async getGitSyncStatus(): Promise<GitSyncStatus> {
+    const active = getActiveBackend().backend;
+    const path = `${AUTOMATION_BASE_PATH}/v1/git-sync/status`;
+
+    if (active.kind === "cloud") {
+      return callCloudProxy<GitSyncStatus>({
+        backend: active,
+        method: "GET",
+        path,
+        headers: await buildAutomationRequestHeaders(),
+      });
+    }
+
+    const { data } = await localAutomationAxios.get<GitSyncStatus>(path);
+    return data;
+  }
+
+  static async updateGitSyncConfig(
+    body: GitSyncConfigUpdateRequest,
+  ): Promise<GitSyncStatus> {
+    const active = getActiveBackend().backend;
+    const path = `${AUTOMATION_BASE_PATH}/v1/git-sync/config`;
+
+    if (active.kind === "cloud") {
+      return callCloudProxy<GitSyncStatus>({
+        backend: active,
+        method: "PUT",
+        path,
+        body: body as Record<string, unknown>,
+        headers: await buildAutomationRequestHeaders(),
+      });
+    }
+
+    const { data } = await localAutomationAxios.put<GitSyncStatus>(path, body);
+    return data;
+  }
+
+  /**
+   * Ask whether a configuration can reach its repo, without saving it. Takes
+   * the same body as `updateGitSyncConfig` and answers for the settings that
+   * body would leave in place.
+   */
+  static async checkGitSyncConfig(
+    body: GitSyncConfigUpdateRequest,
+  ): Promise<GitSyncCheckResponse> {
+    const active = getActiveBackend().backend;
+    const path = `${AUTOMATION_BASE_PATH}/v1/git-sync/check`;
+
+    if (active.kind === "cloud") {
+      return callCloudProxy<GitSyncCheckResponse>({
+        backend: active,
+        method: "POST",
+        path,
+        body: body as Record<string, unknown>,
+        headers: await buildAutomationRequestHeaders(),
+      });
+    }
+
+    const { data } = await localAutomationAxios.post<GitSyncCheckResponse>(
+      path,
+      body,
+    );
+    return data;
+  }
+
+  static async triggerGitSync(): Promise<GitSyncTriggerResponse> {
+    const active = getActiveBackend().backend;
+    const path = `${AUTOMATION_BASE_PATH}/v1/git-sync/sync`;
+
+    if (active.kind === "cloud") {
+      return callCloudProxy<GitSyncTriggerResponse>({
+        backend: active,
+        method: "POST",
+        path,
+        headers: await buildAutomationRequestHeaders(),
+      });
+    }
+
+    const { data } =
+      await localAutomationAxios.post<GitSyncTriggerResponse>(path);
+    return data;
+  }
+
+  static async checkHealth(): Promise<AutomationHealthResponse> {
+    const active = getActiveBackend().backend;
+    const path = `${AUTOMATION_BASE_PATH}${getAutomationEndpoint("health")}`;
+
+    try {
+      if (active.kind === "cloud") {
+        const response = await callCloudProxy<AutomationHealthResponse>({
+          backend: active,
+          method: "GET",
+          path,
+          // Fail fast, matching the local branch's 5s timeout below.
+          timeoutSeconds: 5,
+          headers: await buildAutomationRequestHeaders(),
+        });
+        return response;
+      }
+
+      const { data } = await localAutomationAxios.get<AutomationHealthResponse>(
+        path,
+        { timeout: 5000 },
+      );
+      return data;
+    } catch {
+      return { status: "error" };
+    }
+  }
+}
+
+export default AutomationService;

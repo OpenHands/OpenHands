@@ -1,0 +1,720 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import React from "react";
+import { act, renderHook, waitFor } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { AxiosError, type AxiosResponse } from "axios";
+
+import AutomationService from "#/api/automation-service/automation-service.api";
+import {
+  __resetActiveStoreForTests,
+  setActiveSelection,
+  setRegisteredBackends,
+} from "#/api/backend-registry/active-store";
+import { ActiveBackendProvider } from "#/contexts/active-backend-context";
+import {
+  useAutomations,
+  useAutomationDrafts,
+  useCancelAutomationRun,
+  useDispatchAutomation,
+  useDeleteAutomation,
+  useImportAutomation,
+  useToggleAutomation,
+} from "#/hooks/query/use-automations";
+import {
+  useAutomationDetail,
+  useAutomationRuns,
+} from "#/hooks/query/use-automation-detail";
+import type { Backend } from "#/api/backend-registry/types";
+import { AutomationRunStatus } from "#/types/automation";
+import type {
+  Automation,
+  AutomationRun,
+  AutomationsResponse,
+  AutomationRunsResponse,
+} from "#/types/automation";
+import * as telemetry from "#/services/telemetry";
+import { createAgentServerQueryClient } from "#/query-client-config";
+import { getApiErrorMessage } from "#/utils/api-error-message";
+import * as ToastHandlers from "#/utils/custom-toast-handlers";
+
+vi.mock("#/api/automation-service/automation-service.api", () => ({
+  default: {
+    getAutomations: vi.fn(),
+    getAutomation: vi.fn(),
+    getAutomationRuns: vi.fn(),
+    dispatchAutomation: vi.fn(),
+    cancelAutomationRun: vi.fn(),
+    createAutomation: vi.fn(),
+    deleteAutomation: vi.fn(),
+    toggleAutomation: vi.fn(),
+    listServerDrafts: vi.fn(),
+    getCapabilities: vi.fn(),
+    supportsAutomationDrafts: vi.fn(),
+  },
+}));
+
+// Mirrors the non-terminal poll interval returned by `useAutomationRuns`
+// (`refetchInterval` in src/hooks/query/use-automation-detail.ts).
+const RUNS_POLL_INTERVAL_MS = 3000;
+
+let captureMock: ReturnType<typeof vi.spyOn>;
+
+vi.mock("#/hooks/query/use-settings", () => ({
+  useSettings: () => ({ data: { user_consents_to_analytics: true } }),
+}));
+
+const localBackend: Backend = {
+  id: "local-1",
+  name: "Local 1",
+  host: "http://localhost:8000",
+  apiKey: "session-key",
+  kind: "local",
+};
+
+const cloudBackend: Backend = {
+  id: "cloud-1",
+  name: "Production",
+  host: "https://app.all-hands.dev",
+  apiKey: "bearer-key",
+  kind: "cloud",
+};
+
+const automation: Automation = {
+  id: "auto-1",
+  name: "Test",
+  prompt: "p",
+  trigger: { type: "schedule", schedule_human: "Daily" },
+  enabled: true,
+  repository: "acme/repo",
+  model: "daily-profile",
+  created_at: "2026-01-01T00:00:00Z",
+  updated_at: "2026-01-01T00:00:00Z",
+};
+
+const automationRun: AutomationRun = {
+  id: "run-1",
+  status: AutomationRunStatus.PENDING,
+  conversation_id: null,
+  bash_command_id: null,
+  error_detail: null,
+  started_at: "2026-01-02T00:00:00Z",
+  completed_at: null,
+};
+
+const listResponse: AutomationsResponse = {
+  automations: [automation],
+  total: 1,
+};
+
+function makeWrapper() {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  return function Wrapper({ children }: { children: React.ReactNode }) {
+    return (
+      <QueryClientProvider client={queryClient}>
+        <ActiveBackendProvider>{children}</ActiveBackendProvider>
+      </QueryClientProvider>
+    );
+  };
+}
+
+beforeEach(() => {
+  captureMock = vi.spyOn(telemetry, "trackEvent").mockResolvedValue(undefined);
+  window.localStorage.clear();
+  __resetActiveStoreForTests();
+  vi.mocked(AutomationService.getAutomations).mockReset();
+  vi.mocked(AutomationService.getAutomation).mockReset();
+  vi.mocked(AutomationService.getAutomationRuns).mockReset();
+  vi.mocked(AutomationService.listServerDrafts).mockReset();
+  vi.mocked(AutomationService.listServerDrafts).mockResolvedValue({
+    drafts: [],
+    total: 0,
+  });
+  vi.mocked(AutomationService.getCapabilities).mockReset();
+  vi.mocked(AutomationService.getCapabilities).mockResolvedValue({
+    ready: true,
+    features: ["automationDrafts"],
+    triggerKinds: ["cron", "event"],
+    eventSources: [],
+    eventTypes: [],
+    triggers: {},
+  });
+  vi.mocked(AutomationService.supportsAutomationDrafts).mockReset();
+  vi.mocked(AutomationService.supportsAutomationDrafts).mockImplementation(
+    (capabilities) =>
+      Boolean(capabilities?.features?.includes("automationDrafts")),
+  );
+  vi.mocked(AutomationService.dispatchAutomation).mockReset();
+  vi.mocked(AutomationService.dispatchAutomation).mockResolvedValue(
+    automationRun,
+  );
+  vi.mocked(AutomationService.cancelAutomationRun).mockReset();
+  vi.mocked(AutomationService.cancelAutomationRun).mockResolvedValue(
+    automationRun,
+  );
+  vi.mocked(AutomationService.deleteAutomation).mockReset();
+  vi.mocked(AutomationService.toggleAutomation).mockReset();
+  vi.mocked(AutomationService.deleteAutomation).mockResolvedValue(undefined);
+  vi.mocked(AutomationService.toggleAutomation).mockResolvedValue(automation);
+
+  vi.mocked(AutomationService.getAutomations).mockResolvedValue(listResponse);
+  vi.mocked(AutomationService.getAutomation).mockResolvedValue(automation);
+  setRegisteredBackends([localBackend, cloudBackend]);
+  setActiveSelection({ backendId: localBackend.id });
+});
+
+afterEach(() => {
+  captureMock.mockRestore();
+  window.localStorage.clear();
+  __resetActiveStoreForTests();
+});
+
+describe("useAutomationDrafts — draft endpoint unavailability", () => {
+  it("does not call the drafts endpoint when capabilities do not advertise drafts", async () => {
+    vi.mocked(AutomationService.getCapabilities).mockResolvedValue({
+      ready: true,
+      features: [],
+      triggerKinds: ["cron", "event"],
+      eventSources: [],
+      eventTypes: [],
+      triggers: {},
+    });
+
+    const { result } = renderHook(() => useAutomationDrafts(), {
+      wrapper: makeWrapper(),
+    });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(result.current.data).toEqual({ drafts: [], total: 0 });
+    expect(AutomationService.listServerDrafts).not.toHaveBeenCalled();
+  });
+  it("returns an empty draft list when the drafts fetch rejects with an axios-style error", async () => {
+    const error = Object.assign(new Error("Not Found"), {
+      response: { status: 404 },
+    });
+    vi.mocked(AutomationService.listServerDrafts).mockRejectedValue(error);
+
+    const { result } = renderHook(() => useAutomationDrafts(), {
+      wrapper: makeWrapper(),
+    });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(result.current.data).toEqual({ drafts: [], total: 0 });
+  });
+
+  it("returns an empty draft list when the drafts fetch rejects with an SDK HttpError", async () => {
+    // Cloud requests go through callCloudProxy, whose TypeScript client throws
+    // an HttpError with `status` set directly on the error (not under `response`).
+    const error = Object.assign(new Error("Not Found"), {
+      name: "HttpError",
+      status: 405,
+    });
+    vi.mocked(AutomationService.listServerDrafts).mockRejectedValue(error);
+
+    const { result } = renderHook(() => useAutomationDrafts(), {
+      wrapper: makeWrapper(),
+    });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(result.current.data).toEqual({ drafts: [], total: 0 });
+  });
+
+  it("re-throws errors that are not draft-endpoint 404/405 responses", async () => {
+    vi.mocked(AutomationService.listServerDrafts).mockRejectedValue(
+      new Error("boom"),
+    );
+
+    const { result } = renderHook(() => useAutomationDrafts(), {
+      wrapper: makeWrapper(),
+    });
+
+    await waitFor(() => expect(result.current.isError).toBe(true));
+    expect(result.current.error).toBeInstanceOf(Error);
+  });
+});
+describe("automation hooks — backend switch", () => {
+  it("useAutomations refetches when the active backend changes", async () => {
+    // Arrange — mount under the local backend; capture the initial fetch.
+    const { result } = renderHook(() => useAutomations(), {
+      wrapper: makeWrapper(),
+    });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(AutomationService.getAutomations).toHaveBeenCalledTimes(1);
+
+    // Act — flip the active backend to a cloud one.
+    setActiveSelection({ backendId: cloudBackend.id });
+
+    // Assert — react-query treats the new (backend, org) as a brand-new
+    // query (the key includes active.backend.id + active.orgId), so a
+    // second fetch fires automatically without any explicit invalidate.
+    await waitFor(() => {
+      expect(AutomationService.getAutomations).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  it("useAutomations shows no automations of the previous backend while the next one loads", async () => {
+    // Arrange — the local backend's list is loaded; the cloud one never settles.
+    const { result } = renderHook(() => useAutomations(), {
+      wrapper: makeWrapper(),
+    });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    vi.mocked(AutomationService.getAutomations).mockReturnValue(
+      new Promise(() => {}),
+    );
+
+    // Act
+    act(() => setActiveSelection({ backendId: cloudBackend.id }));
+
+    // Assert
+    await waitFor(() =>
+      expect(AutomationService.getAutomations).toHaveBeenCalledTimes(2),
+    );
+    expect(result.current.data).toBeUndefined();
+  });
+
+  it("useAutomationDetail refetches when the active backend changes", async () => {
+    const { result } = renderHook(() => useAutomationDetail({ id: "auto-1" }), {
+      wrapper: makeWrapper(),
+    });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(AutomationService.getAutomation).toHaveBeenCalledTimes(1);
+
+    setActiveSelection({ backendId: cloudBackend.id });
+
+    await waitFor(() => {
+      expect(AutomationService.getAutomation).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  it("useDispatchAutomation dispatches the selected automation", async () => {
+    const { result } = renderHook(() => useDispatchAutomation(), {
+      wrapper: makeWrapper(),
+    });
+
+    await act(async () => {
+      await result.current.mutateAsync("auto-1");
+    });
+
+    expect(AutomationService.dispatchAutomation).toHaveBeenCalledWith("auto-1");
+  });
+});
+
+describe("useAutomationRuns — polling", () => {
+  const pendingRun: AutomationRun = {
+    id: "run-pending",
+    status: AutomationRunStatus.PENDING,
+    conversation_id: null,
+    bash_command_id: null,
+    error_detail: null,
+    started_at: "2026-01-02T00:00:00Z",
+    completed_at: null,
+  };
+  const completedRun: AutomationRun = {
+    id: "run-pending",
+    status: AutomationRunStatus.COMPLETED,
+    conversation_id: "conv-1",
+    bash_command_id: "cmd-1",
+    error_detail: null,
+    started_at: "2026-01-02T00:00:00Z",
+    completed_at: "2026-01-02T00:00:30Z",
+  };
+
+  it("re-fetches while a run is non-terminal, and stops once all runs are terminal", async () => {
+    // Arrange: first fetch returns a PENDING run (polling should engage);
+    // subsequent fetches return a COMPLETED run (polling should then stop).
+    const pendingResponse: AutomationRunsResponse = {
+      runs: [pendingRun],
+      total: 1,
+    };
+    const completedResponse: AutomationRunsResponse = {
+      runs: [completedRun],
+      total: 1,
+    };
+    vi.mocked(AutomationService.getAutomationRuns)
+      .mockResolvedValueOnce(pendingResponse)
+      .mockResolvedValue(completedResponse);
+
+    // Drive the poll window with fake timers: the contract under test is
+    // "one refetch per window while non-terminal, none once terminal", and
+    // advancing the clock asserts exactly that without paying for it in
+    // real time. `advanceTimersByTimeAsync` is required rather than the
+    // synchronous form because each refetch settles through microtasks
+    // between timer callbacks.
+    vi.useFakeTimers();
+    try {
+      // Act
+      renderHook(
+        () => useAutomationRuns({ id: "auto-1", limit: 20, offset: 0 }),
+        { wrapper: makeWrapper() },
+      );
+
+      // Assert: the initial fetch fires once.
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      expect(AutomationService.getAutomationRuns).toHaveBeenCalledTimes(1);
+
+      // The cached data still contains a PENDING run, so refetchInterval
+      // engages and a second fetch arrives one poll window later.
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(RUNS_POLL_INTERVAL_MS);
+      });
+      expect(AutomationService.getAutomationRuns).toHaveBeenCalledTimes(2);
+
+      // The second fetch returned a COMPLETED run, so polling should stop:
+      // several further poll windows elapse with no additional calls.
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(RUNS_POLL_INTERVAL_MS * 3);
+      });
+      expect(AutomationService.getAutomationRuns).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
+describe("run mutations — sidebar conversation refresh", () => {
+  // The sidebar's conversation poll is paused on automation routes, so these
+  // mutations are what keep the sidebar list current for a run's conversation.
+  function makeClientWrapper() {
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    function Wrapper({ children }: { children: React.ReactNode }) {
+      return (
+        <QueryClientProvider client={queryClient}>
+          <ActiveBackendProvider>{children}</ActiveBackendProvider>
+        </QueryClientProvider>
+      );
+    }
+    return { queryClient, Wrapper };
+  }
+
+  const conversationsKey = [
+    "user",
+    "conversations",
+    "paginated",
+    20,
+    "local-1",
+    null,
+  ];
+
+  it("invalidates the cached conversation list after a successful dispatch", async () => {
+    // Arrange — a sidebar list already sits in the cache.
+    const { queryClient, Wrapper } = makeClientWrapper();
+    queryClient.setQueryData(conversationsKey, { pages: [], pageParams: [] });
+    const { result } = renderHook(() => useDispatchAutomation(), {
+      wrapper: Wrapper,
+    });
+
+    // Act
+    await act(async () => {
+      await result.current.mutateAsync("auto-1");
+    });
+
+    // Assert
+    expect(queryClient.getQueryState(conversationsKey)?.isInvalidated).toBe(
+      true,
+    );
+  });
+
+  it("invalidates the cached conversation list after a successful cancel", async () => {
+    // Arrange
+    const { queryClient, Wrapper } = makeClientWrapper();
+    queryClient.setQueryData(conversationsKey, { pages: [], pageParams: [] });
+    const { result } = renderHook(() => useCancelAutomationRun(), {
+      wrapper: Wrapper,
+    });
+
+    // Act
+    await act(async () => {
+      await result.current.mutateAsync({
+        automationId: "auto-1",
+        runId: "run-1",
+      });
+    });
+
+    // Assert
+    expect(queryClient.getQueryState(conversationsKey)?.isInvalidated).toBe(
+      true,
+    );
+  });
+});
+
+describe("automation mutation hooks — analytics tracking", () => {
+  it("captures automation_executed after a successful dispatch", async () => {
+    const { result } = renderHook(() => useDispatchAutomation(), {
+      wrapper: makeWrapper(),
+    });
+
+    await act(async () => {
+      await result.current.mutateAsync("auto-1");
+    });
+
+    await waitFor(() => {
+      expect(captureMock).toHaveBeenCalledWith(
+        "automation_executed",
+        expect.objectContaining({ backend_kind: "local" }),
+      );
+    });
+  });
+
+  it("captures automation_deleted after a successful delete", async () => {
+    const { result } = renderHook(() => useDeleteAutomation(), {
+      wrapper: makeWrapper(),
+    });
+
+    await act(async () => {
+      await result.current.mutateAsync("auto-1");
+    });
+
+    await waitFor(() => {
+      expect(captureMock).toHaveBeenCalledWith(
+        "automation_deleted",
+        expect.objectContaining({ backend_kind: "local" }),
+      );
+    });
+  });
+
+  it("captures automation_disable_button when an automation is disabled", async () => {
+    const { result } = renderHook(() => useToggleAutomation(), {
+      wrapper: makeWrapper(),
+    });
+
+    await act(async () => {
+      await result.current.mutateAsync({ id: "auto-1", enabled: false });
+    });
+
+    await waitFor(() => {
+      expect(captureMock).toHaveBeenCalledWith(
+        "automation_disable_button",
+        expect.objectContaining({ backend_kind: "local" }),
+      );
+    });
+  });
+
+  it("does not capture automation_disable_button when an automation is enabled", async () => {
+    const { result } = renderHook(() => useToggleAutomation(), {
+      wrapper: makeWrapper(),
+    });
+
+    await act(async () => {
+      await result.current.mutateAsync({ id: "auto-1", enabled: true });
+    });
+
+    expect(captureMock).not.toHaveBeenCalledWith(
+      "automation_disable_button",
+      expect.anything(),
+    );
+  });
+});
+
+describe("automation mutation hooks — error toasts", () => {
+  // The automation service answers a stale id with 404 and a `detail` body.
+  const notFound = new AxiosError(
+    "Request failed with status code 404",
+    "ERR_BAD_REQUEST",
+    undefined,
+    undefined,
+    {
+      status: 404,
+      data: { detail: "Automation not found" },
+    } as AxiosResponse,
+  );
+
+  // The app's real client, whose MutationCache toasts unless a mutation opts out.
+  function makeAppClientWrapper() {
+    const queryClient = createAgentServerQueryClient();
+    return function Wrapper({ children }: { children: React.ReactNode }) {
+      return (
+        <QueryClientProvider client={queryClient}>
+          <ActiveBackendProvider>{children}</ActiveBackendProvider>
+        </QueryClientProvider>
+      );
+    };
+  }
+
+  // Like the routes and home cards, which render the API message themselves.
+  const toastApiMessage = (error: unknown) =>
+    ToastHandlers.displayErrorToast(getApiErrorMessage(error, "fallback"));
+
+  let errorToast: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    errorToast = vi
+      .spyOn(ToastHandlers, "displayErrorToast")
+      .mockImplementation(() => "toast-id");
+    vi.mocked(AutomationService.dispatchAutomation).mockRejectedValue(notFound);
+    vi.mocked(AutomationService.createAutomation).mockRejectedValue(notFound);
+    vi.mocked(AutomationService.cancelAutomationRun).mockRejectedValue(
+      notFound,
+    );
+    vi.mocked(AutomationService.toggleAutomation).mockRejectedValue(notFound);
+    vi.mocked(AutomationService.deleteAutomation).mockRejectedValue(notFound);
+  });
+
+  afterEach(() => {
+    errorToast.mockRestore();
+  });
+
+  it.each([
+    {
+      action: "Run now",
+      run: () => {
+        const { result } = renderHook(() => useDispatchAutomation(), {
+          wrapper: makeAppClientWrapper(),
+        });
+        act(() =>
+          result.current.mutate("auto-1", { onError: toastApiMessage }),
+        );
+      },
+    },
+    {
+      action: "Import",
+      run: () => {
+        const { result } = renderHook(() => useImportAutomation(), {
+          wrapper: makeAppClientWrapper(),
+        });
+        act(() =>
+          result.current.mutate(
+            {
+              name: "Test",
+              prompt: "p",
+              trigger: automation.trigger,
+              enabled: false,
+            },
+            { onError: toastApiMessage },
+          ),
+        );
+      },
+    },
+    {
+      action: "Cancel run",
+      run: () => {
+        const { result } = renderHook(() => useCancelAutomationRun(), {
+          wrapper: makeAppClientWrapper(),
+        });
+        act(() =>
+          result.current.mutate(
+            { automationId: "auto-1", runId: "run-1" },
+            { onError: toastApiMessage },
+          ),
+        );
+      },
+    },
+    {
+      action: "Toggle opted out with { disableToast: true }",
+      run: () => {
+        const { result } = renderHook(
+          () => useToggleAutomation({ disableToast: true }),
+          { wrapper: makeAppClientWrapper() },
+        );
+        act(() =>
+          result.current.mutate(
+            { id: "auto-1", enabled: false },
+            { onError: toastApiMessage },
+          ),
+        );
+      },
+    },
+  ])(
+    "a failed $action shows only the caller's API-message toast",
+    async ({ run }) => {
+      // Act
+      run();
+
+      // Assert
+      // The global MutationCache handler runs before the caller's onError.
+      await waitFor(() =>
+        expect(errorToast).toHaveBeenCalledWith("Automation not found"),
+      );
+      expect(errorToast).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it.each([
+    {
+      action: "Toggle",
+      run: () => {
+        const { result } = renderHook(() => useToggleAutomation(), {
+          wrapper: makeAppClientWrapper(),
+        });
+        act(() => result.current.mutate({ id: "auto-1", enabled: true }));
+      },
+    },
+    {
+      action: "Delete",
+      run: () => {
+        const { result } = renderHook(() => useDeleteAutomation(), {
+          wrapper: makeAppClientWrapper(),
+        });
+        act(() => result.current.mutate("auto-1"));
+      },
+    },
+  ])("a failed $action keeps its one global error toast", async ({ run }) => {
+    // Act
+    run();
+
+    // Assert
+    await waitFor(() => expect(errorToast).toHaveBeenCalledTimes(1));
+  });
+});
+
+describe("useImportAutomation — factories", () => {
+  function setup(factoryId?: string) {
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const invalidate = vi.spyOn(queryClient, "invalidateQueries");
+    const wrapper = ({ children }: { children: React.ReactNode }) => (
+      <QueryClientProvider client={queryClient}>
+        <ActiveBackendProvider>{children}</ActiveBackendProvider>
+      </QueryClientProvider>
+    );
+    const { result } = renderHook(() => useImportAutomation({ factoryId }), {
+      wrapper,
+    });
+    return { result, invalidate };
+  }
+
+  const spec = {
+    name: "Test",
+    prompt: "p",
+    trigger: automation.trigger,
+    enabled: false,
+  };
+
+  beforeEach(() => {
+    setRegisteredBackends([localBackend]);
+    setActiveSelection({ backendId: localBackend.id });
+    vi.mocked(AutomationService.createAutomation).mockReset();
+    vi.mocked(AutomationService.createAutomation).mockResolvedValue(automation);
+  });
+
+  it("imports into the given factory and refreshes the lists and factory counts", async () => {
+    const { result, invalidate } = setup("factory-1");
+
+    act(() => result.current.mutate(spec));
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(AutomationService.createAutomation).toHaveBeenCalledWith(
+      spec,
+      "factory-1",
+    );
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ["automations"] });
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ["factories"] });
+  });
+
+  it("imports with no factory by default", async () => {
+    const { result } = setup();
+
+    act(() => result.current.mutate(spec));
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(AutomationService.createAutomation).toHaveBeenCalledWith(
+      spec,
+      undefined,
+    );
+  });
+});

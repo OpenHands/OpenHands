@@ -1,0 +1,272 @@
+import React from "react";
+import { useTranslation } from "react-i18next";
+import { useChatInputLlmProfileState } from "#/hooks/use-chat-input-llm-profile-state";
+import { ComboboxCaretInline } from "#/ui/combobox-caret";
+import SettingsGearIcon from "#/icons/settings-gear.svg?react";
+import CheckIcon from "#/icons/checkmark.svg?react";
+import { useClickOutsideElement } from "#/hooks/use-click-outside-element";
+import { useCloseOnEscape } from "#/hooks/use-close-on-escape";
+import { NavigationLink } from "#/components/shared/navigation-link";
+import { ContextMenu } from "#/ui/context-menu";
+import { ContextMenuListItem } from "#/components/features/context-menu/context-menu-list-item";
+import { Divider } from "#/ui/divider";
+import { Typography } from "#/ui/typography";
+import { I18nKey } from "#/i18n/declaration";
+import { cn } from "#/utils/utils";
+import { getLockedCloudHost } from "#/api/agent-server-config";
+import { chatInputPillButtonClassName } from "#/utils/form-control-classes";
+import { useFreeModels } from "#/hooks/query/use-free-models";
+import { formatModelPillLabel } from "#/utils/format-model-name";
+import { useModelCatalogWarning } from "#/hooks/use-model-catalog-warning";
+import { ModelCatalogWarning } from "#/components/shared/model-catalog-warning";
+
+const PROFILE_LABEL_MAX_CHARS = 18;
+
+function truncateLabel(label: string): string {
+  return label.length <= PROFILE_LABEL_MAX_CHARS
+    ? label
+    : `${label.slice(0, PROFILE_LABEL_MAX_CHARS)}…`;
+}
+
+interface ChatInputLlmProfileMenuContentProps {
+  onClose: () => void;
+  dividerInset?: "menu";
+  settingsLinkClassName?: string;
+  settingsIconClassName?: string;
+}
+
+/**
+ * The in-conversation OpenHands LLM-profile switcher list. Selecting a profile
+ * live-swaps the running conversation's LLM via `/switch_profile` (the ACP
+ * analog is {@link ChatInputModelMenuContent}). Shared by the inline pill and
+ * the chat-input overflow submenu.
+ */
+export function ChatInputLlmProfileMenuContent({
+  onClose,
+  dividerInset,
+  settingsLinkClassName,
+  settingsIconClassName,
+}: ChatInputLlmProfileMenuContentProps) {
+  const { t } = useTranslation("openhands");
+  const freeModels = useFreeModels();
+  const isModelUnlisted = useModelCatalogWarning();
+  const {
+    profiles,
+    currentProfileName,
+    currentProfileModel,
+    canSwitchProfile,
+    selectProfile,
+  } = useChatInputLlmProfileState();
+  // A read-only surface (a cloud start-task route) still names the active
+  // profile — the same shape ChatInputModelMenuContent uses when the ACP
+  // picker is gated off.
+  const showProfileList = canSwitchProfile && profiles.length > 0;
+  const readOnlyProfileName = canSwitchProfile ? null : currentProfileName;
+  // Locked-to-Cloud blocks the Canvas LLM page this links to (OHE-3457).
+  const showSettingsLink = getLockedCloudHost() === null;
+
+  const handleSelect = (profileName: string) => {
+    selectProfile(profileName);
+    onClose();
+  };
+
+  return (
+    <>
+      {showProfileList && (
+        <>
+          {/* role="presentation" keeps this a valid <li> child of the
+              ContextMenu <ul> without exposing the label as a menu item. */}
+          <li role="presentation" className="px-2 pt-1 pb-0.5">
+            <Typography.Text className="menu-caption-text font-medium text-text-dim uppercase tracking-wide leading-4">
+              {t(I18nKey.SETTINGS$AVAILABLE_PROFILES)}
+            </Typography.Text>
+          </li>
+          {profiles.map((profile) => {
+            const isCurrent = profile.name === currentProfileName;
+            const displayModel = formatModelPillLabel(
+              profile.model,
+              freeModels,
+            );
+            return (
+              <ContextMenuListItem
+                key={profile.name}
+                testId={`chat-input-llm-profile-option-${profile.name}`}
+                onClick={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  if (isCurrent) {
+                    onClose();
+                    return;
+                  }
+                  handleSelect(profile.name);
+                }}
+                className={cn(
+                  "flex flex-col items-stretch gap-0.5",
+                  isCurrent && "bg-interactive-hover",
+                )}
+              >
+                <span className="flex items-center gap-2">
+                  <span
+                    className="flex-1 truncate text-sm leading-5"
+                    title={profile.model ?? profile.name}
+                  >
+                    {profile.name}
+                  </span>
+                  {isCurrent && (
+                    <CheckIcon
+                      width={14}
+                      height={14}
+                      className="shrink-0"
+                      aria-hidden
+                    />
+                  )}
+                </span>
+                {displayModel && (
+                  <span className="block truncate text-xs leading-4 text-muted">
+                    {displayModel}
+                  </span>
+                )}
+                {isModelUnlisted(profile.model) && <ModelCatalogWarning />}
+              </ContextMenuListItem>
+            );
+          })}
+        </>
+      )}
+      {readOnlyProfileName && (
+        <li className="text-sm" data-testid="chat-input-llm-profile-current">
+          <div className="flex flex-col gap-0.5 p-2 leading-5 text-foreground">
+            <span className="truncate" title={readOnlyProfileName}>
+              {readOnlyProfileName}
+            </span>
+            {currentProfileModel && (
+              <span className="truncate text-xs leading-4 text-muted">
+                {formatModelPillLabel(currentProfileModel, freeModels)}
+              </span>
+            )}
+            {isModelUnlisted(currentProfileModel) && <ModelCatalogWarning />}
+          </div>
+        </li>
+      )}
+      {showSettingsLink && (showProfileList || readOnlyProfileName) && (
+        <Divider inset={dividerInset} />
+      )}
+      {showSettingsLink && (
+        <li className="text-sm">
+          <NavigationLink
+            to="/settings/llm"
+            onClick={onClose}
+            className={cn(
+              "flex h-7.5 items-center gap-2 rounded p-2 leading-5 text-foreground hover:bg-interactive-hover transition-colors",
+              settingsLinkClassName,
+            )}
+          >
+            <SettingsGearIcon
+              width={16}
+              height={16}
+              className={cn("shrink-0", settingsIconClassName)}
+              aria-hidden
+            />
+            <span>{t(I18nKey.SETTINGS$LLM_PROFILES)}</span>
+          </NavigationLink>
+        </li>
+      )}
+    </>
+  );
+}
+
+export function ChatInputLlmProfilePicker() {
+  const { t } = useTranslation("openhands");
+  const {
+    profiles,
+    currentProfileName,
+    currentProfileModel,
+    isLoading,
+    isSwitching,
+  } = useChatInputLlmProfileState();
+  const isModelUnlisted = useModelCatalogWarning();
+  const [isPopoverOpen, setIsPopoverOpen] = React.useState(false);
+  const triggerRef = React.useRef<HTMLButtonElement>(null);
+  const [popoverMaxHeight, setPopoverMaxHeight] = React.useState<number>();
+  const popoverRef = useClickOutsideElement<HTMLUListElement>(
+    () => setIsPopoverOpen(false),
+    triggerRef,
+  );
+  useCloseOnEscape(isPopoverOpen, () => setIsPopoverOpen(false), triggerRef);
+
+  React.useLayoutEffect(() => {
+    if (!isPopoverOpen) return undefined;
+    const measureAvailableSpace = () => {
+      const trigger = triggerRef.current;
+      if (!trigger) return;
+      // Leave room for the menu margin and an 8px viewport gutter.
+      setPopoverMaxHeight(
+        Math.max(
+          0,
+          Math.min(
+            window.innerHeight * 0.6,
+            trigger.getBoundingClientRect().top - 16,
+          ),
+        ),
+      );
+    };
+    measureAvailableSpace();
+    window.addEventListener("resize", measureAvailableSpace);
+    window.addEventListener("scroll", measureAvailableSpace, true);
+    return () => {
+      window.removeEventListener("resize", measureAvailableSpace);
+      window.removeEventListener("scroll", measureAvailableSpace, true);
+    };
+  }, [isPopoverOpen]);
+
+  // No LLM profiles yet (or the agent-server lacks the surface): stay out of
+  // the way, exactly like the ACP/AgentProfile pickers.
+  if (isLoading || profiles.length === 0) {
+    return null;
+  }
+
+  const label = currentProfileName ?? t(I18nKey.LLM$SELECT_MODEL_PLACEHOLDER);
+
+  return (
+    <div className="relative min-w-0">
+      <button
+        ref={triggerRef}
+        type="button"
+        className={cn(chatInputPillButtonClassName, "max-w-50")}
+        title={currentProfileName ?? undefined}
+        data-testid="chat-input-llm-profile"
+        aria-expanded={isPopoverOpen}
+        aria-haspopup="dialog"
+        // Disabled mid-switch so re-opening can't fire a second /switch_profile.
+        disabled={isSwitching}
+        aria-busy={isSwitching}
+        onClick={(event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          setIsPopoverOpen((open) => !open);
+        }}
+      >
+        <span className="truncate">{truncateLabel(label)}</span>
+        {isModelUnlisted(currentProfileModel) && (
+          <ModelCatalogWarning compact />
+        )}
+        <ComboboxCaretInline isOpen={isPopoverOpen} />
+      </button>
+
+      {isPopoverOpen && (
+        <ContextMenu
+          ref={popoverRef}
+          testId="chat-input-llm-profile-popover"
+          style={{ maxHeight: popoverMaxHeight }}
+          position="top"
+          alignment="left"
+          spacing="none"
+          className="z-60 mb-2 min-w-50 max-w-80 profile-menu-height overflow-y-auto"
+        >
+          <ChatInputLlmProfileMenuContent
+            onClose={() => setIsPopoverOpen(false)}
+          />
+        </ContextMenu>
+      )}
+    </div>
+  );
+}

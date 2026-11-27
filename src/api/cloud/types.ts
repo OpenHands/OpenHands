@@ -1,0 +1,113 @@
+/**
+ * Minimal slice of the OpenHands cloud organization shape that the GUI needs
+ * to render the backend selector. Full shape lives in the OpenHands repo;
+ * we keep only the fields actually read by this codebase.
+ */
+export interface CloudOrganization {
+  id: string;
+  name: string;
+  is_personal?: boolean;
+  /**
+   * Whether the org should be offered in the UI. The cloud sets this per org
+   * from its `HIDE_PERSONAL_WORKSPACES` policy. Optional on purpose: an
+   * app-server that predates the field omits it, and an absent flag means
+   * "visible" — only an explicit `false` hides an org.
+   */
+  is_visible?: boolean;
+  /**
+   * Whether members can discover the conversations shared with the org in
+   * the Shared list. An Org Admin turns it off on Settings > Organization.
+   * An app-server that predates the setting omits it, which means "on".
+   */
+  enable_shared_conversation_discovery?: boolean;
+}
+
+export interface CloudOrganizationsResponse {
+  items: CloudOrganization[];
+  current_org_id: string | null;
+}
+
+/**
+ * Subset of OpenHands' OrganizationMember that the GUI reads. Returned by
+ * `GET /api/organizations/{orgId}/me`. The relationship between the org and
+ * the current user is the source of truth for "is this a personal
+ * workspace?" — namely `org_id === user_id`.
+ */
+export interface CloudOrganizationMember {
+  org_id: string;
+  user_id: string;
+  email?: string | null;
+  role?: string;
+  status?: string;
+}
+
+/**
+ * Subset of the caller's own budget that the GUI reads. Returned by
+ * `GET /api/organizations/{orgId}/budgets/me`. `enabled` is false when the
+ * organization budget is off, and no other field is set then.
+ */
+export interface CloudMyBudget {
+  enabled: boolean;
+  /** The caller's own monthly limit, in USD. */
+  monthly_limit?: number | null;
+  /** The organization's monthly limit, in USD. */
+  org_monthly_limit?: number | null;
+  /** Admin-written guidance for a member who reaches either limit. */
+  limit_reached_instructions?: string | null;
+}
+
+/**
+ * Subset of an enterprise service account that the GUI reads. Returned by
+ * `GET /api/organizations/{orgId}/service-accounts` (requires
+ * `manage_service_accounts`). `id` is the user id the automation service
+ * stores as `Automation.user_id` when `run_as_kind` is `service`.
+ */
+export interface CloudServiceAccount {
+  id: string;
+  org_id: string;
+  name: string;
+  is_disabled: boolean;
+}
+
+/** One page of `GET /api/organizations/{orgId}/service-accounts`. */
+export interface CloudServiceAccountPage {
+  items: CloudServiceAccount[];
+  next_page_id?: string | null;
+}
+
+/**
+ * Response from `GET /api/keys/current`. Identifies the org the calling
+ * API key is scoped to. Legacy keys without an org binding cause the
+ * upstream to return HTTP 400 instead of producing this shape — the
+ * caller catches that case rather than expecting a partial response.
+ */
+export interface CloudApiKeyMetadata {
+  id: string;
+  name: string;
+  org_id: string | null;
+  user_id: string;
+  auth_type: string;
+}
+
+/**
+ * Server-derived Super Admin setup-guide steps, from
+ * `GET /api/admin/setup-state` on an OpenHands Enterprise backend.
+ */
+export interface CloudSetupGuideSteps {
+  org_llm: boolean;
+  git_provider: boolean;
+  mcp_server: boolean;
+  automation: boolean;
+  invite: boolean;
+}
+
+/**
+ * Subset of the enterprise setup-state the GUI reads. `guide_steps` is
+ * non-null only for the first Super Admin while the guide has an
+ * organization and has not been dismissed.
+ */
+export interface CloudSetupState {
+  guide_org_id: string | null;
+  guide_dismissed: boolean;
+  guide_steps: CloudSetupGuideSteps | null;
+}

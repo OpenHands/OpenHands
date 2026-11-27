@@ -1,0 +1,395 @@
+---
+name: custom-codereview-guide
+description: Repository-specific triage and review rules for the OpenHands Agent Canvas frontend.
+triggers:
+  - /codereview
+---
+
+# OpenHands Agent Canvas Code Review Guidelines
+
+This guide supplements the public `code-review` skill with rules specific to
+`OpenHands/OpenHands`, the Agent Canvas frontend. Read `AGENTS.md` first; it is
+the detailed source of truth for current architecture and test conventions.
+
+## Repository and Product Scope
+
+Confirm scope before detailed inspection. This repository owns the Agent Canvas
+product: its UI, product behavior, and Canvas-specific integration of existing
+SDK and automation capabilities.
+
+Out of scope here, because another repository owns it:
+
+- reusable agent-server, runtime, SDK, and client contracts
+  (`OpenHands/software-agent-sdk`);
+- generic automation scheduling, state, dispatch, and profile machinery
+  (`OpenHands/automation`); and
+- reusable extensions, skills, plugins, and automation bundles
+  (`OpenHands/extensions`).
+
+Cross-repository work is acceptable when the PR contains only the Canvas-owned
+integration and depends on public interfaces from the owning repository. When a
+change belongs in one of the repositories above, say so and ask a maintainer to
+confirm before reviewing the rest.
+
+## Triage: Ownership and Scope
+
+During triage, check ownership, supported behavior, and acceptance criteria.
+Issue readiness means the work is clear enough to start—not that the fix is
+complete. Do not require a PR, passing implementation tests, or before-and-after
+fix evidence. Reconsider readiness when new information leaves scope or expected
+behavior unresolved.
+
+Trace the failing boundary before assigning an owner:
+
+- Check the SDK for events, tools, ACP, profiles, conversation lifecycle, and persistence.
+- Check automation for form contracts, run state, and pagination.
+- Check producers and consumers at installed or supported versions using locks,
+  runtime versions, and `config/defaults.json`, not upstream main alone.
+  Cite versions and sources when ownership or compatibility depends on them.
+
+Prefer fixes in the owning provider. Separate provider work from Canvas integration
+and state release/dependency constraints. Distinguish new regressions from independent,
+preexisting upstream issues. Recommend material follow-ups without expanding scope,
+editing other repositories, or creating tickets without authorization.
+Reuse answers in the issue and linked discussions.
+
+## Triage: Behavioral Acceptance and Readiness
+
+Write acceptance criteria as observable outcomes, affected modes, and relevant
+failure/recovery cases, not implementation requirements or PR artifacts. Keep verification separate.
+Bugs need expected/actual behavior, environment/version, and reproduction steps;
+features need the desired outcome and scope, not evidence of an unbuilt feature.
+
+For Canvas functional bugs, capture the failure in the running app; logs, API
+output, and reproducers can supplement the capture. Accept evidence linked in
+comments without duplicate uploads. State uncertainty when the failure has not
+been reproduced. Triage does not require an after-fix demonstration.
+
+## Implementation and Merge Review
+
+The following checks apply to PRs, not triage.
+
+## Review Sequence and Decision
+
+Review the current PR head in this order:
+
+1. Read the linked issue, its acceptance criteria, and unresolved review threads.
+2. Confirm that the change belongs in this repository and follows the dependency
+   direction below.
+3. Apply every relevant blocking checkpoint in this guide.
+4. Inspect tests and production-facing evidence for the behavior changed.
+
+Submit exactly one review:
+
+- **APPROVE** when every applicable checkpoint passes and there are no material
+  correctness, security, compatibility, architecture, or evidence gaps.
+- **COMMENT** when a material gap remains. State the concrete consequence, the
+  unmet checkpoint or acceptance criterion, and the smallest viable correction.
+- Never use **REQUEST_CHANGES**. A human maintainer owns the blocking decision.
+
+For changes that can affect agent or benchmark behavior—prompts, tool selection,
+conversation payloads, terminal behavior, planning, memory, or evaluation
+paths—state the eval risk in the review. Missing optional eval evidence is not a
+material code finding: when the current head otherwise passes review, APPROVE so
+the automation can request a human maintainer to choose the appropriate
+lightweight evaluation. Use COMMENT when an acceptance criterion or required
+check calls for specific eval evidence and that evidence is missing or failing,
+or when available results show a regression.
+
+Separate code quality from merge readiness. Use **COMMENT** for a failing required
+check, an unmergeable branch, or missing required evidence, even if the code is sound. Name the unmet gate.
+Keep the summary, final verdict/footer, and submitted review state consistent;
+never say `APPROVED` with an unresolved material finding or merge gate.
+Optional evaluation follow-up remains nonblocking.
+
+Include a compact checklist for every linked acceptance criterion. Meeting the
+checklist is necessary but does not replace review for regressions, security, or
+maintainability.
+
+## Repository Ownership and Dependency Direction
+
+| Repository                     | Owns                                                                                                            |
+| ------------------------------ | --------------------------------------------------------------------------------------------------------------- |
+| `OpenHands/OpenHands`          | Agent Canvas UI, frontend state, backend selection, frontend service integration, and local-stack orchestration |
+| `OpenHands/software-agent-sdk` | Agent Server, SDK, canonical server API, and browser-compatible client in `clients/typescript/`                 |
+| `OpenHands/extensions`         | Reusable skills, plugins, and integrations                                                                      |
+| `OpenHands/automation`         | Scheduling, webhooks, run history, and automation dispatch                                                      |
+
+The normal dependency direction is Agent Server contract → TypeScript client →
+Canvas. Submit **COMMENT** for raw endpoint reimplementations, Canvas-local copies
+of server contracts, or behavior implemented in the wrong repository.
+
+## Blocking Checkpoints
+
+### Agent Server and Cloud API access
+
+Apply this checkpoint when a change calls or models an Agent Server, Cloud, or
+runtime-sandbox API.
+
+- `src/api/no-direct-agent-server-calls.test.ts` is the executable source of
+  truth. Agent Server access must use `@openhands/typescript-client` with options
+  from `src/api/agent-server-client-options.ts`.
+- Cloud **App-API** requests must use `callCloudProxy` (now a direct browser
+  call, since the SaaS permits CORS for API-key-authenticated requests). Per-
+  conversation **runtime-sandbox** requests are not proxied: they must call the
+  conversation's runtime URL directly via the typed client
+  (`ConversationClient` / `BashClient` / `RemoteWorkspace` / `FileClient`, or a
+  typed wrapper built via `getAgentServerHttpClientOptions`) with its session
+  API key -- the same path local mode uses. Do not route runtime calls through
+  `callCloudProxy` with `hostOverride`: the `/api/cloud-proxy` envelope it relied
+  on was removed from the agent-server (software-agent-sdk #3326) and 405s on
+  current backends.
+- Treat changes to the guard's allowlist as architecture changes. Do not copy the
+  allowlist into this guide.
+
+Submit **COMMENT** if the PR adds raw `fetch`, `axios`, shared `openHands`, or
+low-level HTTP client access to an Agent Server or cloud endpoint.
+
+### Agent Server compatibility
+
+Apply this checkpoint when Canvas begins relying on a new Agent Server endpoint,
+field, schema, or behavior. Canvas and the Agent Server are independently
+versioned.
+
+Require an increase to `minimumAgentServer` to the first compatible released version.
+
+Before requiring or removing a fallback, show the SDK producer's payloads and behavior
+at the supported release floor and affected deployed versions.
+Old fixtures or hypothetical legacy fields alone do not justify compatibility code.
+
+Verify the compatibility boundary. Adding a TypeScript-client method does not
+make older Agent Servers support it. Submit **COMMENT** if a supported backend
+can reach the new code and fail because the required server behavior is absent.
+
+### Affected Canvas modes
+
+Apply this checkpoint when a change touches a shared adapter, conversation
+builder, setting, state selector, or presentation helper.
+
+Enumerate the affected consumers across these dimensions:
+
+- Local and Cloud backends;
+- OpenHands and ACP agents;
+- standard, planning, and delegated conversations; and
+- standalone and embedded Canvas.
+
+Verify every affected path. Do not require the full Cartesian product when
+control or data flow proves a dimension is isolated. Submit **COMMENT** when an
+affected variant can take a distinct path but the implementation or evidence
+covers only the default.
+
+### Event wire contracts
+
+Apply this checkpoint when a change reads, extends, or renders Agent Server
+events.
+
+The SDK event model is the wire authority, the TypeScript client mirrors it, and
+Canvas consumes the published client type. A contract change must land in this
+order:
+
+1. SDK model/schema and serialization coverage.
+2. TypeScript-client mirror derived from the SDK payload.
+3. Published client release.
+4. Canvas consumption and rendering or telemetry coverage.
+
+Canvas-only presentation state belongs in a separate view model keyed by event
+identity. Submit **COMMENT** for Canvas-local wire redeclarations, partial
+intersections, module augmentation, or presentation fields added to wire types.
+
+### Durable state and transitions
+
+Apply this checkpoint when a change reads or writes a backend setting, profile,
+conversation cache entry, or persisted browser value.
+
+- Give the value one named owner and one obvious writer. Do not mirror an
+  authoritative store into component-local state.
+- When a stored shape or selection rule changes, verify existing-state hydration
+  or migration as well as create, update, delete, default, and active-selection
+  transitions that the feature supports.
+- A destructive transition must leave a deterministic valid state or an explicit
+  empty state that the UI handles.
+
+Submit **COMMENT** if existing users can lose state, a delete or reset can leave
+an invalid selection, or multiple writers can race or overwrite one another.
+
+Telemetry has stricter named owners:
+
+- `src/services/telemetry.ts` exclusively owns the Canvas PostHog client.
+- React events use typed functions from `src/hooks/use-tracking.ts`.
+- Consent rendering uses the telemetry consent external store;
+  `setTelemetryConsent` is the only consent controller.
+- A business milestone has one canonical capture.
+
+### Docker user and permission workarounds
+
+For Docker `--user` or `HOME` workarounds, test the full path under that UID/GID:
+home, config/cache directories, temporary files, and subprocess/browser startup.
+Check ownership and permissions outside the persistence mount too.
+
+## Design Review
+
+Prefer named hooks, services, stores, and feature modules over shared-root
+branches or switches. Keep necessary exceptions in a narrow allowlist beside an
+executable guard. Do not add layers that only rename or forward arguments, or
+split a cohesive file because it is long.
+
+`useEffect` is for synchronization with an external system, not derived render
+data, user actions, lazy initialization, store mirroring, or ordering repairs.
+Subscriptions, browser APIs, timers, and network synchronization remain valid
+when cleanup and dependencies are explicit.
+
+## Design Context for Deep PRs
+
+A diff shows each changed line, not the design. Expect durable design context
+when a reviewer cannot judge a PR from the diff in a couple of minutes, for
+example:
+
+- a new or changed Agent Server, Cloud, or automation integration, event
+  contract, or persisted-state shape;
+- a new feature module or subsystem, a cross-cutting refactor, or a migration;
+- a behavior change in backend selection, conversation flow, or settings and
+  profile transitions; or
+- a large change whose intent cannot be reconstructed from the diff, even if no
+  single hunk is complex.
+
+Do not ask for design context on trivial, generated, or self-explanatory
+changes: a typo, a one-line guard, a dependency bump, a copy or style tweak, or a
+small localized fix. Size alone does not make a PR deep.
+
+Adequate design context states:
+
+- **Intent:** the problem and why this approach;
+- **Before and after:** the important behavior, UI flow, or API shape on each
+  side;
+- **Compatibility and risk:** affected Canvas modes, stored state, and supported
+  backends, and what can break; and
+- **Code references:** links to the real code at a commit SHA.
+
+Put it in the PR description, or link a `.pr/` design doc that covers it from
+the `pr-design-doc` skill. Count a `.pr/` doc only when the link is pinned to a
+full commit SHA, not the branch name. After either a same-repository or fork PR
+merges, the next release PR removes `.pr/` from `main`. A SHA-pinned link keeps
+working after that removal or PR branch deletion.
+
+Scale the response to the risk assessment:
+
+- **Deep and 🔴 HIGH risk without adequate context:** submit **COMMENT** and ask
+  for the write-up or a SHA-pinned doc.
+- **Deep and 🟡 MEDIUM risk:** ask for it when the change is hard to reconstruct
+  from the diff; a small, self-evident change does not need it.
+- **🟢 LOW risk:** never withhold approval for missing design context.
+
+Design context is a review aid, not a merge gate by itself. It does not excuse a
+correctness, security, compatibility, or architecture defect.
+
+## Dependencies and Releases
+
+- Direct dependencies are exact-pinned. Update `package.json` and
+  `package-lock.json` together through npm.
+- Treat dependency exemptions, git pins, and security overrides as policy
+  changes. `__tests__/package-library.test.ts` is the executable source of truth.
+- Scrutinize newly published third-party versions for supply-chain risk.
+  First-party OpenHands packages are exempt from a waiting period, not from
+  contract and release-order review.
+- Package version changes belong in explicit release PRs and must match release
+  workflow expectations.
+
+## Testing and Production Evidence
+
+- Nonvisual evidence alone is acceptable only for non-functional changes, such
+  as documentation or test-only edits that do not alter product behavior. Use
+  relevant commands and output; docs-only changes need no runtime tests or media.
+- Check rendering in Canvas. Token, class-name, and source-string assertions do
+  not prove computed styling, isolation, layout, or readability, or replace captures.
+- Every functional change needs screenshots or video of the running Canvas
+  exercising the changed behavior, including backend integration, launcher,
+  API, and lifecycle changes. Logs, commands, and tests supplement—not replace—
+  that demonstration. Bug fixes must show failure before and success after;
+  new features must demonstrate the working behavior.
+- Authentic evidence comes from the real Agent Canvas app, browser, OS dialog,
+  generated or downloaded artifact, or actual terminal/runtime output. It must
+  include enough surrounding context and reproduction steps to establish what
+  produced it. Mockups, Figma or design images, diagrams, manually recreated
+  terminal output, synthetic before/after cards, and other illustrative graphics
+  do not prove that the code ran.
+- "Real app" evidence must exercise the production integration path with a real
+  backend and, when the behavior depends on model execution, a real LLM. A
+  mock-LLM or mocked backend run is E2E regression coverage, not live evidence.
+  The artifact and description must identify the backend and model used so the
+  reviewer can distinguish live evidence from a mock fixture.
+- Runtime and user-visible bug fixes require the same production-facing setup
+  before and after the change. The base or released version must reproduce the
+  bug; the PR head must show the corrected behavior. If the claimed state cannot
+  be produced through the real product, require the issue and PR to say so and
+  describe the change as defensive handling rather than a reproduced production
+  bug.
+- Match the artifact type to the behavior. A screenshot can prove a static render
+  state, but not duration, ordering, disappearance, refresh, navigation, or any
+  other temporal behavior. Those changes require a video that visibly shows the
+  trigger, the relevant transition, and the final corrected state. A still image
+  of a supposedly stuck or stale state does not establish how long it persisted.
+- Visual evidence must leave the changed behavior and relevant controls readable.
+  Dismiss privacy, consent, onboarding, cookie, tooltip, and other overlays before
+  capture; an obscured target is not evidence even if the underlying app is real.
+- When unsure what genuine product evidence looks like, compare it with these
+  official OpenHands documentation captures: [first-time setup](https://github.com/OpenHands/docs/blob/2409e927af05a40acc27190383a424615fc0f807/openhands/static/img/agent-canvas-setup-step-1.png),
+  [LLM profiles manager](https://github.com/OpenHands/docs/blob/2409e927af05a40acc27190383a424615fc0f807/openhands/static/img/agent-canvas-llm-profiles-manager.png),
+  and [`/model` interaction](https://github.com/OpenHands/docs/blob/2409e927af05a40acc27190383a424615fc0f807/openhands/static/img/model-command-agent-canvas.png).
+- Lifecycle fixes must also verify resulting process or resource state, such as
+  the parent exit code and remaining child services or listening ports.
+- Tests must exercise real logic and observable state. A claimed regression test
+  must reach the target behavior and fail when that behavior regresses; mocks
+  that only prove another mock was called are insufficient.
+- Do not duplicate library behavior or add brittle presentation-only snapshots.
+
+Tests, mock-LLM runs, and mocked-backend runs are regression proof, not a
+substitute for live evidence when the changed behavior requires it. Submit
+**COMMENT** when production-facing evidence is required but absent or ambiguous,
+and name the exact capture or verification still needed before approval.
+
+The PR-description checker requires media for frontend paths and declared bug
+fixes or features, including nonfrontend changes. It checks presence, not whether
+Canvas actually ran or the capture proves before/after behavior. Reviewers enforce
+the functional-change evidence rule above even when a PR is labeled as a chore;
+do not fabricate media or relabel a functional change to avoid evidence.
+
+Follow the test routing in `AGENTS.md`. Mock-LLM, Docker mock-LLM, and live
+LLM-backed E2E suites run after changes reach `main`, not from PR labels. For
+risky pre-merge changes, recommend manually dispatching the relevant workflow
+against the PR branch. Never broaden secret exposure for convenience.
+
+## Final Context and Comment Discipline
+
+Before submitting, compare the review summary and every finding with the current
+PR title, head commit, changed-file manifest, linked issues, acceptance criteria,
+and existing review threads. If a finding describes files or behavior outside
+that context, stop and re-read the PR.
+
+Do not comment on formatting handled by tooling, minor style, praise, optional
+unrelated refactors, extra tests for straightforward data/config changes, or
+temporary `.pr/` artifacts. Do not manufacture feedback to avoid approval.
+
+For every finding, trace the call or data flow far enough to show the concrete
+user-visible or architectural consequence. Prefer one root-cause comment over
+several symptoms, and suggest the smallest viable correction.
+
+## Dependency release-age review
+
+For dependency additions or updates, inspect every changed third-party npm or
+PyPI version, including transitive lockfile changes. Require at least seven days
+since publication of that exact version. Use npm or PyPI registry publication/
+upload metadata; this repository has no `uv.lock`. Include PyPI version changes
+in Docker or launcher install commands. A weekly bot schedule, an old package
+name, or a passing install is not age evidence.
+
+For an under-seven-day artifact, leave a COMMENT naming the package, version,
+publication time, and source, and defer approval until it ages out or a maintainer
+explicitly approves a narrowly documented exception. If publication time is
+unavailable, ask for that evidence. Existing named first-party exemptions apply
+only to those packages, not their third-party dependencies or blanket approval
+of the lockfile. Apply this check before any dependency-bump fast path.
+
+Flag removal or weakening of the npm Dependabot cooldown or new broad
+exemptions. Dependabot security updates bypass cooldown, so review them under
+the explicit maintainer-exception rule in `AGENTS.md`; agents cannot approve
+their own bypass.

@@ -1,0 +1,27 @@
+{
+  "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
+  "include-component-in-tag": false,
+  "include-v-in-tag": true,
+  "draft-pull-request": true,
+  "packages": {
+    ".": {
+      "release-type": "node",
+      "changelog-type": "github",
+      "skip-changelog": true,
+      "extra-files": [
+        {
+          "type": "json",
+          "path": "config/defaults.json",
+          "jsonpath": "$.versions.agentCanvas"
+        },
+        {
+          "_comment": "Must stay `generic` (annotation-driven). A bare \"helm/agent-canvas/Chart.yaml\" string would resolve to CompositeUpdater(GenericYaml('$.version'), Generic), which overwrites the chart-level `version` and strips every comment in the file when js-yaml re-serializes it.",
+          "type": "generic",
+          "path": "helm/agent-canvas/Chart.yaml"
+        },
+        "README.md",
+        "README.windows.md"
+      ]
+    }
+  }
+}

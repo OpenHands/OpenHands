@@ -1,0 +1,349 @@
+import { useTranslation } from "react-i18next";
+import { SettingsInput } from "#/components/features/settings/settings-input";
+import { SettingsDropdownInput } from "#/components/features/settings/settings-dropdown-input";
+import { GitRepoDropdown } from "#/components/features/home/git-repo-dropdown";
+import { useActiveBackend } from "#/contexts/active-backend-context";
+import { useSettings } from "#/hooks/query/use-settings";
+import { useUserProviders } from "#/hooks/use-user-providers";
+import { I18nKey } from "#/i18n/declaration";
+import {
+  automationRepositoryAddress,
+  providerHostKnown,
+} from "#/utils/automation-repo-sources";
+import {
+  formControlMultilineFieldClassName,
+  formControlSettingsFieldClassName,
+} from "#/utils/form-control-classes";
+import { cn } from "#/utils/utils";
+import type { GitRepository } from "#/types/git";
+import { fieldText, fieldValues } from "#/manifests/manifest-local-validation";
+import { SetupRepositoryList } from "./manifest-repository-list";
+import type {
+  SetupFieldOption,
+  SetupFormField as SetupFormFieldDefinition,
+  SetupFormValue,
+  SetupGitProvider,
+} from "#/manifests/types";
+
+/**
+ * The format hint for a repository the manifest states no placeholder for. A
+ * hosted provider's repository is its `owner/repo` path; a Data Center or
+ * Azure DevOps repository is cloned from its URL alone, so that is what the
+ * field asks for when it cannot be picked.
+ */
+const REPOSITORY_PLACEHOLDER_KEYS: Record<SetupGitProvider, I18nKey> = {
+  github: I18nKey.SETUP$REPOSITORY_PLACEHOLDER,
+  gitlab: I18nKey.SETUP$REPOSITORY_PLACEHOLDER,
+  bitbucket: I18nKey.SETUP$REPOSITORY_PLACEHOLDER,
+  bitbucket_data_center:
+    I18nKey.SETUP$BITBUCKET_DATA_CENTER_REPOSITORY_PLACEHOLDER,
+  azure_devops: I18nKey.SETUP$AZURE_DEVOPS_REPOSITORY_PLACEHOLDER,
+};
+
+export interface SetupFormFieldProps {
+  /** The record key the field is declared under, and what `{{form.x}}` reads. */
+  name: string;
+  field: SetupFormFieldDefinition;
+  /** A list for a field collecting several values, a string for the rest. */
+  value: SetupFormValue;
+  /** Already-resolved copy: local checks and service errors look the same here. */
+  error?: string;
+  /** Declared options, or the ones the deployment supplied. */
+  options: SetupFieldOption[];
+  /** Whether dynamic options for this field are still loading. */
+  isOptionsLoading?: boolean;
+  /** The picked repository, kept so the picker can show what is selected. */
+  repository: GitRepository | null;
+  disabled: boolean;
+  onChange: (value: SetupFormValue) => void;
+  onRepositoryChange: (repository: GitRepository | null) => void;
+  onBlur: () => void;
+}
+
+/**
+ * Render one manifest-declared field.
+ *
+ * The host knows how to render a field *type*; what any field means is the
+ * manifest's business. Every field's own copy comes from the manifest and is
+ * never translated by the host; the only host string is the format hint the
+ * repository fallback below needs, because no manifest declares it.
+ */
+export function SetupFormField({
+  name,
+  field,
+  value,
+  error,
+  options,
+  isOptionsLoading = false,
+  repository,
+  disabled,
+  onChange,
+  onRepositoryChange,
+  onBlur,
+}: SetupFormFieldProps) {
+  const { t } = useTranslation("openhands");
+  const { backend } = useActiveBackend();
+  const { providers: connectedProviders } = useUserProviders();
+  const providerHosts = useSettings().data?.provider_tokens_set;
+  const testId = `setup-field-${name}`;
+  const help = <p className="text-xs text-muted">{field.help}</p>;
+
+  const provider: SetupGitProvider = field.provider ?? "github";
+  const providerHost = providerHosts?.[provider];
+
+  // Listing a user's repositories is a cloud-backend capability: `GitService`
+  // answers with an empty page on any other backend, so the picker would offer
+  // a source that can never respond. On a cloud backend it lists through the
+  // instance's native integration for the field's provider, which a user who
+  // connected that provider through an MCP server instead does not have. A
+  // listed repository is stored by its address, so a self-managed connection
+  // whose host the server does not report has nothing to store either.
+  const canListRepositories =
+    backend.kind === "cloud" &&
+    connectedProviders.includes(provider) &&
+    providerHostKnown(provider, providerHost);
+
+  // What the form stores for a picked repository, the way the generic
+  // automation form stores one: GitHub's `owner/repo`, and for the others the
+  // URL on the connected host, which is the only form the service clones a
+  // Data Center or Azure DevOps repository from.
+  const repositoryAddress = (repository: GitRepository): string =>
+    automationRepositoryAddress(provider, repository.full_name, providerHost) ??
+    repository.full_name;
+
+  // The format hint is host copy: a manifest states the format of everything it
+  // declares except a repository, whose shape the host derives.
+  const repositoryPlaceholder =
+    field.placeholder ?? t(REPOSITORY_PLACEHOLDER_KEYS[provider]);
+
+  if (field.type === "repo-picker" && field.multiple) {
+    return (
+      <div className="flex w-full flex-col gap-2.5">
+        <FieldLabel field={field} />
+        <SetupRepositoryList
+          name={name}
+          field={field}
+          values={fieldValues(value)}
+          canListRepositories={canListRepositories}
+          repositoryAddress={repositoryAddress}
+          placeholder={repositoryPlaceholder}
+          disabled={disabled}
+          onChange={onChange}
+          onBlur={onBlur}
+        />
+        <FieldError testId={testId} error={error} />
+        {help}
+      </div>
+    );
+  }
+
+  if (field.type === "repo-picker" && canListRepositories) {
+    return (
+      <div className="flex w-full flex-col gap-2.5">
+        <FieldLabel field={field} />
+        <GitRepoDropdown
+          provider={provider}
+          value={repository?.id ?? null}
+          repositoryName={repository?.full_name ?? fieldText(value) ?? null}
+          placeholder={field.placeholder}
+          disabled={disabled}
+          onChange={(selected) => {
+            onRepositoryChange(selected ?? null);
+            onChange(selected ? repositoryAddress(selected) : "");
+            onBlur();
+          }}
+        />
+        <FieldError testId={testId} error={error} />
+        {help}
+      </div>
+    );
+  }
+
+  // A timezone or event field declares no options of its own: the accepted
+  // values are the deployment's, so it renders as a list once they are known and
+  // as a plain input when they are not. LLM profiles are different: they are a
+  // semantic closed set owned by the current backend, so an unavailable list is
+  // still shown as a disabled dropdown rather than an unrestricted text input.
+  const shouldRenderDropdown =
+    field.type === "select" ||
+    field.type === "llm-profile" ||
+    (["timezone", "event-source", "event-type"].includes(field.type) &&
+      options.length > 0);
+  if (shouldRenderDropdown) {
+    const hasOptions = options.length > 0;
+    const profileOptionsUnavailable =
+      field.type === "llm-profile" && !isOptionsLoading && !hasOptions;
+    return (
+      <div className="flex w-full flex-col gap-2.5">
+        <SettingsDropdownInput
+          testId={testId}
+          name={name}
+          label={<FieldLabelText field={field} />}
+          items={options.map((option) => ({
+            key: option.value,
+            label: option.label,
+          }))}
+          selectedKey={fieldText(value) || undefined}
+          placeholder={
+            profileOptionsUnavailable
+              ? t(I18nKey.MODEL$NO_SAVED_PROFILES)
+              : field.placeholder
+          }
+          isDisabled={disabled || profileOptionsUnavailable}
+          isLoading={isOptionsLoading}
+          required={field.required}
+          onSelectionChange={(key) => {
+            onChange(key === null ? "" : String(key));
+            onBlur();
+          }}
+        />
+        <FieldError testId={testId} error={error} />
+        {help}
+      </div>
+    );
+  }
+
+  if (field.type === "plugin-sources") {
+    return (
+      <label className="flex w-full flex-col gap-2.5">
+        <FieldLabelText field={field} />
+        <textarea
+          data-testid={testId}
+          name={name}
+          rows={4}
+          value={fieldText(value)}
+          placeholder={field.placeholder}
+          disabled={disabled}
+          aria-invalid={!!error}
+          onChange={(event) => onChange(event.target.value)}
+          onBlur={onBlur}
+          className={cn(
+            formControlMultilineFieldClassName,
+            error && "border-semantic-danger dark:border-semantic-danger",
+          )}
+        />
+        <FieldError testId={testId} error={error} />
+        {help}
+      </label>
+    );
+  }
+
+  if (field.type === "tarball-upload") {
+    return (
+      <div className="flex w-full flex-col gap-2.5">
+        <FieldLabel field={field} />
+        <input
+          data-testid={testId}
+          name={name}
+          type="file"
+          accept=".tar,.tar.gz,.tgz,application/gzip,application/x-tar"
+          disabled={disabled}
+          aria-invalid={!!error}
+          onChange={(event) => {
+            onChange(event.target.files?.[0] ?? "");
+            onBlur();
+          }}
+          className={cn(
+            formControlSettingsFieldClassName,
+            "file:mr-3 file:rounded-md file:border-0 file:bg-interactive-hover file:px-3 file:py-1.5 file:text-sm file:text-contrast",
+            error && "border-semantic-danger dark:border-semantic-danger",
+          )}
+        />
+        {fieldText(value) && (
+          <p className="text-xs text-muted">{fieldText(value)}</p>
+        )}
+        <FieldError testId={testId} error={error} />
+        {help}
+      </div>
+    );
+  }
+
+  if (field.type === "textarea") {
+    return (
+      <label className="flex w-full flex-col gap-2.5">
+        <FieldLabelText field={field} />
+        <textarea
+          data-testid={testId}
+          name={name}
+          rows={4}
+          value={fieldText(value)}
+          placeholder={field.placeholder}
+          disabled={disabled}
+          aria-invalid={!!error}
+          onChange={(event) => onChange(event.target.value)}
+          onBlur={onBlur}
+          className={cn(
+            formControlMultilineFieldClassName,
+            error && "border-semantic-danger dark:border-semantic-danger",
+          )}
+        />
+        <FieldError testId={testId} error={error} />
+        {help}
+      </label>
+    );
+  }
+
+  // `text`, `cron`, an unresolved `timezone` and a repository that cannot be
+  // browsed are all single-line strings to the host; only the manifest and the
+  // service know what a cron expression or a repository name means. A manifest
+  // states the format of everything it declares except the repository, whose
+  // shape the host derives, so that one hint is host copy.
+  const placeholder =
+    field.type === "repo-picker" ? repositoryPlaceholder : field.placeholder;
+
+  return (
+    <div className="flex w-full flex-col gap-2.5">
+      <SettingsInput
+        testId={testId}
+        name={name}
+        type={field.type === "number" ? "number" : "text"}
+        label={field.label}
+        value={fieldText(value)}
+        placeholder={placeholder}
+        isDisabled={disabled}
+        min={field.constraints?.min}
+        max={field.constraints?.max}
+        showRequiredTag={field.required}
+        error={error}
+        onChange={onChange}
+        onBlur={onBlur}
+      />
+      {help}
+    </div>
+  );
+}
+
+function FieldLabelText({ field }: { field: SetupFormFieldDefinition }) {
+  return (
+    <span className="flex items-center gap-2 text-sm">
+      {field.label}
+      {field.required && (
+        <span className="text-sm leading-none text-feedback-error" aria-hidden>
+          *
+        </span>
+      )}
+    </span>
+  );
+}
+
+function FieldLabel({ field }: { field: SetupFormFieldDefinition }) {
+  return (
+    <div className="flex items-center gap-2">
+      <FieldLabelText field={field} />
+    </div>
+  );
+}
+
+// @spec FF-001 — Manifest validation feedback follows the host error role
+function FieldError({ testId, error }: { testId: string; error?: string }) {
+  if (!error) return null;
+  return (
+    <p
+      role="alert"
+      data-testid={`${testId}-error`}
+      className="-mt-1 text-xs text-feedback-error"
+    >
+      {error}
+    </p>
+  );
+}

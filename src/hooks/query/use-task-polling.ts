@@ -1,0 +1,279 @@
+import {
+  sessionActivityKey,
+  useSessionActivityStore,
+} from "#/stores/session-activity-store";
+import { useConversationLaunchStore } from "#/stores/conversation-launch-store";
+import {
+  clearAutomationFormSession,
+  getAutomationFormSession,
+  initializeAutomationFormSession,
+} from "#/api/automation-form-session";
+import { markAutomationSetupHandoff } from "#/api/automation-setup-handoff-store";
+import { CONVERSATION_QUERY_KEYS } from "./query-keys";
+import { getActiveBackend } from "#/api/backend-registry/active-store";
+import { usePendingTaskAttachmentsStore } from "#/stores/pending-task-attachments-store";
+import { assertActiveEnvironment } from "#/utils/assert-active-environment";
+import { useEffect, useLayoutEffect, useRef } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
+import type { AppConversationStartTask } from "#/api/conversation-service/agent-server-conversation-service.types";
+import {
+  getStoredConversationMetadata,
+  setStoredConversationMetadata,
+  toPluginCoordinates,
+} from "#/api/conversation-metadata-store";
+import { useNavigation } from "#/context/navigation-context";
+import { useOptionalConversationId } from "#/hooks/use-conversation-id";
+import {
+  consumePendingTaskDraft,
+  setConversationState,
+} from "#/utils/conversation-local-storage";
+import { useOptimisticUserMessageStore } from "#/stores/optimistic-user-message-store";
+import { trackCloudConversationReady } from "#/services/cloud-funnel-analytics";
+import { flushPendingTaskAttachments } from "#/utils/flush-pending-task-attachments";
+import {
+  clearPendingTaskMessageLink,
+  consumeScheduledPendingTaskMessageReassign,
+  linkPendingTaskMessages,
+  schedulePendingTaskMessageReassign,
+} from "#/utils/pending-task-message-link";
+import { retryTransientRequest } from "#/utils/transient-error-retry";
+import { useBackendScopedPath } from "#/hooks/use-backend-scoped-path";
+
+const pollingStartedAt = new WeakMap<object, number>();
+const FAST_POLL_INTERVAL_MS = 500;
+const FAST_POLL_WINDOW_MS = 10_000;
+const SLOW_POLL_INTERVAL_MS = 3000;
+
+const storeTaskPlugins = (
+  task: AppConversationStartTask,
+  conversationId: string,
+) => {
+  const plugins = task.request.plugins?.map(toPluginCoordinates);
+  if (!plugins?.length) return;
+
+  const metadata = getStoredConversationMetadata(conversationId);
+  setStoredConversationMetadata(conversationId, {
+    ...metadata,
+    selected_repository:
+      metadata?.selected_repository ?? task.request.selected_repository ?? null,
+    selected_branch:
+      metadata?.selected_branch ?? task.request.selected_branch ?? null,
+    git_provider: metadata?.git_provider ?? task.request.git_provider ?? null,
+    plugins,
+  });
+};
+
+/**
+ * Read the shared polling state for a V1 conversation start task.
+ *
+ * This hook:
+ * - Detects if the conversationId URL param is a task ID (format: "task-{uuid}")
+ * - Polls active starts quickly, then backs off until READY or ERROR
+ * - Exposes task status and details for UI components to show loading states and errors
+ *
+ * URL patterns:
+ * - /conversations/task-{uuid} → Polls start task, then navigates to /conversations/{conversation-id}
+ * - /conversations/{uuid or hex} → No polling (handled by useActiveConversation)
+ *
+ * The conversation route mounts useTaskPollingController once to own READY
+ * side effects; other components can consume this hook without repeating them.
+ */
+export const useTaskPolling = () => {
+  // Optional: the chat input shell renders on the home page too; polling
+  // simply no-ops when there's no conversation id yet.
+  const { conversationId } = useOptionalConversationId();
+
+  // Check if this is a task ID (format: "task-{uuid}")
+  const isTask = !!conversationId && conversationId.startsWith("task-");
+  const taskId = isTask ? conversationId!.replace("task-", "") : null;
+
+  // Poll the task if this is a task ID
+  const taskQuery = useQuery({
+    queryKey: CONVERSATION_QUERY_KEYS.startTask(taskId),
+    queryFn: async () => {
+      if (!taskId) return null;
+      return AgentServerConversationService.getStartTask(taskId);
+    },
+    enabled: !!taskId,
+    refetchInterval: (query) => {
+      if (query.state.status === "error") return false;
+      const task = query.state.data;
+      if (!task) return false;
+
+      // Stop polling if ready or error
+      if (task.status === "READY" || task.status === "ERROR") {
+        return false;
+      }
+
+      const startedAt = pollingStartedAt.get(query) ?? Date.now();
+      pollingStartedAt.set(query, startedAt);
+      return Date.now() - startedAt < FAST_POLL_WINDOW_MS
+        ? FAST_POLL_INTERVAL_MS
+        : SLOW_POLL_INTERVAL_MS;
+    },
+    retry: retryTransientRequest,
+    meta: { disableToast: true },
+  });
+
+  return {
+    isTask,
+    taskId,
+    conversationId: isTask ? null : (conversationId ?? null),
+    task: taskQuery.data,
+    taskStatus: taskQuery.data?.status,
+    taskDetail: taskQuery.data?.detail,
+    taskError: taskQuery.error,
+    isLoadingTask: taskQuery.isLoading,
+    // Repository information from task request
+    repositoryInfo: {
+      selectedRepository: taskQuery.data?.request?.selected_repository,
+      selectedBranch: taskQuery.data?.request?.selected_branch,
+      gitProvider: taskQuery.data?.request?.git_provider,
+    },
+  };
+};
+
+/** Own the task lifecycle side effects once at the conversation route. */
+export const useTaskPollingController = () => {
+  const polling = useTaskPolling();
+  const { task, taskId } = polling;
+  const { conversationId } = useOptionalConversationId();
+  const { navigate } = useNavigation();
+  const backendScopedPath = useBackendScopedPath();
+  const queryClient = useQueryClient();
+  const handledReadyTaskIdRef = useRef<string | null>(null);
+  const visibleConversationId = useRef(conversationId);
+  visibleConversationId.current = conversationId;
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+
+  // Reassign optimistic pending messages before paint on the real conversation
+  // route. Doing this in the ready handler before navigate leaves a frame where
+  // the URL still points at `task-{uuid}` but pending is keyed to the real id.
+  useLayoutEffect(() => {
+    if (!conversationId) {
+      return;
+    }
+
+    const pendingReassign =
+      consumeScheduledPendingTaskMessageReassign(conversationId);
+    if (!pendingReassign) {
+      return;
+    }
+
+    useOptimisticUserMessageStore
+      .getState()
+      .reassignPendingMessages(
+        pendingReassign.fromConversationId,
+        pendingReassign.toConversationId,
+      );
+    clearPendingTaskMessageLink(pendingReassign.toConversationId);
+  }, [conversationId]);
+
+  useLayoutEffect(() => {
+    if (!taskId || !task) return;
+    const { backend, orgId } = getActiveBackend();
+    const key = sessionActivityKey(backend.id, orgId, `task-${taskId}`);
+    const activity = useSessionActivityStore.getState();
+    activity.begin(key, "initialize");
+    activity.observe(key, task.status);
+    if (task.status === "READY" && task.app_conversation_id) {
+      activity.transfer(
+        key,
+        sessionActivityKey(backend.id, orgId, task.app_conversation_id),
+      );
+    }
+  }, [taskId, task]);
+
+  // Navigate to conversation ID when task is ready
+  useEffect(() => {
+    const appConversationId = task?.app_conversation_id;
+    if (
+      !taskId ||
+      task?.status !== "READY" ||
+      !appConversationId ||
+      handledReadyTaskIdRef.current === taskId
+    ) {
+      return;
+    }
+
+    handledReadyTaskIdRef.current = taskId;
+    trackCloudConversationReady(taskId, appConversationId);
+    storeTaskPlugins(task, appConversationId);
+
+    // The create mutation invalidated the conversation list before the
+    // conversation row existed (cloud returns the start task first). The row
+    // is persisted by the time the task is READY, so refetch now so the
+    // sidebar shows the new conversation without waiting for the 30s poll.
+    queryClient.invalidateQueries({ queryKey: ["user", "conversations"] });
+    queryClient.invalidateQueries({ queryKey: ["start-tasks"] });
+
+    const environment = getActiveBackend();
+    const { launches, update } = useConversationLaunchStore.getState();
+    const launch = Object.values(launches).find(
+      (entry) =>
+        entry.targetId === `task-${taskId}` &&
+        entry.backendId === environment.backend.id &&
+        entry.orgId === environment.orgId,
+    );
+    if (launch) update(launch.id, { conversationId: appConversationId });
+    const automationDraft = getAutomationFormSession(`task-${taskId}`);
+    if (automationDraft) {
+      initializeAutomationFormSession(appConversationId, automationDraft);
+      markAutomationSetupHandoff(appConversationId);
+      clearAutomationFormSession(`task-${taskId}`);
+    }
+    void (async () => {
+      try {
+        await flushPendingTaskAttachments(taskId, appConversationId);
+        assertActiveEnvironment(environment);
+      } catch {
+        const pending =
+          usePendingTaskAttachmentsStore.getState().byTaskId[taskId];
+        if (
+          !pending?.recoverInConversation ||
+          !mounted.current ||
+          visibleConversationId.current !== `task-${taskId}`
+        )
+          return;
+        try {
+          assertActiveEnvironment(environment);
+        } catch {
+          return;
+        }
+        navigate(backendScopedPath(`/conversations/${appConversationId}`), {
+          replace: true,
+        });
+        return;
+      }
+      if (
+        !mounted.current ||
+        visibleConversationId.current !== `task-${taskId}`
+      )
+        return;
+
+      const taskConversationId = `task-${taskId}`;
+      linkPendingTaskMessages(appConversationId, taskConversationId);
+      schedulePendingTaskMessageReassign(taskConversationId, appConversationId);
+
+      const pendingDraft = consumePendingTaskDraft(taskId);
+      if (pendingDraft) {
+        setConversationState(appConversationId, {
+          draftMessage: pendingDraft,
+        });
+      }
+
+      navigate(backendScopedPath(`/conversations/${appConversationId}`), {
+        replace: true,
+      });
+    })();
+  }, [backendScopedPath, task, taskId, navigate, queryClient]);
+
+  return polling;
+};

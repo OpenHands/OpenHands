@@ -1,0 +1,2181 @@
+/**
+ * Development Stack with Automation Service
+ *
+ * Extends agent-canvas's dev-safe.mjs to additionally run the OpenHands Automation
+ * backend via uvx. No cloning required - runs directly from git reference.
+ *
+ * Uses a standalone ingress proxy to route traffic to multiple backends.
+ *
+ * Architecture:
+ *   ┌──────────────────────────────────────────────────────────────────────────┐
+ *   │              http://localhost:8000 (Ingress Proxy)                       │
+ *   │              /api/automation/* → Automation Backend                      │
+ *   │              /api/*, /sockets  → Agent Server                            │
+ *   │              /*                → Vite Dev Server                         │
+ *   └──────────────────────────────────────────────────────────────────────────┘
+ *          │                    │                         │
+ *          ▼                    ▼                         ▼
+ *   ┌─────────────┐    ┌───────────────┐         ┌──────────────────┐
+ *   │ Vite        │    │ Agent Server  │         │ Automation       │
+ *   │ :3001       │    │ (uvx) :18000  │         │ Backend (uvx)    │
+ *   │             │    │               │         │ :18001           │
+ *   └─────────────┘    └───────────────┘         └──────────────────┘
+ *
+ * Usage:
+ *   node scripts/dev-with-automation.mjs
+ *   node scripts/dev-with-automation.mjs --automation-ref feat/my-branch
+ *   node scripts/dev-with-automation.mjs --port 12000
+ *
+ * Environment variables:
+ *   - PORT: Ingress port (default: 8000)
+ *   - OH_AUTOMATION_GIT_REF: Git ref for automation (overrides default version)
+ *   - OH_AGENT_SERVER_LOCAL_PATH: Absolute path to a local software-agent-sdk
+ *     checkout. Highest precedence for agent-server source selection: rebuilds
+ *     the agent-server from local source and installs openhands-sdk,
+ *     openhands-tools and openhands-workspace as editable so source edits are
+ *     picked up without manual reinstall.
+ *   - OH_AGENT_SERVER_GIT_REF: Git ref for agent-server
+ * Secrets:
+ *   The session API key is automatically seeded into agent-server secrets
+ *   as OPENHANDS_AUTOMATION_API_KEY, making it available to agents in conversations.
+ *   Both the agent-server and automation backend use the same key value
+ *   and the same `X-Session-API-Key` header for authentication.
+ *   AUTOMATION_KV_SECRET, if not set explicitly, is pinned in
+ *   <state dir>/automation-kv-secret.txt the first time, seeded with the
+ *   session key, so rotating the session key later does not change it.
+ */
+
+import { spawn, spawnSync } from "node:child_process";
+import { randomBytes } from "node:crypto";
+import {
+  closeSync,
+  constants as fsConstants,
+  existsSync,
+  fchmodSync,
+  fstatSync,
+  linkSync,
+  lstatSync,
+  mkdirSync,
+  openSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
+import { join, resolve, dirname, isAbsolute } from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
+import { homedir } from "node:os";
+import { setTimeout as delay } from "node:timers/promises";
+import process from "node:process";
+
+import {
+  assertPortsFree,
+  buildAgentServerCommand,
+  buildSafeDevConfig,
+  buildAgentServerEnv,
+  buildBackendLogEnv,
+  backendLogLevel,
+  uvicornLogLevel,
+  buildNpmScriptCommand,
+  buildRuntimeServicesInfo,
+  buildUvxPythonArgs,
+  formatMissingUvxGuidance,
+  resolveFrontendPort,
+  validateFrontendDependencies,
+  validateLocalAgentServerPath,
+} from "./dev-safe.mjs";
+import {
+  createShutdownHookRegistry,
+  getProcessTreeSpawnOptions,
+  isProcessRunning,
+  resolveWindowsCommand,
+  signalProcessTree,
+} from "./dev-process-utils.mjs";
+import { fileLog, stripAnsi } from "./logger.mjs";
+import {
+  applySessionKeyPolicy,
+  bindHostArgs,
+  isLoopbackBind,
+  resolveBindHost,
+} from "./bind-host.mjs";
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const projectRoot = resolve(__dirname, "..");
+
+// ── Centralized config (single source of truth for versions, ports, etc.) ───
+const SHARED_DEFAULTS = JSON.parse(
+  readFileSync(join(projectRoot, "config", "defaults.json"), "utf-8"),
+);
+
+const DEFAULT_AUTOMATION_REPO = "https://github.com/OpenHands/automation";
+const DEFAULT_AUTOMATION_PACKAGE = SHARED_DEFAULTS.packages.automation;
+const DEFAULT_AUTOMATION_VERSION = SHARED_DEFAULTS.versions.automation;
+const DEFAULT_AUTOMATION_SDK_VERSION = SHARED_DEFAULTS.versions.agentServer;
+const DEFAULT_BACKEND_PORT = SHARED_DEFAULTS.ports.agentServer;
+const DEFAULT_AUTOMATION_PORT = SHARED_DEFAULTS.ports.automation;
+const DEFAULT_POSTHOG_API_KEY = SHARED_DEFAULTS.telemetry.posthogApiKey;
+const DEFAULT_POSTHOG_HOST = SHARED_DEFAULTS.telemetry.posthogHost;
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Terminal Styling
+// ═══════════════════════════════════════════════════════════════════════════
+
+const c = {
+  reset: "\x1b[0m",
+  bold: "\x1b[1m",
+  dim: "\x1b[2m",
+  red: "\x1b[31m",
+  green: "\x1b[32m",
+  yellow: "\x1b[33m",
+  blue: "\x1b[34m",
+  magenta: "\x1b[35m",
+  cyan: "\x1b[36m",
+};
+
+function logService(name, message, color = c.reset) {
+  const ts = new Date().toISOString().split("T")[1].split(".")[0];
+  console.log(`${c.dim}${ts}${c.reset} ${color}[${name}]${c.reset} ${message}`);
+  fileLog("info", `[${name}] ${stripAnsi(message)}`);
+}
+
+function logStep(step, message) {
+  console.log(`${c.cyan}[${step}]${c.reset} ${message}`);
+  fileLog("info", `[${step}] ${message}`);
+}
+
+function logSuccess(message) {
+  console.log(`${c.green}✓${c.reset} ${message}`);
+  fileLog("info", `✓ ${message}`);
+}
+
+function logError(message) {
+  console.error(`${c.red}✗${c.reset} ${message}`);
+  fileLog("error", `✗ ${stripAnsi(message)}`);
+}
+
+/**
+ * Parse one JSON log line produced by the SDK's JsonFormatter and return a
+ * single-line human-readable string + an appropriate ANSI color.
+ *
+ * Returns null for non-JSON lines so callers can fall back to the raw text.
+ *
+ * @param {string} rawLine
+ * @returns {{ text: string; color: string } | null}
+ */
+function parseAgentServerLogLine(rawLine) {
+  try {
+    const obj = JSON.parse(rawLine);
+    if (!obj.levelname || obj.message === undefined) return null;
+    const level = obj.levelname.padEnd(8);
+    const location =
+      obj.filename && obj.lineno ? `  ${obj.filename}:${obj.lineno}` : "";
+    const text = `${level} ${obj.message}${location}`;
+    const lvl = obj.levelname;
+    const color =
+      lvl === "DEBUG"
+        ? c.dim
+        : lvl === "WARNING"
+          ? c.yellow
+          : lvl === "ERROR" || lvl === "CRITICAL"
+            ? c.red
+            : c.blue;
+    return { text, color };
+  } catch {
+    return null;
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Configuration
+// ═══════════════════════════════════════════════════════════════════════════
+
+function parseArgs() {
+  const args = process.argv.slice(2);
+  const config = {
+    port: null,
+    automationGitRef: null,
+    automationRepo: null,
+    verbose: false,
+    static: false,
+    dynamic: false,
+    staticDir: null,
+    skipBuild: false,
+    public: false,
+    frontendOnly: false,
+    backendOnly: false,
+    host: null,
+    allowLanSessionKey: false,
+  };
+
+  for (let i = 0; i < args.length; i++) {
+    switch (args[i]) {
+      case "-p":
+      case "--port":
+        config.port = parseInt(args[++i], 10);
+        break;
+      case "--automation-ref":
+        config.automationGitRef = args[++i];
+        break;
+      case "--automation-repo":
+        config.automationRepo = args[++i];
+        break;
+      case "-v":
+      case "--verbose":
+        config.verbose = true;
+        break;
+      case "--static":
+        config.static = true;
+        break;
+      case "--dynamic":
+        config.dynamic = true;
+        break;
+      case "--static-dir":
+        config.staticDir = args[++i];
+        break;
+      case "--skip-build":
+        config.skipBuild = true;
+        break;
+      case "--public":
+        config.public = true;
+        break;
+      case "--frontend-only":
+        config.frontendOnly = true;
+        break;
+      case "--backend-only":
+        config.backendOnly = true;
+        break;
+      case "--allow-lan-session-key":
+        config.allowLanSessionKey = true;
+        break;
+      case "-H":
+      case "--host":
+        config.host = args[++i];
+        break;
+      case "-h":
+      case "--help":
+        showHelp();
+        process.exit(0);
+    }
+  }
+
+  return config;
+}
+
+function showHelp() {
+  console.log(`
+Agent Canvas + Automation Development Stack
+
+Runs agent-canvas with the automation backend (via uvx, no clone needed).
+Uses a standalone ingress proxy to route traffic.
+
+USAGE:
+  node scripts/dev-with-automation.mjs [options]
+
+OPTIONS:
+  -p, --port <port>           Ingress port (default: 8000)
+  -H, --host <host>           Bind address for ingress/static (default: 127.0.0.1).
+                              Use 0.0.0.0 or :: to listen on all interfaces; the
+                              session key will not be injected into HTML.
+  --automation-ref <ref>      Git ref for automation (branch/tag/SHA)
+  --automation-repo <url>     Git repo URL (default: ${DEFAULT_AUTOMATION_REPO})
+  --static                    Serve an existing production build instead of Vite
+  --static-dir <dir>          Static build directory (default: build/)
+  --skip-build                Reuse build/ when the launcher builds static assets
+  --dynamic                   Force Vite dev server when a wrapper defaults static
+  --frontend-only             Start only the frontend behind ingress
+  --backend-only              Start only agent-server + automation behind ingress
+  --allow-lan-session-key      Inject the session key on a non-loopback bind (opt-in)
+  -v, --verbose               Set backend log level to DEBUG (default: WARNING)
+  -h, --help                  Show this help
+
+ENVIRONMENT VARIABLES:
+  PORT                        Alternative to --port
+  OH_BIND_HOST                Alternative to --host (default: 127.0.0.1)
+  OH_ALLOWED_HOSTS            Comma-separated tunnel/proxy hostnames a loopback
+                              bind accepts (e.g. abc.ngrok.app)
+  OH_AUTOMATION_GIT_REF       Git ref for automation (overrides default version)
+  OH_AUTOMATION_VERSION       Specific PyPI version for automation (default: ${DEFAULT_AUTOMATION_VERSION})
+  OH_AUTOMATION_LOCAL_PATH    Absolute path to a local automation checkout (overridden only by --automation-git-ref)
+  OH_AGENT_SERVER_LOCAL_PATH  Absolute path to a local software-agent-sdk checkout (highest precedence)
+  OH_AGENT_SERVER_GIT_REF     Git ref for agent-server SDK (overrides default version)
+  OH_AGENT_SERVER_VERSION     Specific PyPI version for agent-server
+  OH_SECRET_KEY               Secret key for sessions
+  LOG_LEVEL                   Log level for both backends (default: WARNING)
+                              Python names and aliases both work; aliases and
+                              numbers are mapped onto Uvicorn's own set.
+  AUTOMATION_LOG_LEVEL        Log level for the automation service only
+                              (default: LOG_LEVEL)
+
+SECRETS:
+  The session API key is automatically seeded into agent-server secrets
+  as OPENHANDS_AUTOMATION_API_KEY, making it available to agents in conversations.
+  Both backends (agent-server and automation) share the same key value.
+  AUTOMATION_KV_SECRET encrypts automation KV state. Unless set explicitly,
+  it is pinned in <state dir>/automation-kv-secret.txt on first launch (seeded
+  with the session key) and kept from then on, so rotating the session key does
+  not change it. Deleting that file makes existing KV state unreadable.
+
+ACCESS POINTS:
+  Main UI:      http://localhost:PORT/
+  API Docs:     http://localhost:PORT/api/automation/docs
+`);
+}
+
+/**
+ * Fail fast on an unusable OH_AUTOMATION_LOCAL_PATH instead of letting
+ * `uv run --project <bad path>` exit on its own -- that leaves the rest of the
+ * stack up and the automations UI just reporting "backend unavailable", with
+ * nothing pointing at the env var. Mirrors validateLocalAgentServerPath.
+ */
+function validateLocalAutomationPath(localPath) {
+  if (!isAbsolute(localPath)) {
+    throw new Error(
+      `OH_AUTOMATION_LOCAL_PATH must be an absolute path, got: ${localPath}`,
+    );
+  }
+  if (!existsSync(localPath)) {
+    throw new Error(`OH_AUTOMATION_LOCAL_PATH does not exist: ${localPath}`);
+  }
+  const projectFile = join(localPath, "pyproject.toml");
+  if (!existsSync(projectFile)) {
+    throw new Error(
+      `OH_AUTOMATION_LOCAL_PATH is not a Python project (no pyproject.toml): ${projectFile}`,
+    );
+  }
+}
+
+/**
+ * Build the uvx command for running automation backend.
+ *
+ * Environment variables (highest precedence first):
+ * - OH_AUTOMATION_LOCAL_PATH: Absolute path to a local checkout
+ * - OH_AUTOMATION_GIT_REF: Git commit SHA or branch name
+ * - OH_AUTOMATION_VERSION: Specific PyPI version (e.g., "1.0.0a1")
+ *
+ * If none are set, defaults to the released version specified by
+ * DEFAULT_AUTOMATION_VERSION. Set OH_AUTOMATION_GIT_REF to use a
+ * git branch or commit instead.
+ *
+ * UV_PYTHON, when set, replaces the default interpreter request (the
+ * python.uvxRequest range in config/defaults.json) given to uvx.
+ */
+function buildAutomationCommand(env = process.env) {
+  const localPath = env.OH_AUTOMATION_LOCAL_PATH;
+  const gitRef = env.OH_AUTOMATION_GIT_REF;
+  const version = env.OH_AUTOMATION_VERSION;
+  const repoUrl = env.OH_AUTOMATION_REPO || DEFAULT_AUTOMATION_REPO;
+
+  const uvxArgs = buildUvxPythonArgs(env);
+  let source = "";
+
+  if (localPath) {
+    // Run straight from a local checkout via `uv run --project`, so
+    // uncommitted working-tree changes are picked up. Outranks the other
+    // automation env vars, mirroring OH_AGENT_SERVER_LOCAL_PATH for the
+    // agent-server SDK; buildConfig drops it when --automation-git-ref asks
+    // for a specific ref.
+    return {
+      command: "uv",
+      args: [
+        "run",
+        "--project",
+        localPath,
+        "uvicorn",
+        "openhands.automation.app:app",
+      ],
+      source: `local (${localPath})`,
+    };
+  }
+
+  if (gitRef) {
+    // Use git ref - refresh to ensure latest commit is fetched
+    const gitUrl = `git+${repoUrl}@${gitRef}`;
+    uvxArgs.push(
+      "--refresh",
+      "--from",
+      gitUrl,
+      "uvicorn",
+      "openhands.automation.app:app",
+    );
+    source = `git (${gitRef})`;
+  } else if (version) {
+    // Use specific PyPI version
+    uvxArgs.push(
+      "--from",
+      `${DEFAULT_AUTOMATION_PACKAGE}==${version}`,
+      "uvicorn",
+      "openhands.automation.app:app",
+    );
+    source = `PyPI (${version})`;
+  } else {
+    // Default to released PyPI version
+    uvxArgs.push(
+      "--from",
+      `${DEFAULT_AUTOMATION_PACKAGE}==${DEFAULT_AUTOMATION_VERSION}`,
+      "uvicorn",
+      "openhands.automation.app:app",
+    );
+    source = `PyPI (${DEFAULT_AUTOMATION_VERSION}, default)`;
+  }
+
+  return {
+    command: "uvx",
+    args: uvxArgs,
+    source,
+  };
+}
+
+async function buildConfig(args, env = process.env) {
+  // Apply args to env for buildAutomationCommand
+  if (args.automationGitRef) {
+    env.OH_AUTOMATION_GIT_REF = args.automationGitRef;
+    // An explicit flag outranks an ambient env var. Otherwise someone with
+    // OH_AUTOMATION_LOCAL_PATH exported in their shell profile would run their
+    // own working tree while believing they were reproducing against the ref
+    // they just passed.
+    if (env.OH_AUTOMATION_LOCAL_PATH) {
+      logStep(
+        "automation",
+        `--automation-git-ref ${args.automationGitRef} overrides OH_AUTOMATION_LOCAL_PATH (${env.OH_AUTOMATION_LOCAL_PATH})`,
+      );
+      delete env.OH_AUTOMATION_LOCAL_PATH;
+    }
+  }
+  if (args.automationRepo) {
+    env.OH_AUTOMATION_REPO = args.automationRepo;
+  }
+
+  const frontendOnly = Boolean(args.frontendOnly);
+  const backendOnly = Boolean(args.backendOnly);
+  if (frontendOnly && backendOnly) {
+    throw new Error(
+      "--frontend-only and --backend-only cannot be used together",
+    );
+  }
+
+  const launchFrontend = !backendOnly;
+  const launchAgentServer = !frontendOnly;
+  const launchAutomation = !frontendOnly;
+  const isPublic = args.public;
+
+  if (isPublic && frontendOnly) {
+    throw new Error("--public cannot be used with --frontend-only");
+  }
+
+  // In public mode, LOCAL_BACKEND_API_KEY is required — without it the
+  // auth screen has nothing to validate against.
+  if (isPublic && !env.LOCAL_BACKEND_API_KEY) {
+    logError(
+      "PUBLIC MODE requires LOCAL_BACKEND_API_KEY environment variable.\n" +
+        "  Example: LOCAL_BACKEND_API_KEY=my-secret npm run dev -- --public",
+    );
+    process.exit(1);
+  }
+
+  // Preferred ports (from env or defaults).
+  // OH_CANVAS_SAFE_BACKEND_PORT / OH_CANVAS_SAFE_AUTOMATION_PORT /
+  // OH_CANVAS_SAFE_VITE_PORT allow tests (and advanced users) to redirect
+  // internal service ports without affecting the production default.
+  const preferredIngressPort = args.port || parseInt(env.PORT, 10) || 8000;
+  const preferredBackendPort =
+    parseInt(env.OH_CANVAS_SAFE_BACKEND_PORT, 10) || DEFAULT_BACKEND_PORT;
+  const preferredAutomationPort =
+    parseInt(env.OH_CANVAS_SAFE_AUTOMATION_PORT, 10) || DEFAULT_AUTOMATION_PORT;
+  const preferredVitePort = parseInt(env.OH_CANVAS_SAFE_VITE_PORT, 10) || 3001;
+
+  // Fail fast if any preferred port for a service in this mode is already in
+  // use, so a second agent-canvas instance is detected (#16904).
+  const requiredPorts = [{ name: "ingress", port: preferredIngressPort }];
+  if (launchAgentServer) {
+    requiredPorts.push({ name: "agent-server", port: preferredBackendPort });
+  }
+  if (launchAutomation) {
+    requiredPorts.push({ name: "automation", port: preferredAutomationPort });
+  }
+
+  logStep("ports", "Checking ports...");
+  await assertPortsFree(requiredPorts);
+
+  const vscodePort = preferredBackendPort + 1000;
+
+  // API key — shared by both agent-server and automation backend.
+  // Both validate it via the `X-Session-API-Key` header.
+  // LOCAL_BACKEND_API_KEY is the single user-facing env var: if set it's
+  // used directly; otherwise one is auto-generated and persisted.
+  const stateDir =
+    env.OH_CANVAS_SAFE_STATE_DIR ||
+    join(homedir(), ".openhands", "agent-canvas");
+
+  const safeConfig = buildSafeDevConfig(projectRoot, {
+    ...env,
+    OH_CANVAS_SAFE_STATE_DIR: stateDir,
+    OH_CANVAS_SAFE_BACKEND_PORT: preferredBackendPort.toString(),
+    OH_CANVAS_SAFE_VSCODE_PORT: vscodePort.toString(),
+  });
+  const sessionApiKey = safeConfig.sessionApiKey;
+
+  if (isPublic) {
+    logService(
+      "auth",
+      "PUBLIC MODE — key will NOT be injected into the frontend",
+      c.yellow,
+    );
+    logService(
+      "auth",
+      "Users must paste the LOCAL_BACKEND_API_KEY in the browser",
+      c.dim,
+    );
+  }
+
+  const bindHost = resolveBindHost({
+    flag: args.host,
+    env:
+      env.OH_BIND_HOST ||
+      (env.OH_CONVERSATION_RUNTIME === "docker" ||
+      env.OH_CONVERSATION_RUNTIME_SELECTABLE === "1"
+        ? "0.0.0.0"
+        : undefined),
+  });
+  if (!isLoopbackBind(bindHost) && !isPublic && !args.allowLanSessionKey) {
+    logService(
+      "auth",
+      `Bind host ${bindHost} is not loopback — session key will not be injected into HTML`,
+      c.yellow,
+    );
+  }
+
+  // The frontend is internal (browsers reach it through the ingress), so a
+  // taken preferred port falls back to a free one instead of failing (#17546).
+  let vitePort = preferredVitePort;
+  if (launchFrontend) {
+    vitePort = await resolveFrontendPort(preferredVitePort, {
+      bindHost,
+      reservedPorts: [
+        ...requiredPorts.map(({ port }) => port),
+        ...(launchAgentServer ? [vscodePort] : []),
+      ],
+    });
+    if (vitePort !== preferredVitePort) {
+      logService(
+        "ports",
+        `Frontend port ${preferredVitePort} is taken — using ${vitePort}`,
+        c.yellow,
+      );
+    }
+  }
+
+  return {
+    // Ingress port (main entry point)
+    ingressPort: preferredIngressPort,
+
+    // Service ports (internal)
+    agentServerPort: preferredBackendPort,
+    autoBackendPort: preferredAutomationPort,
+    vitePort,
+    vscodePort,
+    // Prefix the editor is served under on the ingress origin. Carried on the
+    // config so the route table and the agent-server env are built from one
+    // value (see getLocalServiceRoutes / buildAgentServerEnv).
+    vscodeBasePath: safeConfig.vscodeBasePath,
+
+    // Paths
+    canvasPath: projectRoot,
+
+    // Data directories (same as dev-safe.mjs)
+    stateDir,
+    tmuxTmpDir: safeConfig.tmuxTmpDir,
+    // Only bake the host-side workspace path when this launcher also starts
+    // the agent-server that can read it. In frontend-only mode the backend may
+    // be a tunnel/remote service, so leave VITE_WORKING_DIR unset unless the
+    // user explicitly supplied a backend-relative value.
+    viteWorkingDir: launchAgentServer
+      ? safeConfig.workingDir
+      : env.VITE_WORKING_DIR,
+
+    // Auth — single key for both backends
+    sessionApiKey,
+    // Settings encryption key; the MARS web bridge also encrypts saved
+    // DigitalOcean sign-ins with it where the host has no keychain.
+    secretKey: safeConfig.secretKey,
+
+    // Public mode — the session key should NOT be baked into the frontend
+    isPublic,
+    allowLanSessionKey: Boolean(args.allowLanSessionKey),
+
+    frontendOnly,
+    backendOnly,
+    launchFrontend,
+    launchAgentServer,
+    launchAutomation,
+
+    verbose: args.verbose,
+    bindHost,
+  };
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Prerequisites & Setup
+// ═══════════════════════════════════════════════════════════════════════════
+
+function commandExists(cmd) {
+  const result =
+    process.platform === "win32"
+      ? spawnSync("where.exe", [cmd], { stdio: "pipe" })
+      : spawnSync("sh", ["-c", `command -v ${cmd}`], { stdio: "pipe" });
+
+  return result.status === 0;
+}
+
+function checkPrerequisites({
+  checkUvx = true,
+  checkNpm = true,
+  checkFrontendDependencies = true,
+} = {}) {
+  logStep("1/2", "Checking prerequisites...");
+
+  if (checkUvx) {
+    if (!commandExists("uvx")) {
+      const uvxGuidance = formatMissingUvxGuidance(projectRoot);
+      console.error(uvxGuidance);
+      fileLog("error", stripAnsi(uvxGuidance));
+      process.exit(1);
+    }
+    logSuccess("uvx found");
+  }
+
+  if (checkNpm) {
+    if (!commandExists("npm")) {
+      logError("npm is required but not found");
+      process.exit(1);
+    }
+    logSuccess("npm found");
+  }
+
+  if (checkFrontendDependencies) {
+    try {
+      validateFrontendDependencies(projectRoot);
+    } catch (error) {
+      logError(error instanceof Error ? error.message : String(error));
+      process.exit(1);
+    }
+    logSuccess("frontend dependencies found");
+  }
+}
+
+function ensureDirectories(config) {
+  const dirs = [
+    config.stateDir,
+    // Both agent-server and automation use storage; create it unconditionally
+    // whenever either backend service runs (i.e. not frontend-only).
+    ...(!config.frontendOnly ? [join(config.stateDir, "storage")] : []),
+  ];
+
+  if (config.launchAgentServer) {
+    dirs.push(
+      config.tmuxTmpDir,
+      join(config.stateDir, "dev_conversations"),
+      join(config.stateDir, "workspaces"),
+      join(config.stateDir, "bash_events"),
+    );
+  }
+
+  if (config.launchAutomation) {
+    dirs.push(
+      // Automation DB directory — matches docker/entrypoint.sh mkdir -p behaviour.
+      dirname(
+        join(dirname(config.stateDir), SHARED_DEFAULTS.paths.automationDb),
+      ),
+    );
+  }
+
+  for (const dir of dirs) {
+    mkdirSync(dir, { recursive: true });
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Process Management
+// ═══════════════════════════════════════════════════════════════════════════
+
+const processes = new Map();
+const shutdownHooks = createShutdownHookRegistry((err) => {
+  logService("cleanup", `Cleanup hook failed: ${err.message}`, c.yellow);
+});
+
+// Optional external listener for every service log line. Set by `main()` from
+// its `onServiceLog` option so embedded launchers (e.g. the Electron desktop
+// app) can stream uvx download / install progress to their loading window
+// without touching the terminal logging path. Receives `(name, line, level)`
+// where `level` is one of "stdout" | "stderr" | "info" | "warn" | "error".
+let serviceLogListener = null;
+
+export function setServiceLogListener(listener) {
+  serviceLogListener = typeof listener === "function" ? listener : null;
+}
+
+function emitServiceLog(name, line, level) {
+  if (!serviceLogListener) return;
+  try {
+    serviceLogListener(name, line, level);
+  } catch {
+    // Never let a listener bug crash the dev stack.
+  }
+}
+
+function registerShutdownHook(hook) {
+  return shutdownHooks.add(hook);
+}
+
+function spawnService(name, command, args, options = {}) {
+  const proc = spawn(
+    resolveWindowsCommand(command),
+    args,
+    getProcessTreeSpawnOptions({
+      stdio: ["ignore", "pipe", "pipe"],
+      env: { ...process.env, ...options.env },
+      cwd: options.cwd,
+    }),
+  );
+
+  const color = options.color || c.reset;
+  const parseLogLine = options.parseLogLine;
+
+  proc.stdout.on("data", (data) => {
+    data
+      .toString()
+      .split("\n")
+      .filter(Boolean)
+      .forEach((line) => {
+        const trimmed = line.trim();
+        const parsed = parseLogLine ? parseLogLine(trimmed) : null;
+        logService(
+          name,
+          parsed ? parsed.text : trimmed,
+          parsed ? parsed.color : color,
+        );
+        emitServiceLog(name, trimmed, "stdout");
+      });
+  });
+
+  proc.stderr.on("data", (data) => {
+    data
+      .toString()
+      .split("\n")
+      .filter(Boolean)
+      .forEach((line) => {
+        const trimmed = line.trim();
+        const parsed = parseLogLine ? parseLogLine(trimmed) : null;
+        logService(
+          name,
+          parsed ? parsed.text : trimmed,
+          parsed ? parsed.color : c.yellow,
+        );
+        emitServiceLog(name, trimmed, "stderr");
+      });
+  });
+
+  proc.on("error", (error) => {
+    logError(`${name} failed to start: ${error.message}`);
+    emitServiceLog(name, `failed to start: ${error.message}`, "error");
+  });
+
+  proc.on("exit", (code, signal) => {
+    if (code !== 0 && code !== null && !shuttingDown) {
+      logService(name, `Exited with code ${code}`, c.red);
+      emitServiceLog(name, `exited with code ${code}`, "error");
+    }
+    processes.delete(name);
+    if (code !== 0 && !shuttingDown) {
+      options.onUnexpectedExit?.(code ?? `signal ${signal}`);
+    }
+  });
+
+  processes.set(name, proc);
+  return proc;
+}
+
+async function waitForService(name, url, timeoutMs = 30000, proc = null) {
+  const start = Date.now();
+  let lastError = null;
+
+  while (Date.now() - start < timeoutMs) {
+    // A service that already exited will never answer; let the caller report
+    // the exit instead of polling until the timeout.
+    if (proc && !isProcessRunning(proc)) return false;
+    try {
+      const res = await fetch(url, { signal: AbortSignal.timeout(5000) });
+      if (res.ok) {
+        logService(name, `Ready at ${url}`, c.green);
+        return true;
+      }
+    } catch (err) {
+      lastError = err;
+      // Keep trying
+    }
+    await delay(500);
+  }
+
+  const elapsed = Math.round((Date.now() - start) / 1000);
+  logService(name, `Timeout waiting for ${url} after ${elapsed}s`, c.red);
+  if (lastError) {
+    logService(name, `Last error: ${lastError.message}`, c.dim);
+  }
+  return false;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Service Starters
+// ═══════════════════════════════════════════════════════════════════════════
+
+const AUTOMATION_ROUTE_PREFIX = "/api/automation";
+const AGENT_SERVER_ROUTE_PREFIXES = [
+  "/api",
+  "/sockets",
+  "/server_info",
+  "/health",
+  "/ready",
+  "/alive",
+  "/docs",
+  "/redoc",
+  "/openapi.json",
+];
+
+// This launcher starts the agent-server with `--host 127.0.0.1`, but localhost
+// can resolve to ::1 first (notably on Windows), so every request this process
+// or the automation backend makes to it must address IPv4 explicitly.
+function getAgentServerBaseUrl(config) {
+  return `http://127.0.0.1:${config.agentServerPort}`;
+}
+
+function getLocalServiceRoutes(config) {
+  const routes = [];
+
+  // These services bind to IPv4 loopback, but localhost can resolve to ::1.
+  if (config.launchAutomation) {
+    routes.push([
+      AUTOMATION_ROUTE_PREFIX,
+      `http://127.0.0.1:${config.autoBackendPort}`,
+    ]);
+  }
+
+  if (config.launchAgentServer) {
+    for (const prefix of AGENT_SERVER_ROUTE_PREFIXES) {
+      routes.push([prefix, getAgentServerBaseUrl(config)]);
+    }
+
+    // The editor is a separate process on its own port, but it is reached
+    // through the same origin as the canvas so no second port has to be
+    // published. The prefix is deliberately preserved rather than stripped:
+    // agent-server launches openvscode-server with `--server-base-path`, so
+    // the editor generates its own HTTP and WebSocket URLs beneath the prefix
+    // and only answers there. `createRouter` matches the longest prefix and
+    // the proxy forwards the original path, so both are already handled.
+    if (config.vscodeBasePath) {
+      routes.push([
+        config.vscodeBasePath,
+        `http://127.0.0.1:${config.vscodePort}`,
+      ]);
+    }
+  }
+
+  return routes;
+}
+
+function buildRouteArgs(routes) {
+  return routes.flatMap(([prefix, url]) => ["--route", `${prefix}=${url}`]);
+}
+
+/**
+ * The editor prefix, if this mode serves it, as `--no-referrer-prefix` args.
+ *
+ * agent-server hands the editor a connection token derived from its session
+ * key and advertises it in the URL's query string, so the workbench document
+ * must not leak a Referer to the subresources it loads.
+ */
+function getNoReferrerPrefixArgs(config) {
+  if (!config.launchAgentServer || !config.vscodeBasePath) return [];
+  return ["--no-referrer-prefix", config.vscodeBasePath];
+}
+
+/**
+ * The editor prefix, if this mode serves it, as `--vscode-base-path` args.
+ *
+ * Gated on exactly the same condition as the editor route in
+ * `getLocalServiceRoutes`, because they answer the same question: an origin
+ * advertises the editor if and only if it routes it. static-server enforces
+ * that pairing at startup, so a future edit that breaks it fails loudly rather
+ * than shipping a control that opens the SPA.
+ */
+function getVSCodeAdvertiseArgs(config) {
+  if (!config.launchAgentServer || !config.vscodeBasePath) return [];
+  return ["--vscode-base-path", config.vscodeBasePath];
+}
+
+/**
+ * Build --reject-prefix args for the static server.
+ * In frontend-only mode, API paths that have no backend should return 503
+ * instead of being SPA-fallbacked to index.html.
+ */
+function getRejectPrefixes(config) {
+  const prefixes = [];
+  if (!config.launchAutomation) {
+    prefixes.push(AUTOMATION_ROUTE_PREFIX);
+  }
+  if (!config.launchAgentServer) {
+    for (const prefix of AGENT_SERVER_ROUTE_PREFIXES) {
+      prefixes.push(prefix);
+    }
+    // No agent-server means no editor behind this prefix either. Reject it
+    // rather than SPA-fallbacking to index.html, which would answer an editor
+    // request with the canvas shell.
+    if (config.vscodeBasePath) {
+      prefixes.push(config.vscodeBasePath);
+    }
+  }
+  return prefixes;
+}
+
+function buildRejectPrefixArgs(prefixes) {
+  return prefixes.flatMap((prefix) => ["--reject-prefix", prefix]);
+}
+
+function getFrontendBackend(config) {
+  return config.launchFrontend ? `http://localhost:${config.vitePort}` : null;
+}
+
+function buildViteBackendEnv(config, env = process.env) {
+  // VITE_BACKEND_HOST tells the Vite dev-server proxy (vite.config.ts) where
+  // to forward /api, /sockets, etc.  It is NOT read by the frontend at
+  // runtime, so it is safe to keep as an absolute address.
+  //
+  // VITE_BACKEND_BASE_URL is intentionally left unset so the frontend falls
+  // back to window.location.origin (same-origin) at runtime — matching the
+  // behaviour of dev:static / agent-canvas and keeping the dev server
+  // portable across localhost, LAN hosts, SSH tunnels, and ngrok.
+  const backendHost = config.launchAgentServer
+    ? `127.0.0.1:${config.ingressPort}`
+    : (env.VITE_BACKEND_HOST ??
+      env.VITE_BACKEND_BASE_URL?.replace(/^https?:\/\//, "") ??
+      "127.0.0.1:8000");
+
+  const env_out = { VITE_BACKEND_HOST: backendHost };
+
+  // If the user supplied VITE_BACKEND_BASE_URL with an https:// scheme and
+  // did not explicitly set VITE_USE_TLS, propagate the HTTPS intent so the
+  // Vite proxy forwards over TLS instead of plain HTTP.
+  if (
+    !config.launchAgentServer &&
+    env.VITE_BACKEND_BASE_URL?.startsWith("https://") &&
+    env.VITE_USE_TLS === undefined
+  ) {
+    env_out.VITE_USE_TLS = "true";
+  }
+
+  return env_out;
+}
+
+function buildAgentServerAutomationEnv(config) {
+  return {
+    // Make the session API key available to terminal commands spawned by the
+    // agent-server as OPENHANDS_AUTOMATION_API_KEY. The launcher also seeds
+    // this into Settings > Secrets, but agents commonly create automations
+    // with a curl command that references `$OPENHANDS_AUTOMATION_API_KEY`;
+    // exposing it here keeps that path working even before/without
+    // secret-registry env expansion.
+    OPENHANDS_AUTOMATION_API_KEY: config.sessionApiKey,
+  };
+}
+
+function buildAutomationTelemetryEnv(env = process.env) {
+  const telemetryDisabled = env.VITE_DO_NOT_TRACK === "1";
+  const apiKey =
+    env.AUTOMATION_POSTHOG_API_KEY ||
+    env.VITE_POSTHOG_API_KEY ||
+    (telemetryDisabled ? "" : DEFAULT_POSTHOG_API_KEY);
+
+  if (!apiKey) return {};
+
+  return {
+    AUTOMATION_POSTHOG_API_KEY: apiKey,
+    AUTOMATION_POSTHOG_HOST:
+      env.AUTOMATION_POSTHOG_HOST ||
+      env.VITE_POSTHOG_HOST ||
+      DEFAULT_POSTHOG_HOST,
+  };
+}
+
+// AUTOMATION_KV_SECRET encrypts the automation backend's KV state (and is its
+// fallback key for stored git-sync credentials), so it must not change under
+// existing data. Launchers used to pass the session API key on every start,
+// so rotating that key silently changed the encryption key too (#18299). The
+// first launch without this file pins the session key it runs with -- the
+// value earlier versions used -- and later launches keep it.
+// docker/entrypoint.sh pins to the same file.
+const AUTOMATION_KV_SECRET_FILE = "automation-kv-secret.txt";
+
+// The pin follows one contract in both launchers (docker/entrypoint.sh has
+// the shell version): it must be a regular file, not a symbolic link; an
+// existing pin is made private (0600) before it is used; it is created
+// without replacing anything, so concurrent first launches all end up with
+// the one value that won; a blank pin is replaced by one launcher holding
+// automation-kv-secret.txt.lock, while the others wait for its value; and any
+// failure stops the launch.
+function readPinnedKvSecret(filePath) {
+  let stat;
+  try {
+    stat = lstatSync(filePath);
+  } catch (error) {
+    if (error?.code === "ENOENT") return null;
+    throw error;
+  }
+  if (stat.isSymbolicLink()) {
+    throw new Error(`${filePath} is a symbolic link; refusing to use it`);
+  }
+  // Opening a FIFO would block until something writes to it, so reject
+  // anything that is not a regular file before opening it.
+  if (!stat.isFile()) {
+    throw new Error(`${filePath} is not a regular file`);
+  }
+  // O_NOFOLLOW and O_NONBLOCK close the gap between the lstat above and the
+  // open, where the platform has them (not on Windows): a path swapped for a
+  // symbolic link fails to open, and one swapped for a FIFO does not block.
+  const fd = openSync(
+    filePath,
+    fsConstants.O_RDONLY |
+      (fsConstants.O_NOFOLLOW ?? 0) |
+      (fsConstants.O_NONBLOCK ?? 0),
+  );
+  try {
+    const opened = fstatSync(fd);
+    if (!opened.isFile()) {
+      throw new Error(`${filePath} is not a regular file`);
+    }
+    if (process.platform !== "win32" && opened.mode & 0o077) {
+      fchmodSync(fd, 0o600);
+    }
+    // Read the same way as docker/entrypoint.sh: trailing line breaks are not
+    // part of the key, and a blank file counts as not pinned yet.
+    return readFileSync(fd, "utf8").replace(/[\r\n]+$/, "");
+  } finally {
+    closeSync(fd);
+  }
+}
+
+// Writes the key to a private temporary file, then links it into place. A
+// link never replaces an existing file, so only one concurrent launcher wins,
+// and the others read a pin that is already complete. Returns false if
+// another launcher pinned first.
+function createPinnedKvSecret(filePath, key) {
+  const tmpPath = `${filePath}.${process.pid}.${randomBytes(6).toString("hex")}.tmp`;
+  writeFileSync(tmpPath, `${key}\n`, { mode: 0o600, flag: "wx" });
+  try {
+    linkSync(tmpPath, filePath);
+    return true;
+  } catch (error) {
+    if (error?.code === "EEXIST") return false;
+    throw error;
+  } finally {
+    rmSync(tmpPath, { force: true });
+  }
+}
+
+// Renames a fully written private file over a blank pin, so the pin never
+// goes missing for launchers that are waiting on it. Only the holder of the
+// pin lock calls this.
+function replaceBlankPinnedKvSecret(filePath, key) {
+  const tmpPath = `${filePath}.${process.pid}.${randomBytes(6).toString("hex")}.tmp`;
+  writeFileSync(tmpPath, `${key}\n`, { mode: 0o600, flag: "wx" });
+  try {
+    renameSync(tmpPath, filePath);
+  } catch (error) {
+    rmSync(tmpPath, { force: true });
+    throw error;
+  }
+}
+
+function tryLockKvSecretPin(lockPath) {
+  try {
+    mkdirSync(lockPath);
+    return true;
+  } catch (error) {
+    if (error?.code === "EEXIST") return false;
+    throw error;
+  }
+}
+
+function sleepSync(ms) {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+}
+
+function resolveAutomationKvSecret(config, env = process.env) {
+  if (env.AUTOMATION_KV_SECRET) return env.AUTOMATION_KV_SECRET;
+
+  const filePath = join(config.stateDir, AUTOMATION_KV_SECRET_FILE);
+  const lockPath = `${filePath}.lock`;
+  mkdirSync(config.stateDir, { recursive: true });
+  const pinned = (key) => {
+    logService(
+      "automation",
+      `Pinned AUTOMATION_KV_SECRET in ${filePath}`,
+      c.dim,
+    );
+    return key;
+  };
+  // An unreadable pin throws instead of falling back to the session key, which
+  // could encrypt new state with the wrong key. The attempts allow about 5
+  // seconds of waiting on a concurrent launcher that is replacing a blank pin.
+  let locked = false;
+  try {
+    for (let attempt = 0; attempt < 50; attempt += 1) {
+      const current = readPinnedKvSecret(filePath);
+      if (current?.trim()) return current;
+      if (current === null) {
+        if (createPinnedKvSecret(filePath, config.sessionApiKey)) {
+          return pinned(config.sessionApiKey);
+        }
+        continue;
+      }
+      // A blank pin counts as not pinned yet. One launcher takes the lock and
+      // reads the pin again under it; the others wait for the new value.
+      if (!locked) {
+        locked = tryLockKvSecretPin(lockPath);
+        if (!locked) sleepSync(100);
+        continue;
+      }
+      replaceBlankPinnedKvSecret(filePath, config.sessionApiKey);
+      return pinned(config.sessionApiKey);
+    }
+  } finally {
+    if (locked) rmSync(lockPath, { recursive: true, force: true });
+  }
+  throw new Error(
+    `Could not pin AUTOMATION_KV_SECRET in ${filePath} (if no other launch is running, remove ${lockPath})`,
+  );
+}
+
+function startAgentServer(config) {
+  logService(
+    "agent-server",
+    `Starting on port ${config.agentServerPort}...`,
+    c.blue,
+  );
+
+  const agentServerCmd = buildAgentServerCommand(process.env);
+  logService("agent-server", `Using ${agentServerCmd.source}`, c.dim);
+
+  // Build safe config for agent-server env vars
+  const safeConfig = buildSafeDevConfig(config.canvasPath, {
+    ...process.env,
+    OH_CANVAS_SAFE_STATE_DIR: config.stateDir,
+    OH_CANVAS_SAFE_BACKEND_PORT: config.agentServerPort.toString(),
+    OH_CANVAS_SAFE_VSCODE_PORT: config.vscodePort.toString(),
+    TMUX_TMPDIR: config.tmuxTmpDir,
+  });
+
+  const agentServerEnv = {
+    // Opt into prefix-mode: `getLocalServiceRoutes` registers the matching
+    // route on both the static server and the ingress, so the prefix this
+    // advertises resolves to the editor port on the canvas origin.
+    ...buildAgentServerEnv(safeConfig, {
+      vscodeBasePath: config.vscodeBasePath,
+      verbose: config.verbose,
+    }),
+    ...buildAgentServerAutomationEnv(config),
+    OPENHANDS_REMOTE_WS_READY_REQUIRED:
+      process.env.OPENHANDS_REMOTE_WS_READY_REQUIRED || "false",
+    // Ensure the agent-server uses the resolved key from config. This is
+    // LOCAL_BACKEND_API_KEY when set, or the auto-generated persisted key.
+    OH_SESSION_API_KEYS_0: config.sessionApiKey,
+    // Emit structured JSON log lines instead of Rich-formatted output.
+    // Rich wraps long messages across multiple lines and prepends its own
+    // timestamp; LOG_JSON=true produces one JSON object per record which
+    // parseAgentServerLogLine re-formats into a clean single-line entry.
+    LOG_JSON: "true",
+  };
+
+  spawnService(
+    "agent-server",
+    agentServerCmd.command,
+    [
+      ...agentServerCmd.args,
+      "--host",
+      "127.0.0.1",
+      "--port",
+      String(config.agentServerPort),
+    ],
+    {
+      cwd: safeConfig.workspacesPath,
+      env: agentServerEnv,
+      color: c.blue,
+      parseLogLine: parseAgentServerLogLine,
+    },
+  );
+}
+
+/**
+ * Extra CLI arguments for the automation service, on top of the uvicorn
+ * invocation the command builder already produced.
+ *
+ * `--log-level` is Uvicorn's own level, separate from the app's `LOG_LEVEL`: it
+ * governs the startup banner and per-request access lines. Keeping it in step
+ * with the service level means a default launch is quiet while `--verbose`
+ * still shows request traffic. The value is narrowed by
+ * {@link uvicornLogLevel}, since Uvicorn rejects the Python aliases and numeric
+ * levels the app itself accepts.
+ *
+ * @param {{autoBackendPort: number, verbose?: boolean}} config
+ * @param {Record<string, string | undefined>} [env]
+ * @returns {string[]}
+ */
+export function buildAutomationLogArgs(config, env = process.env) {
+  return [
+    "--host",
+    "127.0.0.1",
+    "--port",
+    config.autoBackendPort.toString(),
+    "--log-level",
+    uvicornLogLevel(backendLogLevel({ verbose: config.verbose, env })),
+  ];
+}
+
+/**
+ * Browser origins the automation backend accepts: the ingress, and the
+ * frontend's own port so it can still be browsed directly.
+ *
+ * @param {{ingressPort: number, vitePort: number}} config
+ * @returns {string}
+ */
+export function buildAutomationCorsOrigins(config) {
+  return [config.ingressPort, config.vitePort]
+    .flatMap((port) => [`http://localhost:${port}`, `http://127.0.0.1:${port}`])
+    .join(",");
+}
+
+function startAutomationBackend(config) {
+  logService(
+    "automation",
+    `Starting on port ${config.autoBackendPort}...`,
+    c.green,
+  );
+
+  const automationCmd = buildAutomationCommand(process.env);
+  logService("automation", `Using ${automationCmd.source}`, c.dim);
+
+  // Quiet the automation service by default; see buildBackendLogEnv.
+  const logEnv = buildBackendLogEnv({
+    verbose: config.verbose,
+    automation: true,
+  });
+
+  return spawnService(
+    "automation",
+    automationCmd.command,
+    [...automationCmd.args, ...buildAutomationLogArgs(config)],
+    {
+      cwd: config.stateDir,
+      env: {
+        // Force UTF-8 for all Python file I/O (same reason as agent-server;
+        // see buildAgentServerEnv in dev-safe.mjs).
+        PYTHONUTF8: "1",
+        ...logEnv,
+        OPENHANDS_REMOTE_WS_READY_REQUIRED:
+          process.env.OPENHANDS_REMOTE_WS_READY_REQUIRED || "false",
+        // The URL the automation backend itself uses to call the
+        // agent-server's REST API (tarball upload + bash dispatch).
+        //
+        // Priority:
+        //   1. AUTOMATION_AGENT_SERVER_URL explicitly set in the user's env
+        //   2. `127.0.0.1:<agentServerPort>`
+        AUTOMATION_AGENT_SERVER_URL:
+          process.env.AUTOMATION_AGENT_SERVER_URL ||
+          getAgentServerBaseUrl(config),
+        // The URL exported into the in-sandbox bash chain as
+        // `AGENT_SERVER_URL` (read by main.py / setup.sh to call back into
+        // the agent-server).
+        //
+        // Priority:
+        //   1. AUTOMATION_SANDBOX_AGENT_SERVER_URL explicitly set in env
+        //   2. launcher-provided value
+        //   3. unset — backend falls back to AUTOMATION_AGENT_SERVER_URL
+        ...(process.env.AUTOMATION_SANDBOX_AGENT_SERVER_URL ||
+        config.sandboxAgentServerUrl
+          ? {
+              AUTOMATION_SANDBOX_AGENT_SERVER_URL:
+                process.env.AUTOMATION_SANDBOX_AGENT_SERVER_URL ||
+                config.sandboxAgentServerUrl,
+            }
+          : {}),
+        AUTOMATION_AGENT_SERVER_API_KEY: config.sessionApiKey,
+        // ~/.openhands/automation/automations.db — matches docker/entrypoint.sh.
+        AUTOMATION_DB_URL: `sqlite+aiosqlite:///${join(dirname(config.stateDir), SHARED_DEFAULTS.paths.automationDb)}`,
+        // The automation backend uses this as its publicly-reachable base
+        // URL: it's appended to callback URLs and injected into each
+        // sandbox as `AUTOMATION_API_URL` (consumed by setup.sh for
+        // /sdk-version and by the SDK for run completion).
+        // Priority:
+        //   1. AUTOMATION_BASE_URL explicitly set in the user's env
+        //   2. launcher-provided host
+        //   3. `localhost`
+        AUTOMATION_BASE_URL:
+          process.env.AUTOMATION_BASE_URL ||
+          `http://${config.automationApiHost ?? "localhost"}:${config.ingressPort}`,
+        // The dispatcher resolves this path and embeds it into a
+        // `mkdir -p ...` shell command executed by the agent-server.
+        // Priority:
+        //   1. AUTOMATION_WORKSPACE_BASE explicitly set in the user's env
+        //   2. `automationWorkspaceBase` option passed by the launcher
+        //   3. host-side default under config.stateDir
+        AUTOMATION_WORKSPACE_BASE:
+          process.env.AUTOMATION_WORKSPACE_BASE ||
+          config.automationWorkspaceBase ||
+          join(config.stateDir, "workspaces"),
+        // Session API key for self-hosted auth — shared with agent-server via X-Session-API-Key header
+        AUTOMATION_LOCAL_API_KEY: config.sessionApiKey,
+        ...buildAutomationTelemetryEnv(),
+        // KV store secret — required for automations to use the built-in
+        // key-value store for state persistence between runs. Used for JWT
+        // signing and value encryption. Resolved in main() before any service
+        // starts; see resolveAutomationKvSecret.
+        AUTOMATION_KV_SECRET: config.automationKvSecret,
+        // CORS: allow localhost origins for dev, unless explicitly overridden.
+        AUTOMATION_CORS_ORIGINS:
+          process.env.AUTOMATION_CORS_ORIGINS ||
+          buildAutomationCorsOrigins(config),
+        FILE_STORE: "local",
+        LOCAL_STORAGE_PATH: join(config.stateDir, "storage"),
+        OPENHANDS_SUPPRESS_BANNER: "1",
+      },
+      color: c.green,
+    },
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Main
+// ═══════════════════════════════════════════════════════════════════════════
+
+let shuttingDown = false;
+
+// Services run in their own process groups, so they outlive the launcher
+// unless it stops them: SIGTERM each tree, then SIGKILL what is still running.
+async function stopServices() {
+  for (const [name, proc] of processes) {
+    logService(name, "Stopping...", c.dim);
+    signalProcessTree(proc, "SIGTERM");
+  }
+
+  await delay(3000);
+
+  for (const [name, proc] of processes) {
+    if (isProcessRunning(proc)) {
+      logService(name, "Force stopping...", c.dim);
+      signalProcessTree(proc, "SIGKILL");
+    }
+  }
+}
+
+function shutdown() {
+  if (shuttingDown) return;
+  shuttingDown = true;
+
+  console.log("");
+  console.log(`${c.yellow}Shutting down...${c.reset}`);
+  fileLog("info", "Shutting down...");
+
+  stopServices().then(() => {
+    shutdownHooks.run();
+    process.exit(0);
+  });
+}
+
+/**
+ * Watch the automation backend until it answers, and stop the stack if it
+ * exits first. It exits during startup when, for example, a database
+ * migration fails (#18299); leaving the stack up made Automate silently
+ * unavailable. The launcher announces the stack without waiting for this, so
+ * a healthy start is not delayed; a failure stops every service and then calls
+ * `onFailure`. A slow start (first-run download) only logs a timeout.
+ */
+async function watchAutomationStartup(config, proc, timeoutMs, onFailure) {
+  const ready = await waitForService(
+    "automation",
+    `http://127.0.0.1:${config.autoBackendPort}${AUTOMATION_ROUTE_PREFIX}/health`,
+    timeoutMs,
+    proc,
+  );
+  if (ready || isProcessRunning(proc) || shuttingDown) return;
+
+  const exit =
+    proc.exitCode !== null
+      ? `code ${proc.exitCode}`
+      : `signal ${proc.signalCode}`;
+  const message =
+    `The automation backend exited during startup (${exit}). ` +
+    "Its [automation] log lines show why.";
+  logError(message);
+  await stopServices();
+  onFailure(new Error(message));
+}
+
+/**
+ * Keep a front-door service (the ingress or the static frontend) running.
+ * When it exits on its own, nothing else answers on the UI port, so start it
+ * again; the ingress has crashed natively on Windows (#19255) while the rest
+ * of the stack kept running. After `maxRestarts` the stack is stopped and
+ * `onFailure` gets the error, like an automation startup failure.
+ * `start(options)` must pass `options` on to `spawnService`.
+ */
+export function superviseService(
+  name,
+  start,
+  { onFailure, maxRestarts = 3, restartDelayMs = 1000 },
+) {
+  let restarts = 0;
+  const launch = () =>
+    start({
+      onUnexpectedExit: async (reason) => {
+        if (restarts < maxRestarts) {
+          restarts += 1;
+          logService(
+            name,
+            `Restarting (${restarts}/${maxRestarts})...`,
+            c.yellow,
+          );
+          setTimeout(launch, restartDelayMs);
+          return;
+        }
+        const message =
+          `The ${name} exited ${maxRestarts + 1} times (last: ${reason}). ` +
+          `Its [${name}] log lines show why.`;
+        logError(message);
+        await stopServices();
+        onFailure(new Error(message));
+      },
+    });
+  launch();
+}
+
+process.on("SIGINT", shutdown);
+process.on("SIGTERM", shutdown);
+process.on("SIGHUP", shutdown);
+
+/**
+ * One MARS web bridge per stack, on the server the browser reaches: the
+ * ingress, guarded by the stack's session key (the same one the page holds).
+ * The static child behind it gets `MARS_WEB=0`: a second bridge there would
+ * answer /mars/* with its own, separate sign-in state for anyone who opens
+ * that port directly. Without a key the ingress bridge would take
+ * destroySession and savePat from any local process, the agent's shell
+ * included, so a stack with no session key mounts nothing. Electron turns it
+ * off altogether (`config.marsWebBridge`), its preload provides the bridge.
+ * The bridge keeps sign-ins under the stack's state directory, encrypted with
+ * its secret key where the host has no keychain.
+ */
+export function buildMarsWebEnv(role, config) {
+  if (role === "static" || config.marsWebBridge === false) {
+    return { MARS_WEB: "0" };
+  }
+  return config.sessionApiKey
+    ? {
+        MARS_WEB_KEY: config.sessionApiKey,
+        ...(config.stateDir ? { MARS_STATE_DIR: config.stateDir } : {}),
+        ...(config.secretKey ? { OH_SECRET_KEY: config.secretKey } : {}),
+      }
+    : { MARS_WEB: "0" };
+}
+
+function startIngress(config, { onUnexpectedExit } = {}) {
+  logService("ingress", `Starting on port ${config.ingressPort}...`, c.yellow);
+
+  const ingressScript = join(projectRoot, "scripts", "ingress.mjs");
+  const frontendBackend = getFrontendBackend(config);
+  const runtimeServicesInfo = config.launchAgentServer
+    ? JSON.stringify(buildAutomationRuntimeServicesInfo(config))
+    : null;
+
+  spawnService(
+    "ingress",
+    "node",
+    [
+      ingressScript,
+      "--port",
+      config.ingressPort.toString(),
+      ...bindHostArgs(config.bindHost),
+      ...(runtimeServicesInfo
+        ? ["--runtime-services-info", runtimeServicesInfo]
+        : []),
+      ...buildRouteArgs(getLocalServiceRoutes(config)),
+      ...getNoReferrerPrefixArgs(config),
+      ...(frontendBackend ? ["--default", frontendBackend] : []),
+    ],
+    {
+      cwd: projectRoot,
+      color: c.yellow,
+      env: buildMarsWebEnv("ingress", config),
+      onUnexpectedExit,
+    },
+  );
+}
+
+/**
+ * Build the JSON-serializable runtime services info for an automation
+ * stack. Backend-serving processes append this to `/server_info` so any
+ * frontend connected to the backend can populate the agent's
+ * `<RUNTIME_SERVICES>` system-prompt block.
+ */
+export function buildAutomationRuntimeServicesInfo(config, env = process.env) {
+  const dockerConversationRuntime = env.OH_CONVERSATION_RUNTIME === "docker";
+  const agentHostAlias = config.agentHostAlias ?? getAgentHostAlias(env);
+  return buildRuntimeServicesInfo({
+    mode: config.mode ?? "dev:automation",
+    agentHostAlias,
+    agentServerPort: config.agentServerPort,
+    ingressPort: config.ingressPort,
+    frontendPort: config.launchFrontend ? config.vitePort : undefined,
+    // The same port hosts Vite in dynamic mode and a static-file server
+    // in static mode. The launcher records this on the config so the
+    // description shown to the agent matches reality.
+    frontendKind: config.frontendKind ?? "vite",
+    automation: config.launchAutomation
+      ? dockerConversationRuntime
+        ? { url: `http://${agentHostAlias}:${config.ingressPort}` }
+        : { port: config.autoBackendPort }
+      : undefined,
+  });
+}
+
+export function getAgentHostAlias(env = process.env) {
+  return env.OH_CONVERSATION_RUNTIME === "docker"
+    ? "host.docker.internal"
+    : "localhost";
+}
+
+function buildViteFrontendEnv(config) {
+  /** @type {Record<string, string>} */
+  const viteEnv = {
+    // Full-stack mode points Vite at this launcher's ingress. Frontend-only
+    // mode uses the separately running backend ingress instead.
+    ...buildViteBackendEnv(config),
+    VITE_FRONTEND_PORT: config.vitePort.toString(),
+    VITE_BIND_HOST: config.bindHost,
+  };
+  if (config.viteWorkingDir) {
+    viteEnv.VITE_WORKING_DIR = config.viteWorkingDir;
+  }
+
+  // Vite serves the HTML for this mode's browser origin, so this is where the
+  // editor-capability advertisement has to be baked. The ingress in front of it
+  // routes the prefix but is a pure proxy — it injects nothing into the
+  // document, so it cannot tell the frontend what it serves.
+  //
+  // Both variables or neither: `vite.config.ts` only registers the editor proxy
+  // when it has a target as well as a prefix, and this stack has two supported
+  // browser origins — the ingress and Vite's own port, which is why the latter
+  // is in AUTOMATION_CORS_ORIGINS. On the ingress the prefix is routed by the
+  // ingress itself; on the Vite origin only this proxy can serve it. Baking the
+  // prefix alone would advertise an editor on the Vite origin whose URL then
+  // falls through to the SPA — the dead button this gating exists to prevent.
+  if (config.launchAgentServer && config.vscodeBasePath) {
+    viteEnv.VITE_VSCODE_BASE_PATH = config.vscodeBasePath;
+    viteEnv.VITE_VSCODE_TARGET = `http://127.0.0.1:${config.vscodePort}`;
+  }
+
+  // The Vite origin is directly reachable on its own port, so it must use the
+  // same bind/key policy as ingress and the static server. Local loopback mode
+  // keeps transparent auth; public or off-loopback mode serves no credential
+  // and shows the API-key entry screen.
+  const policy = applySessionKeyPolicy({
+    host: config.bindHost,
+    allowLanSessionKey: config.allowLanSessionKey,
+    sessionApiKey:
+      config.launchAgentServer && !config.isPublic
+        ? config.sessionApiKey
+        : null,
+    authRequired: Boolean(config.launchAgentServer && config.isPublic),
+    warn: (msg) => logService("vite", msg, c.yellow),
+  });
+  if (policy.authRequired) {
+    viteEnv.VITE_AUTH_REQUIRED = "true";
+  }
+  if (policy.sessionApiKey) {
+    viteEnv.VITE_SESSION_API_KEY = policy.sessionApiKey;
+  }
+
+  return viteEnv;
+}
+
+function startVite(config) {
+  logService("vite", `Starting on port ${config.vitePort}...`, c.magenta);
+
+  const frontendCommand = buildNpmScriptCommand("dev:frontend");
+  const viteEnv = buildViteFrontendEnv(config);
+
+  spawnService("vite", frontendCommand.command, frontendCommand.args, {
+    cwd: config.canvasPath,
+    env: viteEnv,
+    color: c.magenta,
+  });
+}
+
+/**
+ * Seed the session API key into agent-server's secrets store as
+ * OPENHANDS_AUTOMATION_API_KEY so agents can authenticate with the
+ * automation backend in curl commands during conversations.
+ *
+ * Includes retry logic to handle slow server startup or transient failures.
+ *
+ * @param {object} config - Configuration object with agentServerPort, sessionApiKey
+ * @param {object} options - Options for retry behavior
+ * @param {number} options.maxRetries - Maximum number of retry attempts (default: 5)
+ * @param {number} options.retryDelayMs - Delay between retries in ms (default: 2000)
+ * @param {number} options.timeoutMs - Request timeout in ms (default: 10000)
+ * @returns {Promise<boolean>} True if seeding succeeded, false otherwise
+ */
+async function seedAutomationSecret(config, options = {}) {
+  const { maxRetries = 5, retryDelayMs = 2000, timeoutMs = 10000 } = options;
+
+  const secretName = "OPENHANDS_AUTOMATION_API_KEY";
+  const secretDescription =
+    "API key for authenticating with the automation backend";
+
+  logService("secrets", `Seeding ${secretName} into agent-server...`, c.dim);
+
+  const url = `${getAgentServerBaseUrl(config)}/api/settings/secrets`;
+  const body = JSON.stringify({
+    name: secretName,
+    value: config.sessionApiKey,
+    description: secretDescription,
+  });
+
+  const headers = {
+    "Content-Type": "application/json",
+    // Include session API key if configured
+    ...(config.sessionApiKey && { "X-Session-API-Key": config.sessionApiKey }),
+  };
+
+  let lastError = null;
+
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      const response = await fetch(url, {
+        method: "PUT",
+        headers,
+        body,
+        signal: AbortSignal.timeout(timeoutMs),
+      });
+
+      if (response.ok) {
+        logService("secrets", `${secretName} seeded successfully`, c.green);
+        return true;
+      }
+
+      const text = await response.text();
+      lastError = `HTTP ${response.status}: ${text}`;
+
+      // Don't retry on authentication errors - they won't resolve with retries
+      if (response.status === 401 || response.status === 403) {
+        logService(
+          "secrets",
+          `Warning: Failed to seed secret (${response.status}): ${text}`,
+          c.yellow,
+        );
+        return false;
+      }
+
+      // Retry on server errors or service unavailable
+      if (attempt < maxRetries) {
+        logService(
+          "secrets",
+          `Retry ${attempt}/${maxRetries} after ${response.status}...`,
+          c.dim,
+        );
+        await delay(retryDelayMs);
+      }
+    } catch (err) {
+      lastError = err.message;
+
+      // Connection errors likely mean server isn't ready - wait and retry
+      if (attempt < maxRetries) {
+        logService(
+          "secrets",
+          `Retry ${attempt}/${maxRetries}: ${err.message}`,
+          c.dim,
+        );
+        await delay(retryDelayMs);
+      }
+    }
+  }
+
+  logService(
+    "secrets",
+    `Warning: Failed to seed secret after ${maxRetries} attempts: ${lastError}`,
+    c.yellow,
+  );
+  return false;
+}
+
+function printBanner(config) {
+  const stackName = config.frontendOnly
+    ? "Agent Canvas Frontend Stack"
+    : config.backendOnly
+      ? "Agent Canvas Backend Stack"
+      : "Agent Canvas + Automation Stack";
+
+  // padEnd counts invisible ANSI escape bytes as visible characters, so we
+  // compute the visible length separately and pad with spaces accordingly.
+  const ansiEscape = String.fromCharCode(27);
+  const ansiRe = new RegExp(`${ansiEscape}\\[[0-9;]*m`, "g");
+  const ansiPadEnd = (str, targetVisible) => {
+    const visible = str.replace(ansiRe, "").length;
+    return str + " ".repeat(Math.max(0, targetVisible - visible));
+  };
+  // The box has 62-char inner width; each content line needs 63 visible chars
+  // before the trailing border (1 leading ║ + 62 inner).
+  const BOX_INNER = 63;
+
+  console.log("");
+  console.log(
+    `${c.green}${c.bold}╔══════════════════════════════════════════════════════════════╗${c.reset}`,
+  );
+  console.log(
+    ansiPadEnd(
+      `${c.green}${c.bold}║${c.reset}  ${c.bold}${stackName}${c.reset}`,
+      BOX_INNER,
+    ) + `${c.green}${c.bold}║${c.reset}`,
+  );
+  console.log(
+    `${c.green}${c.bold}╠══════════════════════════════════════════════════════════════╣${c.reset}`,
+  );
+  console.log(
+    `${c.green}${c.bold}║${c.reset}                                                              ${c.green}${c.bold}║${c.reset}`,
+  );
+  console.log(
+    ansiPadEnd(
+      `${c.green}${c.bold}║${c.reset}  Ingress:      ${c.cyan}http://localhost:${config.ingressPort}/${c.reset}`,
+      BOX_INNER,
+    ) + `${c.green}${c.bold}║${c.reset}`,
+  );
+  if (config.launchFrontend) {
+    console.log(
+      ansiPadEnd(
+        `${c.green}${c.bold}║${c.reset}  Main UI:      ${c.cyan}http://localhost:${config.ingressPort}/${c.reset}`,
+        BOX_INNER,
+      ) + `${c.green}${c.bold}║${c.reset}`,
+    );
+  }
+  if (config.launchAutomation) {
+    console.log(
+      ansiPadEnd(
+        `${c.green}${c.bold}║${c.reset}  API Docs:     ${c.cyan}http://localhost:${config.ingressPort}/api/automation/docs${c.reset}`,
+        BOX_INNER,
+      ) + `${c.green}${c.bold}║${c.reset}`,
+    );
+  }
+  console.log(
+    `${c.green}${c.bold}║${c.reset}                                                              ${c.green}${c.bold}║${c.reset}`,
+  );
+  console.log(
+    `${c.green}${c.bold}╚══════════════════════════════════════════════════════════════╝${c.reset}`,
+  );
+  console.log("");
+  console.log(`${c.dim}State directory: ${config.stateDir}${c.reset}`);
+  console.log(`${c.dim}Press Ctrl+C to stop${c.reset}`);
+  console.log("");
+
+  // Write a compact plain-text summary to the log file.
+  const summary = [
+    `${stackName} — started`,
+    `  Ingress:         http://localhost:${config.ingressPort}/`,
+    ...(config.launchFrontend
+      ? [`  Main UI:         http://localhost:${config.ingressPort}/`]
+      : []),
+    ...(config.launchAutomation
+      ? [
+          `  API Docs:        http://localhost:${config.ingressPort}/api/automation/docs`,
+        ]
+      : []),
+    `  State directory: ${config.stateDir}`,
+  ];
+  fileLog("info", summary.join("\n"));
+}
+
+async function main(options = {}) {
+  const {
+    bannerTitle = "Agent Canvas + Automation Development Stack",
+    startAgentServer: startAgentServerOverride,
+    extraPrereqs,
+    viteWorkingDir,
+    // Path used as `AUTOMATION_WORKSPACE_BASE` by the automation backend.
+    // Defaults to a host-side path under config.stateDir.
+    automationWorkspaceBase,
+    // Host used in `AUTOMATION_BASE_URL` (the URL the automation sandbox
+    // uses to call back into the automation backend). Defaults to `localhost`.
+    automationApiHost,
+    // Value exported as `AUTOMATION_SANDBOX_AGENT_SERVER_URL` to the
+    // automation backend. This is the URL the in-sandbox bash chain uses
+    // to reach the agent-server. When unset the backend falls back to
+    // AUTOMATION_AGENT_SERVER_URL.
+    sandboxAgentServerUrl,
+    staticMode: staticModeOverride,
+    // Whether the ingress hosts the MARS web bridge (DigitalOcean Managed
+    // Agents for the browser). Electron passes false: its preload already
+    // provides the bridge, and a second one would hold its own sign-in state
+    // and, with MARS_TOKEN set, validate the token against DO at every start.
+    marsWebBridge = true,
+    defaultStaticMode = false,
+    buildStaticFrontend,
+    staticDir: staticDirOverride,
+    // Hostname the agent uses to reach services running on the host.
+    agentHostAlias = getAgentHostAlias(),
+    // Human-readable label for the dev mode, surfaced in the agent's
+    // <RUNTIME_SERVICES> system-prompt block.
+    mode = "dev:automation",
+    // When true, enable public mode (require LOCAL_BACKEND_API_KEY,
+    // don't bake session key into frontend).
+    isPublic: isPublicOverride,
+    // When true, skip the npm prerequisite check. Used by the Electron desktop
+    // launcher where npm is not needed at runtime in static mode.
+    skipNpmCheck = false,
+    // How long to wait for the agent-server's `/server_info` to return 200
+    // before continuing. Defaults to 60 s, which is fine for warm-cache dev
+    // workflows. The Electron desktop launcher bumps this to several minutes
+    // because first-launch on a fresh machine runs `uvx` to download Python
+    // and install `openhands-agent-server` from PyPI, which can take much
+    // longer than 60 s on a slow network.
+    agentServerReadyTimeoutMs = 60_000,
+    // Optional `(name, line, level)` callback that receives every service log
+    // line (stdout, stderr, and lifecycle events) emitted by any spawned
+    // backend process. Used by the Electron loading screen to surface uvx
+    // download / install progress to the user. `level` is one of
+    // "stdout" | "stderr" | "info" | "warn" | "error".
+    onServiceLog,
+    // Called with an Error after every service has been stopped because the
+    // stack cannot keep running: the automation backend exited before it
+    // became healthy, or the ingress/static server kept exiting. That can
+    // happen after `main()` has returned. Defaults to exiting the process
+    // with code 1; embedded launchers (Electron) pass their own handler.
+    onStackFailure = () => process.exit(1),
+  } = options;
+
+  // Install the listener early so log lines emitted before the first
+  // `spawnService` call (e.g. by future setup steps) are also captured.
+  setServiceLogListener(onServiceLog);
+
+  const args = parseArgs();
+
+  // Allow options to override CLI args for public mode
+  if (isPublicOverride != null) {
+    args.public = isPublicOverride;
+  }
+
+  // Allow options to override CLI args (for bin/agent-canvas.mjs)
+  const useStaticMode =
+    staticModeOverride ??
+    (args.dynamic ? false : args.static || defaultStaticMode);
+  const staticDir =
+    staticDirOverride ?? args.staticDir ?? join(projectRoot, "build");
+
+  const modeLabel = useStaticMode && !args.backendOnly ? "(Static)" : "";
+  const titleWithMode = modeLabel ? `${bannerTitle} ${modeLabel}` : bannerTitle;
+
+  console.log("");
+  console.log(`${c.cyan}${c.bold}${titleWithMode}${c.reset}`);
+  console.log("");
+  fileLog("info", titleWithMode);
+
+  // Setup phase
+  checkPrerequisites({
+    checkUvx: !args.frontendOnly,
+    // Static-mode + backend-only has no frontend to build, so npm is not
+    // required — unless the caller provides a custom buildStaticFrontend hook.
+    // The Electron desktop launcher passes `skipNpmCheck: true` because the
+    // packaged binary serves a pre-built static frontend and never invokes
+    // npm at runtime, so we suppress the check unconditionally there.
+    checkNpm:
+      !skipNpmCheck &&
+      ((!useStaticMode && !args.backendOnly) ||
+        typeof buildStaticFrontend === "function"),
+    checkFrontendDependencies:
+      (!useStaticMode && !args.backendOnly) ||
+      typeof buildStaticFrontend === "function",
+  });
+
+  // Fail fast on an obviously bad OH_AGENT_SERVER_LOCAL_PATH so we don't waste
+  // time allocating ports / generating keys / launching uvx with a path that
+  // would only produce a cryptic build error. Mirrors dev-safe.mjs and
+  // dev-extra-backend.mjs.
+  if (!args.frontendOnly && process.env.OH_AGENT_SERVER_LOCAL_PATH) {
+    try {
+      validateLocalAgentServerPath(process.env.OH_AGENT_SERVER_LOCAL_PATH);
+    } catch (error) {
+      logError(error instanceof Error ? error.message : String(error));
+      process.exit(1);
+    }
+  }
+
+  // Same for the automation checkout -- skipped when --automation-git-ref was
+  // passed, since buildConfig drops the env var in favor of the explicit flag.
+  if (
+    !args.frontendOnly &&
+    !args.automationGitRef &&
+    process.env.OH_AUTOMATION_LOCAL_PATH
+  ) {
+    try {
+      validateLocalAutomationPath(process.env.OH_AUTOMATION_LOCAL_PATH);
+    } catch (error) {
+      logError(error instanceof Error ? error.message : String(error));
+      process.exit(1);
+    }
+  }
+
+  // Build config with dynamic port allocation
+  const config = await buildConfig(args);
+  if (viteWorkingDir) config.viteWorkingDir = viteWorkingDir;
+  if (automationWorkspaceBase) {
+    config.automationWorkspaceBase = automationWorkspaceBase;
+  }
+  if (automationApiHost) {
+    config.automationApiHost = automationApiHost;
+  }
+  if (sandboxAgentServerUrl) {
+    config.sandboxAgentServerUrl = sandboxAgentServerUrl;
+  }
+  // Stamp the dev-mode label, host alias, and frontend kind on the config
+  // so downstream helpers (Vite spawn, static build) can produce a
+  // runtime-services info object describing what the agent can reach.
+  config.mode = mode;
+  config.marsWebBridge = marsWebBridge;
+  config.agentHostAlias = agentHostAlias;
+  config.frontendKind = useStaticMode ? "static" : "vite";
+  ensureDirectories(config);
+  if (typeof extraPrereqs === "function") {
+    extraPrereqs(config);
+  }
+  // Before any service starts, so a problem with the pinned secret stops the
+  // launch instead of leaving the agent-server running without automation.
+  if (config.launchAutomation) {
+    config.automationKvSecret = resolveAutomationKvSecret(config);
+  }
+
+  if (
+    config.launchFrontend &&
+    useStaticMode &&
+    typeof buildStaticFrontend === "function"
+  ) {
+    buildStaticFrontend(config, args);
+  }
+
+  // In static mode, verify build exists after any launcher-managed build.
+  if (config.launchFrontend && useStaticMode && !existsSync(staticDir)) {
+    logError(`Static directory not found: ${staticDir}`);
+    logError(`Run 'npm run build' first to create the static files.`);
+    process.exit(1);
+  }
+
+  // Start services phase
+  logStep("2/2", "Starting services...");
+
+  let agentServerReady = false;
+
+  // 1. Start agent-server first (automation depends on it).
+  //
+  // Readiness timeout defaults to 60 s, which is fine for `npm run dev` against
+  // a warm uvx cache. The Electron desktop launcher overrides this via the
+  // `agentServerReadyTimeoutMs` option because first-launch on a fresh machine
+  // runs `uvx` to download Python + install `openhands-agent-server` from PyPI,
+  // which can take several minutes. Dropping the user into a half-booted UI
+  // before that completes triggers axios "Request timeout" popups on the first
+  // SPA fetch that hits an unbound port 18000.
+  if (config.launchAgentServer) {
+    const agentServerStarter = startAgentServerOverride ?? startAgentServer;
+    agentServerStarter(config);
+
+    agentServerReady = await waitForService(
+      "agent-server",
+      `${getAgentServerBaseUrl(config)}/server_info`,
+      agentServerReadyTimeoutMs,
+    );
+  }
+
+  // 2. Seed automation API key into agent-server secrets
+  // This makes the key available to agents during conversations
+  // Note: seedAutomationSecret has its own retry logic if server is still warming up
+  if (config.launchAutomation && agentServerReady) {
+    await seedAutomationSecret(config);
+  } else if (config.launchAutomation) {
+    logService(
+      "secrets",
+      "Skipping secret seeding - agent-server not ready",
+      c.yellow,
+    );
+  }
+
+  // 3. Start automation backend
+  const automationProc = config.launchAutomation
+    ? startAutomationBackend(config)
+    : null;
+
+  // 4. Start frontend server (Vite dev server OR static server)
+  if (config.launchFrontend) {
+    if (useStaticMode) {
+      superviseService(
+        "static",
+        (hooks) => startStaticFrontend(config, staticDir, hooks),
+        { onFailure: onStackFailure },
+      );
+    } else {
+      startVite(config);
+    }
+  }
+
+  // 5. Wait for services to be ready
+  await delay(2000);
+
+  // 6. Start ingress proxy (routes traffic only to running services)
+  superviseService("ingress", (hooks) => startIngress(config, hooks), {
+    onFailure: onStackFailure,
+  });
+
+  // Wait for ingress to start
+  await delay(1000);
+
+  printBanner(config);
+
+  // 7. Watch the automation backend in the background: if it exits before it
+  //    is healthy, stop the stack and report the failure.
+  if (automationProc) {
+    void watchAutomationStartup(
+      config,
+      automationProc,
+      agentServerReadyTimeoutMs,
+      onStackFailure,
+    );
+  }
+
+  // Return the resolved config + readiness signal so embedded launchers can
+  // (a) build URLs from the actual allocated ports and (b) decide whether to
+  // show an error to the user when the agent-server never came up.
+  return { config, agentServerReady };
+}
+
+function startStaticFrontend(config, staticDir, { onUnexpectedExit } = {}) {
+  logService("static", `Starting on port ${config.vitePort}...`, c.magenta);
+  logService("static", `Serving from: ${staticDir}`, c.dim);
+
+  // Build the runtime-services info JSON so static-server can append it to
+  // /server_info. The static-server also injects the old window global for
+  // compatibility with previously built frontend bundles.
+  const runtimeServicesInfo = config.launchAgentServer
+    ? JSON.stringify(buildAutomationRuntimeServicesInfo(config))
+    : null;
+
+  const staticServerScript = join(projectRoot, "scripts", "static-server.mjs");
+  const keyPolicy = applySessionKeyPolicy({
+    host: config.bindHost,
+    allowLanSessionKey: config.allowLanSessionKey,
+    sessionApiKey:
+      config.launchAgentServer && !config.isPublic ? config.sessionApiKey : null,
+    authRequired: Boolean(config.launchAgentServer && config.isPublic),
+    warn: (msg) => logService("static", msg, c.yellow),
+  });
+  spawnService(
+    "static",
+    "node",
+    [
+      staticServerScript,
+      "--dir",
+      staticDir,
+      "--port",
+      String(config.vitePort),
+      ...bindHostArgs(config.bindHost),
+      ...(process.env.VITE_BASE_PATH
+        ? ["--base-path", process.env.VITE_BASE_PATH]
+        : []),
+      // Explicit LAN opt-in: let static-server keep the key on a non-loopback bind.
+      ...(keyPolicy.sessionApiKey && config.allowLanSessionKey
+        ? ["--allow-lan-session-key"]
+        : []),
+      // Off-loopback binds and public mode show the API key entry screen.
+      ...(keyPolicy.authRequired ? ["--auth-required"] : []),
+      // Inject runtime-services info so the agent knows what's reachable.
+      ...(runtimeServicesInfo
+        ? ["--runtime-services-info", runtimeServicesInfo]
+        : []),
+      // Proxy routes only to services that this launch mode started.
+      // (MARS web bridge: see the env below — the ingress hosts it.)
+      ...buildRouteArgs(getLocalServiceRoutes(config)),
+      // Only the static server injects into the document, so only it can tell
+      // the frontend this origin serves the editor. The ingress routes the same
+      // prefix but proxies the HTML through untouched.
+      ...getVSCodeAdvertiseArgs(config),
+      ...getNoReferrerPrefixArgs(config),
+      // Reject known API prefixes that have no backend — returns 503
+      // instead of SPA-fallbacking to index.html.
+      ...buildRejectPrefixArgs(getRejectPrefixes(config)),
+    ],
+    {
+      cwd: config.canvasPath,
+      color: c.magenta,
+      // Clear an inherited key in public or frontend-only mode.
+      env: {
+        ...buildMarsWebEnv("static", config),
+        SESSION_API_KEY: keyPolicy.sessionApiKey || "",
+      },
+      onUnexpectedExit,
+    },
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Exports for testing
+// ═══════════════════════════════════════════════════════════════════════════
+
+export {
+  buildAgentServerAutomationEnv,
+  buildAutomationCommand,
+  buildAutomationTelemetryEnv,
+  buildConfig,
+  buildRouteArgs,
+  resolveAutomationKvSecret,
+  buildViteBackendEnv,
+  buildViteFrontendEnv,
+  getAgentServerBaseUrl,
+  getFrontendBackend,
+  getLocalServiceRoutes,
+  getNoReferrerPrefixArgs,
+  getRejectPrefixes,
+  getVSCodeAdvertiseArgs,
+  main,
+  registerShutdownHook,
+  spawnService,
+  commandExists,
+  validateLocalAutomationPath,
+  logService,
+  logStep,
+  logSuccess,
+  logError,
+  c,
+  DEFAULT_AUTOMATION_REPO,
+  DEFAULT_AUTOMATION_PACKAGE,
+  DEFAULT_AUTOMATION_VERSION,
+  DEFAULT_AUTOMATION_SDK_VERSION,
+};
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Main entry point (only when run directly, not when imported)
+// ═══════════════════════════════════════════════════════════════════════════
+
+// Check if this module is the main entry point
+const isMainModule =
+  process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
+
+if (isMainModule) {
+  main().catch((err) => {
+    logError(`Fatal error: ${err.message}`);
+    if (err.stack && err.code !== "EADDRINUSE") {
+      console.error(c.dim + err.stack + c.reset);
+      fileLog("error", err.stack);
+    }
+    process.exit(1);
+  });
+}

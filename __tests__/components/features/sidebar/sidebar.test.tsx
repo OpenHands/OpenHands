@@ -1,0 +1,847 @@
+import React from "react";
+import { readFile } from "node:fs/promises";
+import { resolve } from "node:path";
+import { compile } from "@tailwindcss/node";
+import {
+  act,
+  render,
+  screen,
+  fireEvent,
+  within,
+  waitFor,
+} from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { Sidebar } from "#/components/features/sidebar/sidebar";
+import { SidebarMobileNavProvider } from "#/components/features/sidebar/sidebar-mobile-nav-context";
+import { SidebarMobileMenuBar } from "#/components/features/sidebar/sidebar-mobile-menu-bar";
+import { useCloseOnEscape } from "#/hooks/use-close-on-escape";
+import { useSidebarStore } from "#/stores/sidebar-store";
+import {
+  NavigationProvider,
+  type NavigationContextValue,
+} from "#/context/navigation-context";
+import { getPinnedHomeRouteKey } from "#/hooks/use-pinned-home-route";
+import translations from "#/i18n/translation.json";
+
+const sidebarConversationListMockState = vi.hoisted(() => ({
+  renderNestedEscapeMenu: false,
+}));
+
+// The global `useTranslation` mock in `vitest.setup.ts` returns the key
+// as-is. Override it here so `t(...)` resolves keys via the source-of-truth
+// `translation.json` (English values), letting the test assert real
+// user-facing labels rather than raw keys.
+vi.mock("react-i18next", async () => {
+  const actual = await vi.importActual("react-i18next");
+  return {
+    ...(actual as object),
+    useTranslation: () => ({
+      t: (key: string) => {
+        const entry = (translations as Record<string, Record<string, string>>)[
+          key
+        ];
+        return entry?.en ?? key;
+      },
+      i18n: { language: "en", exists: () => false },
+    }),
+  };
+});
+
+const factoriesSupport = vi.hoisted(() => ({ isSupported: false }));
+
+vi.mock("#/hooks/query/use-factories", () => ({
+  useFactoriesSupported: () => ({
+    isLoading: false,
+    isSupported: factoriesSupport.isSupported,
+  }),
+}));
+
+vi.mock("#/hooks/query/use-config", () => ({
+  useConfig: () => ({ data: { feature_flags: {} } }),
+}));
+
+vi.mock("#/hooks/query/use-settings", () => ({
+  useSettings: () => ({
+    data: { email_verified: true },
+    error: null,
+    isError: false,
+    isFetching: false,
+  }),
+  getErrorStatus: () => undefined,
+}));
+
+vi.mock("#/contexts/active-backend-context", () => {
+  const active = {
+    backend: { id: "local", name: "Local", kind: "local" },
+    orgId: null,
+  };
+
+  return {
+    useActiveBackendContext: () => ({
+      backends: [active.backend],
+      active,
+      setActive: vi.fn(),
+    }),
+    useActiveBackend: () => active,
+  };
+});
+
+vi.mock("#/hooks/query/use-backends-health", () => ({
+  useBackendsHealth: () => ({
+    local: { isConnected: true },
+  }),
+}));
+
+vi.mock("#/components/shared/buttons/styled-tooltip", () => ({
+  StyledTooltip: ({ children }: { children: unknown }) => children,
+}));
+
+vi.mock("#/components/shared/buttons/openhands-logo-button", () => ({
+  OpenHandsLogoButton: () => <div data-testid="logo-button" />,
+}));
+
+vi.mock("#/components/features/conversation-panel/conversation-panel", () => ({
+  ConversationPanel: () => null,
+}));
+
+vi.mock("#/components/features/sidebar/sidebar-onboarding-checklist", () => ({
+  SidebarOnboardingChecklist: () => (
+    <div data-testid="sidebar-onboarding-checklist" />
+  ),
+}));
+
+vi.mock(
+  "#/components/features/conversation-panel/conversation-panel-wrapper",
+  () => ({
+    ConversationPanelWrapper: () => null,
+  }),
+);
+
+vi.mock("#/components/shared/modals/settings/settings-modal", () => ({
+  SettingsModal: () => null,
+}));
+
+vi.mock("#/components/features/settings/agent-canvas-version-tile", () => ({
+  AgentCanvasVersionTile: ({
+    hideWhenUpToDate,
+  }: {
+    hideWhenUpToDate?: boolean;
+  } = {}) =>
+    hideWhenUpToDate ? (
+      <button type="button" data-testid="agent-canvas-version-tile">
+        Agent Canvas version
+      </button>
+    ) : null,
+}));
+
+vi.mock("#/components/features/backends/backend-selector", () => ({
+  BackendSelector: ({
+    onSelectOption,
+    onOpenAddBackend,
+    onOpenManageBackends,
+  }: {
+    onSelectOption?: () => void;
+    onOpenAddBackend?: () => void;
+    onOpenManageBackends?: () => void;
+  } = {}) => (
+    <div data-testid="backend-selector">
+      {/*
+        Mimic a backend OPTION row in the dropdown menu — same role/tag the
+        real Dropdown emits. Clicking this should not bubble up to the rail
+        collapse handler.
+       */}
+      <ul>
+        <li
+          data-testid="mock-backend-option"
+          role="option"
+          aria-selected={false}
+          onClick={() => onSelectOption?.()}
+        >
+          Switch backend
+        </li>
+      </ul>
+      <button
+        type="button"
+        data-testid="mock-add-backend"
+        onClick={() => onOpenAddBackend?.()}
+      >
+        Add Backend
+      </button>
+      <button
+        type="button"
+        data-testid="mock-manage-backends"
+        onClick={() => onOpenManageBackends?.()}
+      >
+        Manage Backends
+      </button>
+    </div>
+  ),
+}));
+
+vi.mock("#/components/features/backends/add-backend-modal", () => ({
+  AddBackendModal: ({ onClose }: { onClose: () => void }) => (
+    <div data-testid="add-backend-modal">
+      <button
+        type="button"
+        data-testid="add-backend-modal-close"
+        onClick={onClose}
+      >
+        Close
+      </button>
+    </div>
+  ),
+}));
+
+vi.mock("#/components/features/backends/manage-backends-modal", () => ({
+  ManageBackendsModal: ({ onClose }: { onClose: () => void }) => (
+    <div data-testid="manage-backends-modal">
+      <button
+        type="button"
+        data-testid="manage-backends-modal-close"
+        onClick={onClose}
+      >
+        Close
+      </button>
+    </div>
+  ),
+}));
+
+vi.mock("#/components/features/sidebar/sidebar-conversation-list", () => ({
+  SidebarConversationList: () => {
+    const [menuOpen, setMenuOpen] = React.useState(false);
+    const triggerRef = React.useRef<HTMLButtonElement>(null);
+    useCloseOnEscape(
+      sidebarConversationListMockState.renderNestedEscapeMenu && menuOpen,
+      () => setMenuOpen(false),
+      triggerRef,
+    );
+
+    if (!sidebarConversationListMockState.renderNestedEscapeMenu) {
+      return <div data-testid="sidebar-conversation-list" />;
+    }
+
+    return (
+      <div data-testid="sidebar-conversation-list">
+        <button
+          ref={triggerRef}
+          type="button"
+          data-testid="nested-menu-trigger"
+          onClick={() => setMenuOpen(true)}
+        >
+          Open nested menu
+        </button>
+        {menuOpen ? (
+          <button type="button" data-testid="nested-menu-item">
+            Nested menu item
+          </button>
+        ) : null}
+      </div>
+    );
+  },
+}));
+
+vi.mock("#/hooks/use-settings-nav-items", () => ({
+  useSettingsNavItems: () => [],
+}));
+
+function getDesktopSidebar(collapsed?: boolean): HTMLElement {
+  const selector =
+    collapsed === undefined
+      ? "aside[data-collapsed]"
+      : `aside[data-collapsed="${collapsed ? "true" : "false"}"]`;
+  const sidebar = document.querySelector(selector);
+  if (!(sidebar instanceof HTMLElement)) {
+    throw new Error(`Desktop sidebar not found: ${selector}`);
+  }
+  return sidebar;
+}
+
+function renderSidebar(currentPath: string, currentSearch = "") {
+  const navigate = vi.fn();
+  const value: NavigationContextValue = {
+    currentPath,
+    currentSearch,
+    conversationId: null,
+    isNavigating: false,
+    navigate,
+  };
+
+  const rendered = render(
+    <QueryClientProvider client={new QueryClient()}>
+      <NavigationProvider value={value}>
+        <SidebarMobileNavProvider>
+          <Sidebar />
+          <SidebarMobileMenuBar />
+        </SidebarMobileNavProvider>
+      </NavigationProvider>
+    </QueryClientProvider>,
+  );
+
+  return { ...rendered, navigate };
+}
+
+describe("Sidebar", () => {
+  beforeEach(() => {
+    window.localStorage.clear();
+    // Zustand store is a module singleton; reset it so collapsed state from
+    // a prior test doesn't bleed into this one.
+    useSidebarStore.setState({ collapsed: false });
+    sidebarConversationListMockState.renderNestedEscapeMenu = false;
+    factoriesSupport.isSupported = false;
+  });
+
+  afterEach(() => {
+    window.localStorage.clear();
+    useSidebarStore.setState({ collapsed: false });
+    sidebarConversationListMockState.renderNestedEscapeMenu = false;
+  });
+
+  it("opens and closes the mobile navigation drawer from the menu button", async () => {
+    renderSidebar("/conversations");
+
+    expect(
+      screen.queryByTestId("sidebar-mobile-drawer"),
+    ).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId("sidebar-mobile-menu-toggle"));
+    const drawer = screen.getByTestId("sidebar-mobile-drawer");
+    expect(drawer).toBeInTheDocument();
+    expect(
+      within(drawer).getByTestId("sidebar-conversation-list"),
+    ).toBeInTheDocument();
+
+    fireEvent.click(within(drawer).getByTestId("sidebar-mobile-drawer-close"));
+    await waitFor(() => {
+      expect(
+        screen.queryByTestId("sidebar-mobile-drawer"),
+      ).not.toBeInTheDocument();
+    });
+  });
+
+  it("applies safe-area padding to the fixed mobile drawer", () => {
+    renderSidebar("/conversations");
+
+    fireEvent.click(screen.getByTestId("sidebar-mobile-menu-toggle"));
+
+    const drawer = screen.getByTestId("sidebar-mobile-drawer");
+    expect(drawer).toHaveClass("mobile-sidebar-drawer-safe-area");
+    expect(drawer).not.toHaveClass("pb-2", "pl-2.5", "pr-0");
+  });
+
+  it("keeps the CSS drawer and backdrop timing in step with removal", async () => {
+    // Arrange: compile the production stylesheet, then drive the real drawer.
+    const compiler = await compile(
+      await readFile(resolve("src/tailwind.css"), "utf8"),
+      { base: resolve("src"), onDependency: () => {} },
+    );
+    vi.useFakeTimers();
+    try {
+      renderSidebar("/conversations");
+      fireEvent.click(screen.getByTestId("sidebar-mobile-menu-toggle"));
+      act(() => vi.advanceTimersToNextFrame());
+      const drawer = screen.getByTestId("sidebar-mobile-drawer");
+      const backdrop = drawer.previousElementSibling as HTMLElement;
+      expect(drawer).toHaveAttribute("aria-hidden", "false");
+      expect(backdrop).toHaveAttribute("aria-hidden", "false");
+
+      // Act: use only duration classes actually emitted by each element.
+      const durations = [drawer, backdrop].map((element) => {
+        const css = compiler.build(
+          [...element.classList].filter((candidate) =>
+            candidate.startsWith("duration-"),
+          ),
+        );
+        const declarations = [
+          ...css.matchAll(/\.((?:\\.|[\w-])+)\s*\{([^}]+)\}/g),
+        ]
+          .filter(([, selector]) =>
+            element.classList.contains(selector.replace(/\\(.)/g, "$1")),
+          )
+          .map(([, , body]) => body)
+          .join("\n");
+        const property = declarations.match(
+          /transition-duration:\s*var\((--[\w-]+)\);/,
+        )?.[1];
+        expect(property).toBeDefined();
+        const value = element.style.getPropertyValue(property!);
+        expect(value).toMatch(/^\d+ms$/);
+        return Number.parseFloat(value);
+      });
+
+      // Assert: the visible CSS duration and the lifecycle timer agree.
+      const [duration] = durations;
+      expect(duration).toBeGreaterThan(0);
+      expect(durations[1]).toBe(duration);
+      fireEvent.click(
+        within(drawer).getByTestId("sidebar-mobile-drawer-close"),
+      );
+      expect(drawer).toHaveAttribute("aria-hidden", "true");
+      expect(backdrop).toHaveAttribute("aria-hidden", "true");
+      act(() => vi.advanceTimersByTime(duration - 1));
+      expect(drawer).toBeInTheDocument();
+      expect(backdrop).toBeInTheDocument();
+      act(() => vi.advanceTimersByTime(1));
+      expect(drawer).not.toBeInTheDocument();
+      expect(backdrop).not.toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("renders sidebar text one step above the app's small text sizes", async () => {
+    // Arrange: compile the production stylesheet and open both sidebar variants.
+    const compiler = await compile(
+      await readFile(resolve("src/tailwind.css"), "utf8"),
+      { base: resolve("src"), onDependency: () => {} },
+    );
+    renderSidebar("/conversations");
+    fireEvent.click(screen.getByTestId("sidebar-mobile-menu-toggle"));
+    const sidebars = [
+      getDesktopSidebar(false),
+      await screen.findByTestId("sidebar-mobile-drawer"),
+    ];
+    const rem = (css: string, token: string, selectorTest: RegExp) =>
+      [...css.matchAll(/([^{}]+)\{([^{}]+)\}/g)]
+        .filter(([, selector]) => selectorTest.test(selector.trim()))
+        .map(
+          ([, , body]) =>
+            body.match(new RegExp(`${token}:\\s*([\\d.]+)rem`))?.[1],
+        )
+        .filter(Boolean)
+        .map(Number)[0];
+    const theme = compiler.build(["text-sm", "text-xs"]);
+
+    for (const sidebar of sidebars) {
+      // Act: build only the classes this element actually carries.
+      const css = compiler.build([...sidebar.classList]);
+      const own = new RegExp(
+        `^\\.(${[...sidebar.classList].map((c) => c.replace(/[^\w-]/g, "\\\\$&")).join("|")})$`,
+      );
+
+      // Assert: text-sm / text-xs resolve to larger sizes inside the sidebar.
+      for (const token of ["--text-sm", "--text-xs"]) {
+        const base = rem(theme, token, /^:root/);
+        expect(base).toBeGreaterThan(0);
+        expect(rem(css, token, own)).toBeGreaterThan(base!);
+      }
+    }
+  });
+
+  it("leaves the mobile drawer open when a menu inside it already handled Escape", () => {
+    renderSidebar("/conversations");
+    const toggle = screen.getByTestId("sidebar-mobile-menu-toggle");
+    fireEvent.click(toggle);
+
+    const handledEscape = new KeyboardEvent("keydown", {
+      key: "Escape",
+      bubbles: true,
+      cancelable: true,
+    });
+    handledEscape.preventDefault();
+    act(() => {
+      document.body.dispatchEvent(handledEscape);
+    });
+
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+
+    fireEvent.keyDown(document.body, { key: "Escape" });
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+  });
+
+  it("lets a nested Escape layer close before the mobile drawer", () => {
+    sidebarConversationListMockState.renderNestedEscapeMenu = true;
+    renderSidebar("/conversations");
+    const toggle = screen.getByTestId("sidebar-mobile-menu-toggle");
+    fireEvent.click(toggle);
+
+    const drawer = screen.getByTestId("sidebar-mobile-drawer");
+    const nestedTrigger = within(drawer).getByTestId("nested-menu-trigger");
+    fireEvent.click(nestedTrigger);
+    expect(within(drawer).getByTestId("nested-menu-item")).toBeInTheDocument();
+
+    fireEvent.keyDown(document.body, { key: "Escape" });
+
+    expect(
+      within(drawer).queryByTestId("nested-menu-item"),
+    ).not.toBeInTheDocument();
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+    expect(document.activeElement).toBe(nestedTrigger);
+
+    fireEvent.keyDown(document.body, { key: "Escape" });
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+  });
+
+  it("toggles between expanded and collapsed states and persists the choice", () => {
+    const { unmount } = renderSidebar("/conversations");
+
+    const sidebar = getDesktopSidebar(false);
+    expect(sidebar.dataset.collapsed).toBe("false");
+
+    const toggle = screen.getByTestId("sidebar-collapse-toggle");
+    fireEvent.click(toggle);
+
+    expect(sidebar.dataset.collapsed).toBe("true");
+
+    // The choice survives a remount via localStorage.
+    unmount();
+    renderSidebar("/conversations");
+    expect(getDesktopSidebar(true).dataset.collapsed).toBe("true");
+  });
+
+  it("resizes the expanded sidebar by dragging its edge and remembers the width", () => {
+    // Arrange: the sidebar starts at the left edge of the viewport.
+    const { unmount } = renderSidebar("/conversations");
+    const sidebar = getDesktopSidebar(false);
+    vi.spyOn(sidebar, "getBoundingClientRect").mockReturnValue(
+      DOMRect.fromRect({ x: 0, width: 300, height: 800 }),
+    );
+    const handle = screen
+      .getByTestId("sidebar-resize-handle")
+      .querySelector(".cursor-ew-resize")!;
+    expect(sidebar.style.getPropertyValue("--sidebar-width")).toBe("300px");
+
+    // Act + Assert: the width follows the pointer within its bounds.
+    fireEvent.mouseDown(handle);
+    for (const [clientX, expectedWidth] of [
+      [420, "420px"],
+      [100, "240px"],
+      [2000, "560px"],
+      [380, "380px"],
+    ] as const) {
+      fireEvent.mouseMove(document, { clientX });
+      expect(sidebar.style.getPropertyValue("--sidebar-width")).toBe(
+        expectedWidth,
+      );
+    }
+    fireEvent.mouseUp(document);
+
+    // The chosen width survives a remount; the collapsed rail has no handle.
+    unmount();
+    renderSidebar("/conversations");
+    expect(
+      getDesktopSidebar(false).style.getPropertyValue("--sidebar-width"),
+    ).toBe("380px");
+    fireEvent.click(screen.getByTestId("sidebar-collapse-toggle"));
+    expect(screen.queryByTestId("sidebar-resize-handle")).toBeNull();
+  });
+
+  it("expands the sidebar when the toggle is clicked from the collapsed state", () => {
+    // Arrange: simulate a user whose sidebar was previously collapsed.
+    useSidebarStore.setState({ collapsed: true });
+    renderSidebar("/conversations");
+
+    // Act
+    fireEvent.click(screen.getByTestId("sidebar-collapse-toggle"));
+
+    // Assert: state flips back to expanded.
+    expect(getDesktopSidebar(false).dataset.collapsed).toBe("false");
+  });
+
+  it("expands the sidebar when collapsed rail empty space is clicked", () => {
+    useSidebarStore.setState({ collapsed: true });
+    renderSidebar("/conversations");
+
+    const sidebar = getDesktopSidebar(true);
+    expect(sidebar.dataset.collapsed).toBe("true");
+
+    fireEvent.click(sidebar);
+    expect(sidebar.dataset.collapsed).toBe("false");
+  });
+
+  it("shows the version tile above the backend selector when expanded", () => {
+    renderSidebar("/conversations");
+
+    const versionTile = screen.getByTestId("agent-canvas-version-tile");
+    const backendSelector = screen.getByTestId("backend-selector");
+    expect(versionTile.compareDocumentPosition(backendSelector)).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING,
+    );
+  });
+
+  it("hides the version tile when the sidebar is collapsed", () => {
+    useSidebarStore.setState({ collapsed: true });
+    renderSidebar("/conversations");
+
+    expect(
+      screen.queryByTestId("agent-canvas-version-tile"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("shows collapsed server/settings action icons when sidebar is collapsed", () => {
+    useSidebarStore.setState({ collapsed: true });
+    renderSidebar("/conversations");
+
+    expect(screen.getByTestId("collapsed-settings-link")).toBeInTheDocument();
+    expect(
+      screen.getByTestId("collapsed-backend-selector-link"),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId("backend-status-dot")).toBeInTheDocument();
+  });
+
+  it("navigates to settings when collapsed settings icon is clicked", () => {
+    useSidebarStore.setState({ collapsed: true });
+    const { navigate } = renderSidebar("/conversations");
+
+    fireEvent.click(screen.getByTestId("collapsed-settings-link"));
+    expect(navigate).toHaveBeenCalledWith("/settings", { replace: false });
+  });
+
+  it("opens the backend popover when hovering the collapsed backend icon", async () => {
+    useSidebarStore.setState({ collapsed: true });
+    renderSidebar("/conversations");
+
+    expect(screen.queryByTestId("backend-selector")).not.toBeInTheDocument();
+    const trigger = screen.getByTestId("collapsed-backend-selector-link");
+    const wrapper = trigger.parentElement;
+    if (!wrapper) throw new Error("Popover wrapper not found");
+    fireEvent.mouseEnter(wrapper);
+    expect(await screen.findByTestId("backend-selector")).toBeInTheDocument();
+  });
+
+  it("does NOT expand the sidebar when a backend option in the popover is clicked", async () => {
+    // Bug: clicking a backend <li role='option'> bubbled up to the aside's
+    // rail-collapse handler (which only bails on a/button/[role=button]),
+    // so selecting a backend would expand the sidebar mid-switch.
+    useSidebarStore.setState({ collapsed: true });
+    renderSidebar("/conversations");
+
+    const sidebar = getDesktopSidebar(true);
+    expect(sidebar.dataset.collapsed).toBe("true");
+
+    const trigger = screen.getByTestId("collapsed-backend-selector-link");
+    const popoverContainer = trigger.parentElement;
+    if (!popoverContainer) throw new Error("Popover container not found");
+    fireEvent.mouseEnter(popoverContainer);
+    const option = await screen.findByTestId("mock-backend-option");
+
+    fireEvent.click(option);
+
+    // Sidebar should remain collapsed — selecting a backend should not
+    // collapse-toggle the rail.
+    expect(sidebar.dataset.collapsed).toBe("true");
+  });
+
+  it("keeps the Add Backend modal open after the popover closes", async () => {
+    // Bug: modal state lived inside BackendSelector; once the cursor moved
+    // out of the popover toward the centred modal, mouseLeave closed the
+    // popover, which unmounted BackendSelector and tore the modal down with
+    // it. Modal state must live above the popover to survive its unmount.
+    useSidebarStore.setState({ collapsed: true });
+    renderSidebar("/conversations");
+
+    const trigger = screen.getByTestId("collapsed-backend-selector-link");
+    const popoverContainer = trigger.parentElement;
+    if (!popoverContainer) throw new Error("Popover container not found");
+    fireEvent.mouseEnter(popoverContainer);
+
+    fireEvent.click(await screen.findByTestId("mock-add-backend"));
+
+    // Cursor moves toward the modal -> popover times out and closes.
+    fireEvent.mouseLeave(popoverContainer);
+    await new Promise((resolve) => {
+      setTimeout(resolve, 200);
+    });
+
+    expect(screen.queryByTestId("backend-selector")).not.toBeInTheDocument();
+    expect(await screen.findByTestId("add-backend-modal")).toBeInTheDocument();
+  });
+
+  it("keeps the Manage Backends modal open after the popover closes", async () => {
+    useSidebarStore.setState({ collapsed: true });
+    renderSidebar("/conversations");
+
+    const trigger = screen.getByTestId("collapsed-backend-selector-link");
+    const popoverContainer = trigger.parentElement;
+    if (!popoverContainer) throw new Error("Popover container not found");
+    fireEvent.mouseEnter(popoverContainer);
+
+    fireEvent.click(await screen.findByTestId("mock-manage-backends"));
+    fireEvent.mouseLeave(popoverContainer);
+    await new Promise((resolve) => {
+      setTimeout(resolve, 200);
+    });
+
+    expect(screen.queryByTestId("backend-selector")).not.toBeInTheDocument();
+    expect(
+      await screen.findByTestId("manage-backends-modal"),
+    ).toBeInTheDocument();
+  });
+
+  it("does not bubble mouse events to window when the collapsed backend icon is clicked, so the downshift-driven popover is not torn down mid-hover", () => {
+    // Bug: while the popover was open, left-clicking the tray icon closed
+    // the dropdown menu because downshift attaches its outside-click logic
+    // to window-level mousedown/mouseup. The tray icon is a sibling of the
+    // Dropdown (not one of its tracked elements), so the event reached
+    // downshift and was treated as "outside". The fix stops propagation on
+    // the button so neither event reaches the window listeners that close
+    // the menu.
+    useSidebarStore.setState({ collapsed: true });
+    const windowMouseDown = vi.fn();
+    const windowMouseUp = vi.fn();
+    window.addEventListener("mousedown", windowMouseDown);
+    window.addEventListener("mouseup", windowMouseUp);
+
+    try {
+      renderSidebar("/conversations");
+      const trigger = screen.getByTestId("collapsed-backend-selector-link");
+      const wrapper = trigger.parentElement;
+      if (!wrapper) throw new Error("Popover wrapper not found");
+      fireEvent.mouseEnter(wrapper);
+
+      fireEvent.mouseDown(trigger);
+      fireEvent.mouseUp(trigger);
+
+      expect(windowMouseDown).not.toHaveBeenCalled();
+      expect(windowMouseUp).not.toHaveBeenCalled();
+    } finally {
+      window.removeEventListener("mousedown", windowMouseDown);
+      window.removeEventListener("mouseup", windowMouseUp);
+    }
+  });
+
+  it("renders the Getting Started checklist above the bottom backend bar", () => {
+    renderSidebar("/conversations");
+
+    const automations = screen.getByTestId("sidebar-automations-link");
+    const checklist = screen.getByTestId("sidebar-onboarding-checklist");
+    const backendBar = screen.getByTestId("backend-selector");
+
+    expect(
+      automations.compareDocumentPosition(checklist) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      checklist.compareDocumentPosition(backendBar) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  it("hides the Factories link when the automation service has no factories", () => {
+    renderSidebar("/conversations");
+
+    expect(
+      screen.queryByTestId("sidebar-factories-link"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("links to the factories list when the automation service has factories", () => {
+    factoriesSupport.isSupported = true;
+
+    renderSidebar("/conversations");
+
+    const link = screen.getByTestId("sidebar-factories-link");
+    expect(link).toHaveTextContent("Factories");
+    expect(link).toHaveAttribute("href", "/factories");
+  });
+
+  it("keeps Factories selected on an automation page opened from a factory", () => {
+    factoriesSupport.isSupported = true;
+
+    renderSidebar("/automations/setup", "?factory=factory-1");
+
+    expect(screen.getByTestId("sidebar-factories-link")).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+    expect(screen.getByTestId("sidebar-automations-link")).toHaveAttribute(
+      "aria-current",
+      "false",
+    );
+  });
+
+  it("selects Automate on the same pages when no factory is in play", () => {
+    factoriesSupport.isSupported = true;
+
+    renderSidebar("/automations/setup");
+
+    expect(screen.getByTestId("sidebar-automations-link")).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+    expect(screen.getByTestId("sidebar-factories-link")).not.toHaveAttribute(
+      "aria-current",
+    );
+  });
+
+  it("renders icons for every top-level nav item so they remain meaningful in the collapsed rail", () => {
+    renderSidebar("/conversations");
+
+    for (const testId of [
+      "sidebar-conversations-link",
+      "sidebar-automations-link",
+      "sidebar-skills-link",
+    ]) {
+      const link = screen.getByTestId(testId);
+      expect(link.querySelector("svg")).not.toBeNull();
+    }
+  });
+
+  it("renders the renamed top-level nav labels", () => {
+    // Arrange
+    renderSidebar("/conversations");
+
+    // Act + Assert: each top-level nav link surfaces its new user-facing label.
+    expect(screen.getByTestId("sidebar-conversations-link")).toHaveTextContent(
+      "New Chat",
+    );
+    expect(screen.getByTestId("sidebar-skills-link")).toHaveTextContent(
+      "Customize",
+    );
+    expect(screen.getByTestId("sidebar-automations-link")).toHaveTextContent(
+      "Automate",
+    );
+  });
+
+  it.each(["/customize", "/mcp", "/skills", "/plugins", "/apps"])(
+    "marks the Customize row as the current page on %s",
+    (path) => {
+      renderSidebar(path);
+
+      expect(screen.getByTestId("sidebar-skills-link")).toHaveAttribute(
+        "aria-current",
+        "page",
+      );
+    },
+  );
+
+  it.each(["/conversations", "/automations"])(
+    "does not mark the Customize row as current on %s",
+    (path) => {
+      renderSidebar(path);
+
+      expect(screen.getByTestId("sidebar-skills-link")).not.toHaveAttribute(
+        "aria-current",
+      );
+    },
+  );
+
+  it("pins and unpins a sidebar page as the home route without navigating", () => {
+    // Arrange: the mocked active backend is `local` with no org.
+    const pinKey = getPinnedHomeRouteKey("local", null);
+    const { navigate } = renderSidebar("/conversations");
+    const pinToggle = screen.getByTestId("sidebar-pin-home-toggle-customize");
+    expect(pinToggle).toHaveAttribute("aria-pressed", "false");
+    expect(pinToggle).toHaveAttribute("aria-label", "Pin as home page");
+
+    // Act: pin Customize as the home page.
+    fireEvent.click(pinToggle);
+
+    // Assert: the toggle flips and the pin persists for the active backend.
+    expect(pinToggle).toHaveAttribute("aria-pressed", "true");
+    expect(pinToggle).toHaveAttribute("aria-label", "Unpin as home page");
+    expect(window.localStorage.getItem(pinKey)).toBe(
+      JSON.stringify("/customize"),
+    );
+    expect(navigate).not.toHaveBeenCalled();
+
+    // Act: unpin from the same control.
+    fireEvent.click(pinToggle);
+
+    // Assert: the pin is gone.
+    expect(pinToggle).toHaveAttribute("aria-pressed", "false");
+    expect(window.localStorage.getItem(pinKey)).not.toBe(
+      JSON.stringify("/customize"),
+    );
+  });
+});

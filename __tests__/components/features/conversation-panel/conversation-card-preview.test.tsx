@@ -1,0 +1,221 @@
+import { describe, expect, it } from "vitest";
+import { screen } from "@testing-library/react";
+import { renderWithProviders } from "test-utils";
+import { ConversationCardPreview } from "#/components/features/conversation-panel/conversation-card/conversation-card-preview";
+import { ExecutionStatus } from "#/types/agent-server/core/base/common";
+
+const PREVIEW_TITLE = "Conversation 1";
+
+describe("ConversationCardPreview", () => {
+  it("renders free-form tags and skips reserved repo / branch / workspace keys", () => {
+    renderWithProviders(
+      <ConversationCardPreview
+        title={PREVIEW_TITLE}
+        selectedRepository={null}
+        tags={{
+          git_provider: "github",
+          repo_name: "org/repo",
+          selected_branch: "main",
+          archiveworkspacepath: "/workspace/project",
+          owner: "alice",
+          origin: "slack",
+        }}
+      />,
+    );
+
+    expect(screen.queryByTestId("conversation-card-tag-chip")).not.toBeInTheDocument();
+
+    const rows = screen.getAllByTestId("conversation-card-preview-tag-row");
+    expect(rows).toHaveLength(2);
+    expect(rows[0]).toHaveAttribute("data-tag-key", "origin");
+    expect(rows[0]).toHaveTextContent("slack");
+    expect(rows[1]).toHaveAttribute("data-tag-key", "owner");
+    expect(rows[1]).toHaveTextContent("alice");
+  });
+
+  it("names the launched agent profile instead of echoing its id tags", () => {
+    renderWithProviders(
+      <ConversationCardPreview
+        title={PREVIEW_TITLE}
+        selectedRepository={null}
+        agentProfileId="3f2a1b9c-d4e5-4f60-8a7b-9c0d1e2f3a4b"
+        agentProfileName="Research"
+        tags={{
+          agentprofileid: "3f2a1b9c-d4e5-4f60-8a7b-9c0d1e2f3a4b",
+          agentprofilerevision: "3",
+          owner: "alice",
+        }}
+      />,
+    );
+
+    expect(
+      screen.getByTestId("conversation-card-preview-agent-profile"),
+    ).toHaveTextContent("Research");
+    expect(screen.queryByText(/agentprofile/i)).not.toBeInTheDocument();
+    const tagRows = screen.getAllByTestId("conversation-card-preview-tag-row");
+    expect(tagRows).toHaveLength(1);
+    expect(tagRows[0]).toHaveAttribute("data-tag-key", "owner");
+  });
+
+  it("falls back to the profile id when the name is unknown", () => {
+    renderWithProviders(
+      <ConversationCardPreview
+        title={PREVIEW_TITLE}
+        selectedRepository={null}
+        agentProfileId="3f2a1b9c-d4e5-4f60-8a7b-9c0d1e2f3a4b"
+        agentProfileName={null}
+      />,
+    );
+
+    expect(
+      screen.getByTestId("conversation-card-preview-agent-profile"),
+    ).toHaveTextContent("3f2a1b9c-d4e5-4f60-8a7b-9c0d1e2f3a4b");
+  });
+
+  it("shows no profile row while the profile names are still loading", () => {
+    renderWithProviders(
+      <ConversationCardPreview
+        title={PREVIEW_TITLE}
+        selectedRepository={null}
+        agentProfileId="3f2a1b9c-d4e5-4f60-8a7b-9c0d1e2f3a4b"
+      />,
+    );
+
+    expect(
+      screen.queryByTestId("conversation-card-preview-agent-profile"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("still shows first-class repo / branch rows from selectedRepository", () => {
+    renderWithProviders(
+      <ConversationCardPreview
+        title={PREVIEW_TITLE}
+        selectedRepository={{
+          selected_repository: "org/repo",
+          selected_branch: "main",
+          git_provider: "github",
+        }}
+        tags={{
+          git_provider: "github",
+          repo_name: "org/repo",
+          selected_branch: "main",
+          owner: "alice",
+        }}
+      />,
+    );
+
+    expect(screen.getByText("org/repo")).toBeInTheDocument();
+    expect(screen.getByText("main")).toBeInTheDocument();
+    const rows = screen.getAllByTestId("conversation-card-preview-tag-row");
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toHaveAttribute("data-tag-key", "owner");
+  });
+
+  it("shows Directory from workspaceWorkingDir instead of a workspace tag", () => {
+    renderWithProviders(
+      <ConversationCardPreview
+        title={PREVIEW_TITLE}
+        selectedRepository={null}
+        workspaceWorkingDir="/workspace/project"
+        tags={{ archiveworkspacepath: "/workspace/project", owner: "alice" }}
+      />,
+    );
+
+    expect(screen.getByText("/workspace/project")).toBeInTheDocument();
+    const rows = screen.getAllByTestId("conversation-card-preview-tag-row");
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toHaveAttribute("data-tag-key", "owner");
+  });
+
+  it("shows full tag values without truncation", () => {
+    const longValue = "a-very-long-custom-tag-value-that-exceeds-chip-budget";
+    renderWithProviders(
+      <ConversationCardPreview
+        title={PREVIEW_TITLE}
+        selectedRepository={null}
+        tags={{ custom_token: longValue }}
+      />,
+    );
+
+    expect(screen.getByTestId("conversation-card-preview-tag-row")).toHaveTextContent(
+      longValue,
+    );
+  });
+
+  it("styles the model row with the OpenHands brand icon", () => {
+    renderWithProviders(
+      <ConversationCardPreview
+        title={PREVIEW_TITLE}
+        selectedRepository={null}
+        llmModel="openhands/claude-opus-4-5-20251101"
+      />,
+    );
+
+    expect(
+      screen.getByTestId("conversation-card-preview-model"),
+    ).toHaveTextContent("openhands/claude-opus-4-5-20251101");
+    expect(
+      screen.getByTestId("agent-brand-icon-openhands"),
+    ).toBeInTheDocument();
+  });
+
+  it("uses the ACP provider mark on the model row for ACP conversations", () => {
+    // The card chip resolves the ACP brand mark; the hovercard for the same
+    // conversation must not contradict it with the OpenHands wordmark.
+    renderWithProviders(
+      <ConversationCardPreview
+        title={PREVIEW_TITLE}
+        selectedRepository={null}
+        llmModel="claude-opus-4-5"
+        agentKind="acp"
+        acpServer="claude-code"
+      />,
+    );
+
+    expect(
+      screen.getByTestId("agent-brand-icon-claude-code"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("agent-brand-icon-openhands"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("infers the archive dot from a missing runtime when isArchived is omitted", () => {
+    // A hovercard that only knows the sandbox status must match the card's
+    // missing-runtime archive presentation.
+    renderWithProviders(
+      <ConversationCardPreview
+        title={PREVIEW_TITLE}
+        selectedRepository={null}
+        executionStatus={ExecutionStatus.FINISHED}
+        sandboxStatus="MISSING"
+      />,
+    );
+
+    expect(
+      screen.getByTestId("conversation-status-archived"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("conversation-status-check"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("shows bare tags (empty value) with an em dash in the hovercard", () => {
+    renderWithProviders(
+      <ConversationCardPreview
+        title={PREVIEW_TITLE}
+        selectedRepository={null}
+        tags={{ appmode: "work", worktools: "", workwsid: "abc" }}
+      />,
+    );
+
+    const rows = screen.getAllByTestId("conversation-card-preview-tag-row");
+    expect(rows).toHaveLength(3);
+    expect(rows[0]).toHaveAttribute("data-tag-key", "appmode");
+    expect(rows[0]).toHaveTextContent("work");
+    expect(rows[1]).toHaveAttribute("data-tag-key", "worktools");
+    expect(rows[1]).toHaveTextContent("—");
+    expect(rows[2]).toHaveAttribute("data-tag-key", "workwsid");
+    expect(rows[2]).toHaveTextContent("abc");
+  });
+});
