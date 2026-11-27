@@ -3143,6 +3143,21 @@ async function cmdBrowser({ positional, flags }) {
         position: flags.position,
       });
       break;
+    case "swipe":
+      need(
+        1,
+        "control-openhands browser swipe 'testid=conversation-chat-panel' --from 48,422 --to 260,430",
+      );
+      if (!flags.from || !flags.to || flags.from === true || flags.to === true)
+        usage("browser swipe needs --from X,Y and --to X,Y");
+      result = await browserCall(run, "swipe", {
+        selector: sel,
+        from: flags.from,
+        to: flags.to,
+        steps: flags.steps,
+        holdMs: flags["hold-ms"],
+      });
+      break;
     case "upload-via":
       need(
         2,
@@ -4328,6 +4343,7 @@ const BROWSER_VERBS = new Set([
   "reset",
   "clipboard",
   "drag",
+  "swipe",
   "upload-via",
   "drop-files",
   "paste",
@@ -5331,6 +5347,9 @@ Verbs
   drop-files <sel> <file...> [--stage enter|over]   files dragged in from the desktop
   paste <sel> [--text T] [--file F]...   a paste event carrying text and/or files
   drag <sel> <target-sel> [--position before|after] | drag <sel> --by DX,DY [--steps N]
+  swipe <sel> --from X,Y --to X,Y [--steps 8] [--hold-ms 150]
+        one-finger touch swipe (Chromium touch input); offsets from <sel>'s top-left corner.
+        Returns the box, the touch points and the URL before and after.
   choose <combobox-sel> <option label>   open an autocomplete, filter, click the option
   clipboard [--write TEXT]               read (or arrange) the clipboard; Copy buttons write it
   wait <sel> [--state visible|hidden|attached|detached] | wait-url <regex> | wait-text <text>
