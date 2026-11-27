@@ -10,6 +10,8 @@ import {
   useAddWorkspaceParents,
   useRemoveWorkspace,
   useRemoveWorkspaceParent,
+  useRenameWorkspace,
+  useRenameWorkspaceParent,
 } from "#/hooks/mutation/use-local-workspaces-mutations";
 import { useLocalWorkspaces } from "#/hooks/query/use-local-workspaces";
 import { useResolvedWorkspaces } from "#/hooks/query/use-resolved-workspaces";
@@ -82,6 +84,8 @@ export function LocalNewConversationMenu({
   const { mutate: removeWorkspace } = useRemoveWorkspace();
   const { mutate: addWorkspaceParents } = useAddWorkspaceParents();
   const { mutate: removeWorkspaceParent } = useRemoveWorkspaceParent();
+  const { mutateAsync: renameWorkspace } = useRenameWorkspace();
+  const { mutateAsync: renameWorkspaceParent } = useRenameWorkspaceParent();
   const { workspaces } = useResolvedWorkspaces();
   const { isolated, unsupportedMessage: runtimeWorkspaceMessage } =
     useConversationWorkspace();
@@ -303,6 +307,8 @@ export function LocalNewConversationMenu({
         onClose={() => setManageOpen(false)}
         onRemove={(path) => removeWorkspace(path)}
         onRemoveParent={(path) => removeWorkspaceParent(path)}
+        onRename={(path, name) => renameWorkspace({ path, name })}
+        onRenameParent={(path, name) => renameWorkspaceParent({ path, name })}
       />
     </div>
   );

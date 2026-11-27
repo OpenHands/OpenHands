@@ -19,6 +19,13 @@ const UNKNOWN_AGENT_SERVER_VERSION = "unknown";
 
 export const MINIMUM_COMPATIBLE_AGENT_SERVER_VERSION =
   defaults.compatibility.minimumAgentServer;
+
+/**
+ * Agent-server release that first serves `PATCH /api/workspaces` (rename).
+ * Renaming is feature-gated rather than folded into the global minimum so
+ * older backends keep working for everything else.
+ */
+export const WORKSPACE_RENAME_MINIMUM_AGENT_SERVER_VERSION = "1.63.0";
 export const AGENT_SERVER_UNSUPPORTED_VERSION_ERROR_CODE =
   "AGENT_SERVER_UNSUPPORTED_VERSION";
 export const AGENT_SERVER_UNKNOWN_VERSION_ERROR_CODE =

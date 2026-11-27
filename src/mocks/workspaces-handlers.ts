@@ -40,17 +40,28 @@ export const WORKSPACES_HANDLERS = [
   http.post("*/api/workspaces", async ({ request }) => {
     // `workspaces` is the top-level key used by WorkspacesClient.addWorkspaces()
     // in @openhands/typescript-client — aligns with the agent-server SDK contract.
+    // Like the real route, an existing `path` is skipped, not replaced: a
+    // re-post cannot rename.
     const body = (await request.json()) as { workspaces?: WorkspaceItem[] };
     for (const incoming of body.workspaces ?? []) {
-      const existingIndex = workspaces.findIndex(
-        (w) => w.path === incoming.path,
-      );
-      if (existingIndex >= 0) {
-        workspaces[existingIndex] = { ...incoming };
-      } else {
-        workspaces.push({ ...incoming });
-      }
+      if (workspaces.some((w) => w.path === incoming.path)) continue;
+      workspaces.push({ ...incoming });
     }
+    return HttpResponse.json(snapshot());
+  }),
+
+  http.patch("*/api/workspaces", async ({ request }) => {
+    const url = new URL(request.url);
+    const path = url.searchParams.get("path");
+    const { name } = (await request.json()) as { name?: string };
+    const existing = workspaces.find((w) => w.path === path);
+    if (!existing || !name) {
+      return HttpResponse.json(
+        { detail: "Workspace not found" },
+        { status: 404 },
+      );
+    }
+    existing.name = name;
     return HttpResponse.json(snapshot());
   }),
 
@@ -67,15 +78,24 @@ export const WORKSPACES_HANDLERS = [
   http.post("*/api/workspaces/parents", async ({ request }) => {
     const body = (await request.json()) as { parents?: WorkspaceParentItem[] };
     for (const incoming of body.parents ?? []) {
-      const existingIndex = workspaceParents.findIndex(
-        (p) => p.path === incoming.path,
-      );
-      if (existingIndex >= 0) {
-        workspaceParents[existingIndex] = { ...incoming };
-      } else {
-        workspaceParents.push({ ...incoming });
-      }
+      if (workspaceParents.some((p) => p.path === incoming.path)) continue;
+      workspaceParents.push({ ...incoming });
     }
+    return HttpResponse.json(snapshot());
+  }),
+
+  http.patch("*/api/workspaces/parents", async ({ request }) => {
+    const url = new URL(request.url);
+    const path = url.searchParams.get("path");
+    const { name } = (await request.json()) as { name?: string };
+    const existing = workspaceParents.find((p) => p.path === path);
+    if (!existing || !name) {
+      return HttpResponse.json(
+        { detail: "Workspace parent not found" },
+        { status: 404 },
+      );
+    }
+    existing.name = name;
     return HttpResponse.json(snapshot());
   }),
 
