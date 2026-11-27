@@ -6,16 +6,18 @@ them; changing the page background alone is not a complete theme.
 
 ## Paper
 
-Paper (`paper`) is an optional light palette printed like an old newspaper:
-yellowed newsprint and one warm black ink. Every neutral is a screen of that
-ink, primary actions print in reverse (paper on solid ink), and a single spot
-red marks links, focus and danger. Status colors are dark olive, ochre and red
-inks that stay readable as text; there is no blue in the interface. Code,
-diffs and terminal output follow the same inks: reserved words in bold ink,
-comments faded, literals in the spot and status inks. Select it in Settings →
-Application → Color Theme. It uses the existing `setColorTheme` and browser
-preference; OpenHands-Neutral remains the default. Paper stays light
-regardless of the operating system's appearance.
+Paper (`paper`) is an optional light palette set like an old newspaper or a
+printed journal: grey newsprint (`#e9e6df`) rather than cream, carbon-black
+ink (`#1d1c19`), and panels drawn as halftone screens of that ink rather than
+other paper colors. Primary actions print in reverse (paper on solid ink).
+Red is the single spot color (`#a01f1b`), kept for the logo and for danger and
+errors; links, focus and notes use a blue-black writing ink (`#21436b`), and
+success and warning stay ink-dark. Code, diffs and terminal output follow the
+same inks: reserved words in bold ink, comments faded, literals in the blue
+ink and the spot red. Select it in Settings → Application → Color Theme. It
+uses the existing `setColorTheme` and browser preference; OpenHands-Neutral
+remains the default. Paper stays light regardless of the operating system's
+appearance.
 
 Newsreader is used only for `h1`, `h2`, and `.heading`. Dense controls, message
 body text, and smaller supporting headings retain their existing fonts; code and
