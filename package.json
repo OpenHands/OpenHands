@@ -160,7 +160,7 @@
     "@vercel/react-router": "1.3.7",
     "@vitest/coverage-v8": "5.1.1",
     "cross-env": "10.1.0",
-    "electron": "45.3.4",
+    "electron": "45.4.1",
     "electron-builder": "26.18.0",
     "eslint": "10.15.0",
     "eslint-config-prettier": "10.1.8",
