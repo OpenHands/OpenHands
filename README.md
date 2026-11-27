@@ -194,6 +194,25 @@ Local (`npx` / `npm run dev`) listeners bind **loopback only** (`127.0.0.1`) so 
 
 Docker listens on all container interfaces so port publishing works, but does not inject its session key into HTML by default. The quickstart above explicitly enables injection while publishing the host port on `127.0.0.1` only. If you publish Docker on a LAN or public interface, omit `AGENT_CANVAS_ALLOW_LAN_SESSION_KEY` and enter the API key in the UI. Set `LOCAL_BACKEND_API_KEY` to a strong value, or retrieve the generated value with `docker exec <container> sh -c 'cat "$STATE_DIR/api-key.txt"'`. For internet-facing installs, follow [self-hosting](./docs/SELF_HOSTING.md).
 
+## Using OpenHands Cloud
+
+OpenHands Cloud is the hosted agent backend. To use it you need an **OpenHands Cloud API key**:
+
+1. Sign in to [OpenHands Cloud](https://app.all-hands.dev).
+2. Open the **API Keys** tab and create a key.
+3. Use it where OpenHands Cloud is the selected provider (for example the OpenHands LLM provider in *Settings → LLM*), or export it as `OPENHANDS_CLOUD_API_KEY` (the older `OPENHANDS_API_KEY` is still accepted) when calling the Cloud REST API.
+
+### Two kinds of keys
+
+OpenHands Cloud uses two distinct keys — don't confuse them:
+
+| Key | What it authenticates | Where to get it |
+| --- | --- | --- |
+| **OpenHands Cloud API key** (`OPENHANDS_CLOUD_API_KEY`) | You, against the OpenHands Cloud platform (Bearer auth to `https://app.all-hands.dev/api/v1/...`); also powers the OpenHands LLM provider's models. | The **API Keys** tab of OpenHands Cloud. |
+| **Session API key** (`X-Session-API-Key`) | A specific agent server / sandbox runtime, for direct agent-server calls. | Returned by the Cloud API when you create or inspect a conversation's sandbox. |
+
+See [First Time Setup](https://docs.openhands.dev/openhands/usage/agent-canvas/first-time-setup) and the [OpenHands Cloud API reference](https://docs.openhands.dev/) for details.
+
 # Architecture
 
 Agent Canvas is powered by the [OpenHands Agent Server](https://github.com/OpenHands/software-agent-sdk/tree/main/openhands-agent-server/openhands/agent_server), a REST API for running multiple agents on a single machine. Each Agent Server runs on a single host/port; the Agent Canvas can connect to multiple Agent Servers and easily flip between them.
