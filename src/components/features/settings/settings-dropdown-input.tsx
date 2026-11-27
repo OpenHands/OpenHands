@@ -160,7 +160,7 @@ export function SettingsDropdownInput({
         <ComboBox.InputGroup
           className={cn(
             formControlSettingsFieldClassName,
-            "focus-within:border-contrast/40 dark:focus-within:border-contrast/40 focus-within:ring-1 focus-within:ring-contrast/20",
+            "pe-0 focus-within:border-contrast/40 dark:focus-within:border-contrast/40 focus-within:ring-1 focus-within:ring-contrast/20",
             inputWrapperClassName,
             inputClassName,
           )}
@@ -169,7 +169,7 @@ export function SettingsDropdownInput({
           <OpenOnClickInput
             testId={testId}
             name={name}
-            className="border-0 bg-transparent shadow-none outline-none focus:ring-0 focus-visible:ring-0 data-[focused=true]:ring-0"
+            className="min-w-0 flex-1 border-0 bg-transparent pe-3 shadow-none outline-none focus:ring-0 focus-visible:ring-0 data-[focused=true]:ring-0"
             placeholder={isLoading ? t(I18nKey.HOME$LOADING) : placeholder}
             ariaLabel={ariaLabel}
           />
@@ -180,7 +180,10 @@ export function SettingsDropdownInput({
             clearLabel={t(I18nKey.COMMON$CLEAR_SELECTION)}
           />
           <ComboBox.Trigger
-            className={heroUiAutocompleteSelectorButtonClassName}
+            className={cn(
+              heroUiAutocompleteSelectorButtonClassName,
+              "static translate-y-0",
+            )}
           />
         </ComboBox.InputGroup>
         <ComboBox.Popover className="rounded-xl">
