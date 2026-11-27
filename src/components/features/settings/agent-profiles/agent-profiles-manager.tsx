@@ -3,11 +3,18 @@ import { useTranslation } from "react-i18next";
 import { BrandButton } from "#/components/features/settings/brand-button";
 import { AgentProfilesBody } from "./agent-profiles-body";
 import { DeleteAgentProfileModal } from "./delete-agent-profile-modal";
-import { type AgentProfileSummary } from "#/api/agent-profiles-service/agent-profiles-service.api";
+import AgentProfilesService, {
+  type AgentProfileSaveInput,
+  type AgentProfileSummary,
+} from "#/api/agent-profiles-service/agent-profiles-service.api";
 import { useAgentProfiles } from "#/hooks/query/use-agent-profiles";
 import { useActivateAgentProfile } from "#/hooks/mutation/use-activate-agent-profile";
+import { useSaveAgentProfile } from "#/hooks/mutation/use-save-agent-profile";
 import { useCanManageOrgProfiles } from "#/hooks/use-can-manage-org-profiles";
-import { displaySuccessToast } from "#/utils/custom-toast-handlers";
+import {
+  displayErrorToast,
+  displaySuccessToast,
+} from "#/utils/custom-toast-handlers";
 import { I18nKey } from "#/i18n/declaration";
 
 interface AgentProfilesManagerProps {
@@ -22,9 +29,9 @@ export function AgentProfilesManager({
   const { t } = useTranslation("openhands");
   const { data, isLoading, error } = useAgentProfiles();
   const activateProfile = useActivateAgentProfile();
+  const saveProfile = useSaveAgentProfile();
   // Cloud members are view-only; only owners/admins (and all local users) may
-  // add, edit, delete, or activate agent profiles (org-scoped, same permission
-  // as LLM profiles). Mirrors LlmProfilesManager.
+  // manage agent profiles, as with LLM profiles.
   const canManage = useCanManageOrgProfiles();
   const [profileToDelete, setProfileToDelete] =
     useState<AgentProfileSummary | null>(null);
@@ -42,6 +49,39 @@ export function AgentProfilesManager({
     } catch (error) {
       // The global mutation error toast reports the failure; just log here.
       console.error("Failed to activate agent profile:", error);
+    }
+  };
+
+  const handleDuplicate = async (profile: AgentProfileSummary) => {
+    const existingNames = new Set(profiles.map(({ name }) => name));
+    let suffix = "-copy";
+    let copyName = `${profile.name.slice(0, 64 - suffix.length)}${suffix}`;
+    for (let index = 1; existingNames.has(copyName); index += 1) {
+      suffix = `-copy-${index}`;
+      copyName = `${profile.name.slice(0, 64 - suffix.length)}${suffix}`;
+    }
+
+    try {
+      const { profile: source } = await AgentProfilesService.getProfile(
+        profile.name,
+        "encrypted",
+      );
+      const {
+        id: _id,
+        name: _name,
+        revision: _revision,
+        schema_version: _schemaVersion,
+        ...fields
+      } = source;
+      await saveProfile.mutateAsync({
+        name: copyName,
+        profile: fields as AgentProfileSaveInput,
+      });
+      displaySuccessToast(
+        t(I18nKey.SETTINGS$PROFILE_DUPLICATED, { name: copyName }),
+      );
+    } catch {
+      displayErrorToast(t(I18nKey.ERROR$GENERIC));
     }
   };
 
@@ -73,6 +113,7 @@ export function AgentProfilesManager({
           canManage={canManage}
           onActivate={handleActivate}
           onEdit={(profile) => onEditProfile?.(profile)}
+          onDuplicate={handleDuplicate}
           onDelete={setProfileToDelete}
           isActivating={activateProfile.isPending}
         />

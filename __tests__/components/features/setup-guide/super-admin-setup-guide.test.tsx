@@ -233,7 +233,7 @@ describe("SuperAdminSetupGuide", () => {
     ).toHaveAttribute("href", "/mcp");
     expect(
       screen.getByTestId("super-admin-setup-guide-step-add-integration"),
-    ).toHaveAttribute("href", "/mcp");
+    ).toHaveAttribute("href", "/agents");
     expect(
       screen.getByTestId("super-admin-setup-guide-step-invite-users"),
     ).toHaveAttribute(
@@ -279,7 +279,7 @@ describe("SuperAdminSetupGuide", () => {
     ).toHaveAttribute("href", "/mcp");
   });
 
-  it("opens the Canvas MCP page from Start for the integration step", async () => {
+  it("opens the Agents page from Start for the integration step", async () => {
     activateBackend(cloudBackend);
     serveSetupGuide({
       setupState: () =>
@@ -292,7 +292,7 @@ describe("SuperAdminSetupGuide", () => {
 
     expect(
       await screen.findByTestId("super-admin-setup-guide-start"),
-    ).toHaveAttribute("href", "/mcp");
+    ).toHaveAttribute("href", "/agents");
   });
 
   it("opens an enterprise step from Start on the guide's organization, with its tour", async () => {
@@ -317,7 +317,7 @@ describe("SuperAdminSetupGuide", () => {
   });
 
   describe("when the guide's next step is done", () => {
-    it("opens the Canvas MCP page with its tour after an automation is created", async () => {
+    it("opens the Agents page with its tour after an automation is created", async () => {
       activateBackend(cloudBackend);
       let state = guideState({ org_llm: true, git_provider: true });
       serveSetupGuide({ setupState: () => HttpResponse.json(state) });
@@ -353,7 +353,7 @@ describe("SuperAdminSetupGuide", () => {
         automation: true,
       });
       serveSetupGuide({ setupState: () => HttpResponse.json(state) });
-      renderGuide("/mcp");
+      renderGuide("/agents");
       expect(await screen.findByText("3/5")).toBeInTheDocument();
 
       state = guideState({
@@ -378,7 +378,7 @@ describe("SuperAdminSetupGuide", () => {
         automation: true,
       });
       serveSetupGuide({ setupState: () => HttpResponse.json(state) });
-      renderGuide("/mcp");
+      renderGuide("/agents");
       expect(await screen.findByText("3/5")).toBeInTheDocument();
       await user.click(
         screen.getByRole("button", { name: I18nKey.BUTTON$CLOSE }),
@@ -514,7 +514,7 @@ describe("SuperAdminSetupGuide", () => {
     window.history.replaceState(
       null,
       "",
-      "/mcp?org=org-1&setup_tour=add-integration",
+      "/agents?org=org-1&setup_tour=add-integration",
     );
     activateBackend(cloudBackend);
     serveSetupGuide({
@@ -522,7 +522,7 @@ describe("SuperAdminSetupGuide", () => {
         HttpResponse.json(guideState({ org_llm: true, automation: true })),
     });
 
-    renderGuide("/mcp");
+    renderGuide("/agents");
 
     await waitFor(() =>
       expect(startSetupGuideTour).toHaveBeenCalledWith(

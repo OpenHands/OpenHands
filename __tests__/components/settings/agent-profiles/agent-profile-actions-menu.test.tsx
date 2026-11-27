@@ -6,6 +6,7 @@ import { AgentProfileActionsMenu } from "#/components/features/settings/agent-pr
 
 const defaultProps = {
   onEdit: vi.fn(),
+  onDuplicate: vi.fn(),
   onSetActive: vi.fn(),
   onDelete: vi.fn(),
   isActive: false,
@@ -14,15 +15,32 @@ const defaultProps = {
 };
 
 describe("AgentProfileActionsMenu", () => {
-  it("renders Edit, Set as active, and Delete", () => {
+  it("renders Edit, Duplicate, Set as active, and Delete", () => {
     render(<AgentProfileActionsMenu {...defaultProps} />);
 
     const items = screen.getAllByRole("menuitem");
     expect(items.map((item) => item.getAttribute("data-testid"))).toEqual([
       "agent-profile-edit",
+      "agent-profile-duplicate",
       "agent-profile-set-active",
       "agent-profile-delete",
     ]);
+  });
+
+  it("fires Duplicate and closes the menu", async () => {
+    const onDuplicate = vi.fn();
+    const onClose = vi.fn();
+    render(
+      <AgentProfileActionsMenu
+        {...defaultProps}
+        onDuplicate={onDuplicate}
+        onClose={onClose}
+      />,
+    );
+
+    await userEvent.click(screen.getByTestId("agent-profile-duplicate"));
+    expect(onDuplicate).toHaveBeenCalledOnce();
+    expect(onClose).toHaveBeenCalledOnce();
   });
 
   it("disables Set as active when already active", () => {
@@ -95,6 +113,9 @@ describe("AgentProfileActionsMenu", () => {
       expect(screen.getByTestId("agent-profile-edit")).toHaveFocus();
 
       await user.keyboard("{ArrowDown}");
+      expect(screen.getByTestId("agent-profile-duplicate")).toHaveFocus();
+
+      await user.keyboard("{ArrowDown}");
       expect(screen.getByTestId("agent-profile-delete")).toHaveFocus();
 
       await user.keyboard("{ArrowDown}");
@@ -104,12 +125,15 @@ describe("AgentProfileActionsMenu", () => {
       expect(screen.getByTestId("agent-profile-delete")).toHaveFocus();
     });
 
-    it("cycles through all three items with wrap on a non-active row", async () => {
+    it("cycles through all four items with wrap on a non-active row", async () => {
       const user = userEvent.setup();
       render(<AnchoredMenu />);
 
       await user.click(screen.getByTestId("agent-profile-menu-trigger"));
       expect(screen.getByTestId("agent-profile-edit")).toHaveFocus();
+
+      await user.keyboard("{ArrowDown}");
+      expect(screen.getByTestId("agent-profile-duplicate")).toHaveFocus();
 
       await user.keyboard("{ArrowDown}");
       expect(screen.getByTestId("agent-profile-set-active")).toHaveFocus();

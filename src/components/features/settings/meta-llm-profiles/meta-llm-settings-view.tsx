@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { HttpError } from "@openhands/typescript-client";
 import { BrandButton } from "#/components/features/settings/brand-button";
@@ -24,6 +24,7 @@ import {
   displaySuccessToast,
 } from "#/utils/custom-toast-handlers";
 import { I18nKey } from "#/i18n/declaration";
+import { ProfileChoiceList } from "#/components/features/settings/agent-profiles/profile-choice-list";
 import { MetaProfileEditor } from "./meta-profile-editor";
 import { MetaProfileRow } from "./meta-profile-row";
 import { DeleteMetaProfileModal } from "./delete-meta-profile-modal";
@@ -36,6 +37,8 @@ import {
 import {
   buildRouterModel,
   collectRequiredRouterModelNames,
+  ROUTER_FIRST_KEY,
+  ROUTER_OFF_KEY,
 } from "./router-profiles";
 
 type ViewMode = "list" | "create" | "edit";
@@ -53,7 +56,27 @@ const CUSTOM_META_PROFILE_CONFIG: MetaProfile = {
   model_table: "",
 };
 
-export function MetaLlmSettingsView() {
+interface MetaLlmSettingsViewProps {
+  embedded?: boolean;
+  selectedRouter?: string | null;
+  showFirstRouter?: boolean;
+  missingRouter?: string | null;
+  onSelected?: (name: string | null) => void;
+  onCreated?: (name: string) => void;
+  onDeleted?: (name: string) => void;
+  onEditingChange?: (editing: boolean) => void;
+}
+
+export function MetaLlmSettingsView({
+  embedded = false,
+  selectedRouter,
+  showFirstRouter = false,
+  missingRouter,
+  onSelected,
+  onCreated,
+  onDeleted,
+  onEditingChange,
+}: MetaLlmSettingsViewProps = {}) {
   const { t } = useTranslation("openhands");
   const { data, isLoading, error } = useMetaProfiles();
   const { data: llmProfilesData } = useLlmProfiles();
@@ -66,6 +89,9 @@ export function MetaLlmSettingsView() {
     useSaveSettings();
 
   const [view, setView] = useState<ViewMode>("list");
+  useEffect(() => {
+    onEditingChange?.(view !== "list");
+  }, [onEditingChange, view]);
   const [editing, setEditing] = useState<EditingMetaProfile | null>(null);
   const [createInitial, setCreateInitial] = useState<EditingMetaProfile | null>(
     null,
@@ -239,6 +265,7 @@ export function MetaLlmSettingsView() {
       if (shouldActivateAfterCreate) {
         await activateMetaProfile.mutateAsync(name);
       }
+      if (view === "create") onCreated?.(name);
       if (!autoEnableFailed) {
         displaySuccessToast(t(I18nKey.SETTINGS$META_PROFILE_SAVED, { name }));
       }
@@ -327,18 +354,56 @@ export function MetaLlmSettingsView() {
           </p>
         ) : null}
 
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <h2 className="text-base font-medium text-contrast">
-            {t(I18nKey.SETTINGS$META_PROFILES_AVAILABLE)}
-          </h2>
+        {embedded && !isLoading && !error ? (
+          <ProfileChoiceList
+            testId="agent-settings-router-choices"
+            name="agent-router"
+            label={t(I18nKey.SETTINGS$NAV_META_LLM)}
+            choices={[
+              {
+                name: ROUTER_OFF_KEY,
+                label: t(I18nKey.SETTINGS$AGENT_PROFILE_ROUTER_OFF),
+                selectable: false,
+              },
+              ...(showFirstRouter
+                ? [
+                    {
+                      name: ROUTER_FIRST_KEY,
+                      label: t(I18nKey.SETTINGS$AGENT_PROFILE_ROUTER_FIRST),
+                      selectable: false,
+                    },
+                  ]
+                : []),
+              ...metaProfiles.map((profile) => ({
+                name: profile.name,
+                description: profile.classifier_model
+                  ? String(profile.classifier_model)
+                  : undefined,
+              })),
+              ...(missingRouter
+                ? [{ name: missingRouter, selectable: false }]
+                : []),
+            ]}
+            selected={selectedRouter ?? ROUTER_OFF_KEY}
+            onSelect={(name) =>
+              onSelected?.(name === ROUTER_OFF_KEY ? null : name)
+            }
+            onEdit={handleEdit}
+            onDelete={setNameToDelete}
+          />
+        ) : null}
+
+        <div className="flex flex-wrap items-center gap-2">
+          {!embedded ? (
+            <h2 className="mr-auto text-base font-medium text-contrast">
+              {t(I18nKey.SETTINGS$META_PROFILES_AVAILABLE)}
+            </h2>
+          ) : null}
           <BrandButton
             testId="add-meta-profile"
             type="button"
             variant="secondary"
-            className="ml-auto"
-            onClick={() => {
-              setIsTemplateModalOpen(true);
-            }}
+            onClick={() => setIsTemplateModalOpen(true)}
           >
             {t(I18nKey.SETTINGS$ADD_META_PROFILE)}
           </BrandButton>
@@ -356,13 +421,13 @@ export function MetaLlmSettingsView() {
           </p>
         ) : null}
 
-        {!isLoading && !error && metaProfiles.length === 0 ? (
+        {!embedded && !isLoading && !error && metaProfiles.length === 0 ? (
           <p data-testid="meta-profile-empty" className="text-sm text-muted">
             {t(I18nKey.SETTINGS$META_PROFILE_NO_PROFILES)}
           </p>
         ) : null}
 
-        {metaProfiles.length > 0 ? (
+        {!embedded && metaProfiles.length > 0 ? (
           <div className="flex flex-col gap-2" data-testid="meta-profile-list">
             {metaProfiles.map((info) => (
               <MetaProfileRow
@@ -405,6 +470,7 @@ export function MetaLlmSettingsView() {
       <DeleteMetaProfileModal
         name={nameToDelete}
         onClose={() => setNameToDelete(null)}
+        onDeleted={onDeleted}
       />
       <ApiKeyModalBase
         isOpen={isTemplateModalOpen}

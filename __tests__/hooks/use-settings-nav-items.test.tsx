@@ -67,22 +67,26 @@ describe("useSettingsNavItems", () => {
     vi.unstubAllEnvs();
   });
 
-  it("returns the LLM settings item unchanged on local backends", () => {
+  it("keeps standalone Agents out of local Settings navigation", () => {
     useConfigMock.mockReturnValue({ data: createConfig() });
 
     const { result } = renderHook(() => useSettingsNavItems());
-    const llmItem = result.current.find(
-      (item) => item.type === "item" && item.item.to === "/settings/llm",
+    expect(result.current).not.toContainEqual(
+      expect.objectContaining({
+        item: expect.objectContaining({ to: "/agents" }),
+      }),
     );
-
-    const baseLlm = OSS_NAV_ITEMS.find((item) => item.to === "/settings/llm")!;
-    expect(llmItem).toEqual({
+    expect(result.current).toContainEqual({
       type: "item",
-      item: baseLlm,
+      item: OSS_NAV_ITEMS.find((item) => item.to === "/settings/app"),
+    });
+    expect(result.current).not.toContainEqual({
+      type: "item",
+      item: OSS_NAV_ITEMS.find((item) => item.to === "/settings/meta-llm"),
     });
   });
 
-  it("keeps the generic LLM settings item on cloud backends", () => {
+  it("keeps the remaining Settings entries on cloud backends", () => {
     useConfigMock.mockReturnValue({ data: createConfig() });
     useActiveBackendMock.mockReturnValue({
       backend: { kind: "cloud" },
@@ -90,11 +94,6 @@ describe("useSettingsNavItems", () => {
     });
 
     const { result } = renderHook(() => useSettingsNavItems());
-
-    // Agent profiles are available on cloud too (OpenHands #15060), so every
-    // OSS item is present except Experimental (experimental features live on a local
-    // agent server); the `/settings` LLM-Profiles rename stays local-only, so
-    // on cloud every other item is passed through unchanged.
     expect(result.current).toEqual(
       OSS_NAV_ITEMS.filter((item) => item.to !== "/settings/experimental").map(
         (item) => ({ type: "item", item }),
@@ -102,7 +101,7 @@ describe("useSettingsNavItems", () => {
     );
   });
 
-  it("shows a single Agent item (the profile library) on both local and cloud", () => {
+  it("does not list the standalone Agent route on either backend", () => {
     useConfigMock.mockReturnValue({ data: createConfig() });
 
     for (const kind of ["local", "cloud"] as const) {
@@ -113,12 +112,8 @@ describe("useSettingsNavItems", () => {
       const paths = renderHook(() => useSettingsNavItems())
         .result.current.filter((item) => item.type === "item")
         .map((item) => (item.type === "item" ? item.item.to : null));
-      // "Agent" IS the profile library; the old standalone /settings/agent
-      // global-agent form + separate /settings/agents "Agent profiles" item
-      // were collapsed into one.
-      expect(paths).toContain("/settings/agents");
+      expect(paths).not.toContain("/agents");
       expect(paths).not.toContain("/settings/agent");
-      expect(paths.filter((p) => p === "/settings/agents")).toHaveLength(1);
     }
   });
 
@@ -133,8 +128,9 @@ describe("useSettingsNavItems", () => {
       .map((item) => (item.type === "item" ? item.item.to : null));
 
     expect(paths).not.toContain("/settings/llm");
+    expect(paths).not.toContain("/settings/secrets");
+    expect(paths).not.toContain("/agents");
     expect(paths).toContain("/settings/app");
-    expect(paths).toContain("/settings/secrets");
   });
 
   it("never lists removed settings sub-pages", () => {
@@ -171,7 +167,7 @@ describe("useSettingsNavItems", () => {
         ),
     );
 
-    for (const path of ["/settings/llm", "/settings/verification"]) {
+    for (const path of ["/settings/app", "/settings/verification"]) {
       const renderedItem = byPath.get(path);
       expect(renderedItem).toEqual({
         type: "item",

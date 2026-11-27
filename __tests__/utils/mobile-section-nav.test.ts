@@ -16,17 +16,14 @@ describe("getMobileTopBarState", () => {
     });
   });
 
-  it("backs from extension detail pages to the customize hub", () => {
-    expect(getMobileTopBarState("/skills")).toEqual({
+  it("backs from Plugins to Customize, not from legacy agent routes", () => {
+    expect(getMobileTopBarState("/plugins")).toEqual({
       mode: "back",
       backTo: "/customize",
       backLabelKey: I18nKey.NAV$CUSTOMIZE,
     });
-    expect(getMobileTopBarState("/mcp")).toEqual({
-      mode: "back",
-      backTo: "/customize",
-      backLabelKey: I18nKey.NAV$CUSTOMIZE,
-    });
+    expect(getMobileTopBarState("/skills")).toEqual({ mode: "menu" });
+    expect(getMobileTopBarState("/mcp")).toEqual({ mode: "menu" });
   });
 
   it("backs from the apps management page but not extension pages", () => {

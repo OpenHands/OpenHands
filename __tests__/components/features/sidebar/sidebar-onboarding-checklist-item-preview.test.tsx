@@ -15,7 +15,9 @@ const navigation: NavigationContextValue = {
   navigate: () => undefined,
 };
 
-function renderPreview(id: Parameters<typeof SidebarOnboardingChecklistItemPreview>[0]["id"]) {
+function renderPreview(
+  id: Parameters<typeof SidebarOnboardingChecklistItemPreview>[0]["id"],
+) {
   return render(
     <NavigationProvider value={navigation}>
       <SidebarOnboardingChecklistItemPreview id={id} />
@@ -30,7 +32,10 @@ describe("SidebarOnboardingChecklistItemIcon", () => {
       "configure-subscription-agent",
       "sidebar-onboarding-checklist-icon-configure-subscription-agent",
     ],
-    ["start-conversation", "sidebar-onboarding-checklist-icon-start-conversation"],
+    [
+      "start-conversation",
+      "sidebar-onboarding-checklist-icon-start-conversation",
+    ],
     ["schedule-task", "sidebar-onboarding-checklist-icon-schedule-task"],
     ["customize-agent", "sidebar-onboarding-checklist-icon-customize-agent"],
     ["connect-mcp", "sidebar-onboarding-checklist-icon-connect-mcp"],
@@ -50,7 +55,7 @@ describe("SidebarOnboardingChecklistItemPreview", () => {
       screen.getByTestId(
         "sidebar-onboarding-checklist-preview-action-configure-subscription-agent",
       ),
-    ).toHaveAttribute("href", "/settings/agents");
+    ).toHaveAttribute("href", "/agents");
     expect(
       screen.getByText(
         I18nKey.SIDEBAR$ONBOARDING_CHECKLIST_CONFIGURE_SUBSCRIPTION_AGENT,
@@ -71,13 +76,19 @@ describe("SidebarOnboardingChecklistItemPreview", () => {
       screen.getByText(I18nKey.SIDEBAR$ONBOARDING_CHECKLIST_CONFIGURE_LLM_DESC),
     ).toBeInTheDocument();
     expect(
-      screen.getByTestId("sidebar-onboarding-checklist-preview-action-configure-llm"),
-    ).toHaveAttribute("href", "/settings/llm");
+      screen.getByTestId(
+        "sidebar-onboarding-checklist-preview-action-configure-llm",
+      ),
+    ).toHaveAttribute("href", "/agents");
     expect(
-      screen.getByText(I18nKey.SIDEBAR$ONBOARDING_CHECKLIST_ACTION_CONFIGURE_LLM),
+      screen.getByText(
+        I18nKey.SIDEBAR$ONBOARDING_CHECKLIST_ACTION_CONFIGURE_LLM,
+      ),
     ).toBeInTheDocument();
     expect(
-      screen.getByTestId("sidebar-onboarding-checklist-preview-docs-configure-llm"),
+      screen.getByTestId(
+        "sidebar-onboarding-checklist-preview-docs-configure-llm",
+      ),
     ).toHaveAttribute(
       "href",
       "https://docs.openhands.dev/openhands/usage/settings/llm-settings#llm-profiles",
@@ -97,13 +108,19 @@ describe("SidebarOnboardingChecklistItemPreview", () => {
       screen.getByTestId("sidebar-onboarding-checklist-preview-join-slack"),
     ).toBeInTheDocument();
     expect(
-      screen.getByTestId("sidebar-onboarding-checklist-preview-action-join-slack"),
+      screen.getByTestId(
+        "sidebar-onboarding-checklist-preview-action-join-slack",
+      ),
     ).toHaveAttribute("href", "https://openhands.dev/joinslack");
     expect(
-      screen.getByTestId("sidebar-onboarding-checklist-preview-action-join-slack"),
+      screen.getByTestId(
+        "sidebar-onboarding-checklist-preview-action-join-slack",
+      ),
     ).toHaveAttribute("target", "_blank");
     expect(
-      screen.getByTestId("sidebar-onboarding-checklist-preview-docs-join-slack"),
+      screen.getByTestId(
+        "sidebar-onboarding-checklist-preview-docs-join-slack",
+      ),
     ).toHaveAttribute("href", "https://docs.openhands.dev/overview/community");
   });
 });

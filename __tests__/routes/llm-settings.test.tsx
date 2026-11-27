@@ -9,9 +9,8 @@ import {
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-// Import the named export LlmSettingsScreen directly for testing the form component.
-// The default export now renders LlmSettingsLocalView (the profiles manager view).
-import LlmSettingsRoute, { LlmSettingsScreen } from "#/routes/llm-settings";
+import { LlmSettingsScreen } from "#/routes/llm-settings";
+import { LlmSettingsLocalView } from "#/components/features/settings/llm-profiles/llm-settings-local-view";
 import ConfigService from "#/api/config-service/config-service.api";
 import SettingsService from "#/api/settings-service/settings-service.api";
 import { MOCK_DEFAULT_USER_SETTINGS } from "#/mocks/handlers";
@@ -67,7 +66,7 @@ function renderLlmSettingsScreen(
 }
 
 function renderLlmSettingsRoute() {
-  return render(<LlmSettingsRoute />, {
+  return render(<LlmSettingsLocalView />, {
     wrapper: ({ children }) => (
       <MemoryRouter>
         <QueryClientProvider
@@ -734,7 +733,7 @@ describe("LlmSettingsScreen - OpenHands provider on cloud", () => {
   });
 });
 
-describe("LlmSettingsRoute - backend mode rendering", () => {
+describe("LlmSettingsLocalView - backend mode rendering", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
 

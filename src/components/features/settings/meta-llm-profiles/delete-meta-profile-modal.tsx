@@ -4,6 +4,7 @@ import { BrandButton } from "#/components/features/settings/brand-button";
 import { LoadingSpinner } from "#/components/shared/loading-spinner";
 import { ApiKeyModalBase } from "#/components/features/settings/api-key-modal-base";
 import { useDeleteMetaProfile } from "#/hooks/mutation/use-delete-meta-profile";
+import { agentProfileSupportsRouter } from "#/api/agent-profiles-service/profile-field-support";
 import {
   displayErrorToast,
   displaySuccessToast,
@@ -13,11 +14,13 @@ import { I18nKey } from "#/i18n/declaration";
 interface DeleteMetaProfileModalProps {
   name: string | null;
   onClose: () => void;
+  onDeleted?: (name: string) => void;
 }
 
 export function DeleteMetaProfileModal({
   name,
   onClose,
+  onDeleted,
 }: DeleteMetaProfileModalProps) {
   const { t } = useTranslation("openhands");
   const deleteMetaProfile = useDeleteMetaProfile();
@@ -28,6 +31,7 @@ export function DeleteMetaProfileModal({
   const handleDelete = async () => {
     try {
       await deleteMetaProfile.mutateAsync(name);
+      onDeleted?.(name);
       displaySuccessToast(t(I18nKey.SETTINGS$META_PROFILE_DELETED, { name }));
       onClose();
     } catch (error) {
@@ -85,6 +89,11 @@ export function DeleteMetaProfileModal({
       <p className="text-sm break-all">
         {t(I18nKey.SETTINGS$META_PROFILE_DELETE_CONFIRMATION, { name })}
       </p>
+      {agentProfileSupportsRouter() ? (
+        <p className="text-sm">
+          {t(I18nKey.SETTINGS$META_PROFILE_DELETE_SHARED_WARNING)}
+        </p>
+      ) : null}
     </ApiKeyModalBase>
   );
 }

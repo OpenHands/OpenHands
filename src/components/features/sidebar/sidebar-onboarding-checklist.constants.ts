@@ -47,12 +47,12 @@ export const SIDEBAR_ONBOARDING_CHECKLIST_ROUTES: Record<
   SidebarOnboardingChecklistInternalItemId,
   string
 > = {
-  "configure-llm": "/settings/llm",
-  "configure-subscription-agent": "/settings/agents",
-  "connect-mcp": "/mcp",
+  "configure-llm": "/agents",
+  "configure-subscription-agent": "/agents",
+  "connect-mcp": "/agents",
   "start-conversation": "/conversations",
   "schedule-task": "/automations",
-  "customize-agent": "/settings/agents",
+  "customize-agent": "/agents",
 };
 
 /** Semantic `link_id` values for `onboarding_link_clicked` (no `open_docs`). */
@@ -158,5 +158,5 @@ export const SIDEBAR_ONBOARDING_CHECKLIST_DOCS_URLS: Record<
 };
 
 export function isCustomizeChecklistPath(path: string): boolean {
-  return path === "/settings/agents" || path.startsWith("/settings/agents/");
+  return path === "/agents" || path.startsWith("/agents/");
 }

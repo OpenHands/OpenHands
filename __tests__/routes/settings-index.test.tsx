@@ -11,10 +11,6 @@ function renderSettingsIndex() {
   const RouterStub = createRoutesStub([
     { path: "/settings", Component: SettingsIndex },
     {
-      path: "/settings/agents",
-      Component: () => <div data-testid="agent-profiles-screen" />,
-    },
-    {
       path: "/settings/app",
       Component: () => <div data-testid="app-settings-screen" />,
     },
@@ -58,14 +54,11 @@ describe("settings index route", () => {
     __resetActiveStoreForTests();
   });
 
-  it("lands on the Agent library by default", async () => {
-    // Arrange — no lock-to-cloud; jsdom's default viewport is desktop width.
-    // Act
+  it("lands on Application by default", async () => {
     renderSettingsIndex();
 
-    // Assert
     expect(
-      await screen.findByTestId("agent-profiles-screen"),
+      await screen.findByTestId("app-settings-screen"),
     ).toBeInTheDocument();
   });
 

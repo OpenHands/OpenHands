@@ -19,6 +19,7 @@ interface AgentProfilesBodyProps {
   canManage: boolean;
   onActivate: (profile: AgentProfileSummary) => void;
   onEdit: (profile: AgentProfileSummary) => void;
+  onDuplicate: (profile: AgentProfileSummary) => void;
   onDelete: (profile: AgentProfileSummary) => void;
   isActivating: boolean;
 }
@@ -31,6 +32,7 @@ export function AgentProfilesBody({
   canManage,
   onActivate,
   onEdit,
+  onDuplicate,
   onDelete,
   isActivating,
 }: AgentProfilesBodyProps) {
@@ -85,6 +87,7 @@ export function AgentProfilesBody({
           canManage={canManage}
           onActivate={onActivate}
           onEdit={onEdit}
+          onDuplicate={onDuplicate}
           onDelete={onDelete}
           isActivating={isActivating}
         />

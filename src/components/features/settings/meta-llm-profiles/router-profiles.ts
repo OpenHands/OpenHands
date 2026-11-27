@@ -10,6 +10,10 @@
  * its credentials instead of cloning them.
  */
 
+// Reserved selection values cannot collide with saved router profile names.
+export const ROUTER_OFF_KEY = "__off__";
+export const ROUTER_FIRST_KEY = "__first__";
+
 /**
  * Extract model names from a router ``model_table``.
  *

@@ -15,11 +15,13 @@ import { getApiErrorMessage } from "#/utils/api-error-message";
 interface DeleteProfileModalProps {
   profile: ProfileInfo | null;
   onClose: () => void;
+  onDeleted?: (name: string) => void;
 }
 
 export function DeleteProfileModal({
   profile,
   onClose,
+  onDeleted,
 }: DeleteProfileModalProps) {
   const { t } = useTranslation("openhands");
   const deleteProfile = useDeleteLlmProfile();
@@ -30,6 +32,7 @@ export function DeleteProfileModal({
   const handleDelete = async () => {
     try {
       await deleteProfile.mutateAsync(profile.name);
+      onDeleted?.(profile.name);
       displaySuccessToast(
         t(I18nKey.SETTINGS$PROFILE_DELETED, { name: profile.name }),
       );
@@ -89,6 +92,9 @@ export function DeleteProfileModal({
         {t(I18nKey.SETTINGS$PROFILE_DELETE_CONFIRMATION, {
           name: profile.name,
         })}
+      </p>
+      <p className="text-sm break-words">
+        {t(I18nKey.SETTINGS$LLM_PROFILE_DELETE_WARNING)}
       </p>
     </ApiKeyModalBase>
   );

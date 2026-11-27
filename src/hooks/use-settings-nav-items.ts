@@ -18,7 +18,10 @@ export type SettingsNavRenderedItem =
   | { type: "divider" };
 
 // Locally each agent profile owns these settings.
-const PROFILE_OWNED_SETTINGS_PATHS = new Set(["/settings/condenser"]);
+const PROFILE_OWNED_SETTINGS_PATHS = new Set([
+  "/settings/condenser",
+  "/settings/meta-llm",
+]);
 // Experimental features live on a local agent server; Cloud has none yet.
 const LOCAL_ONLY_SETTINGS_PATHS = new Set(["/settings/experimental"]);
 

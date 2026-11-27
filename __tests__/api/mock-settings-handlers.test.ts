@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
+import { ProfilesClient } from "@openhands/typescript-client/clients";
 import SettingsService from "#/api/settings-service/settings-service.api";
 import { resetTestHandlersMockSettings } from "#/mocks/settings-handlers";
 
@@ -19,6 +20,23 @@ describe("mock settings handlers", () => {
     expect(
       schema.sections.some((section) => section.key === "verification"),
     ).toBe(true);
+  });
+
+  it("accepts valid LLM configuration in the local profile preflight", async () => {
+    const client = new ProfilesClient({
+      host: "http://localhost:3000",
+      apiKey: "mock-api-key",
+    });
+    try {
+      expect(
+        await client.validateProfile("demo-gpt", {
+          llm: { model: "openai/gpt-4o", api_key: "sk-mock" },
+          include_secrets: true,
+        }),
+      ).toEqual({ valid: true });
+    } finally {
+      client.close();
+    }
   });
 
   it("supports the profile endpoints used by local LLM settings", async () => {

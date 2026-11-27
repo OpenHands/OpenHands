@@ -6,7 +6,7 @@ function CondenserSettingsScreen() {
   const { backend } = useActiveBackend();
   // Locally each agent profile has its own condenser.
   if (backend.kind !== "cloud") {
-    return <Navigate to="/settings/agents" replace />;
+    return <Navigate to="/agents" replace />;
   }
   return (
     <SdkSectionPage

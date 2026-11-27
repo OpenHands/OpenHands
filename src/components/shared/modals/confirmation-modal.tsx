@@ -10,6 +10,7 @@ interface ConfirmationModalProps {
   onConfirm: () => void;
   onCancel: () => void;
   confirmText?: string;
+  isDestructive?: boolean;
   /**
    * Disables both action buttons while an asynchronous confirm
    * mutation is in flight. Defaults to false to preserve existing
@@ -25,6 +26,7 @@ export function ConfirmationModal({
   onConfirm,
   onCancel,
   confirmText,
+  isDestructive = false,
   isConfirming = false,
 }: ConfirmationModalProps) {
   const { t } = useTranslation("openhands");
@@ -39,9 +41,9 @@ export function ConfirmationModal({
     >
       <div
         data-testid="confirmation-modal"
-        className="bg-base-secondary p-4 rounded-xl flex flex-col gap-4 border border-border"
+        className="bg-base-secondary p-4 rounded-xl flex max-w-md flex-col gap-4 border border-border"
       >
-        <p>{text}</p>
+        <p className="break-words">{text}</p>
         {children}
         <div className="w-full flex justify-end gap-2">
           <BrandButton
@@ -57,7 +59,7 @@ export function ConfirmationModal({
             testId="confirm-button"
             type="button"
             onClick={onConfirm}
-            variant="primary"
+            variant={isDestructive ? "danger" : "primary"}
             isDisabled={isConfirming || confirmDisabled}
           >
             {confirmText ?? t(I18nKey.BUTTON$CONFIRM)}

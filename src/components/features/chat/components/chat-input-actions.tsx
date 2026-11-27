@@ -81,12 +81,6 @@ export function ChatInputActions({
   const isCloud = backend.kind === "cloud";
   const modelState = useChatInputModelState();
   const llmProfileState = useChatInputLlmProfileState();
-  // Agent-profile switching lives in the "+" tools menu while the conversation
-  // hasn't started (OSS-5735) — the pill itself is always an LLM selector. The
-  // gate is computed here (not in the menu) so ToolsContextMenu only mounts the
-  // profile submenu when it can actually be used: pre-start, not on a task
-  // route, and only when the backend has profiles (#1571 fallback). Fetch is
-  // limited to the pre-start window.
   const isPreStart = !conversationId || hasStartedConversation === false;
   const agentProfilesForStart = useAgentProfiles({ enabled: isPreStart });
   const agentProfilesAvailable = useAgentProfileAvailability();
@@ -148,11 +142,10 @@ export function ChatInputActions({
       const nextRowWidth = rowEl.getBoundingClientRect().width;
       const nextRightWidth = rightEl.getBoundingClientRect().width;
       const nextAddWidth = addEl.getBoundingClientRect().width;
-      const nextModelWidth = modelEl.getBoundingClientRect().width;
-
       if (nextRowWidth > 0) setActionsRowWidth(nextRowWidth);
       if (nextRightWidth > 0) setRightSectionWidth(nextRightWidth);
       if (nextAddWidth > 0) setAddFileWidth(nextAddWidth);
+      const nextModelWidth = modelEl.getBoundingClientRect().width;
       if (nextModelWidth > 0) setModelWidth(nextModelWidth);
 
       if (codeEl) {
@@ -221,7 +214,6 @@ export function ChatInputActions({
         remaining -= modelWidth + INLINE_GAP;
       }
 
-      // Drops first: the "+" menu also switches the agent profile.
       if (showAgentProfileSwitch && remaining >= agentProfileWidth) {
         next.showAgentProfileInline = true;
       }
@@ -535,8 +527,6 @@ export function ChatInputActions({
             </div>
           )}
           <div ref={modelRef} className={cn(!showModelInline && "hidden")}>
-            {/* Picker depends on backend + ACP context; see the `pickerKind`
-                cases above. */}
             {pickerKind === "model" ? (
               <ChatInputModel />
             ) : (

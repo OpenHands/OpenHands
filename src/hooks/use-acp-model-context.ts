@@ -1,11 +1,9 @@
 import { useTranslation } from "react-i18next";
-import { useActiveBackend } from "#/contexts/active-backend-context";
 import { useActiveConversation } from "#/hooks/query/use-active-conversation";
 import { useActiveAgentKind } from "#/hooks/use-active-agent-profile";
 import { I18nKey } from "#/i18n/declaration";
 
-const AGENT_SETTINGS_PATH = "/settings/agents";
-const LLM_SETTINGS_PATH = "/settings/llm";
+const AGENT_SETTINGS_PATH = "/agents";
 
 export interface AcpModelContext {
   /** The active conversation runs an ACP agent. */
@@ -18,7 +16,7 @@ export interface AcpModelContext {
   /** Either of the above: the model affordance should defer to the ACP picker. */
   isAcpContext: boolean;
   /** Where the model/settings link should navigate. */
-  destinationPath: typeof AGENT_SETTINGS_PATH | typeof LLM_SETTINGS_PATH;
+  destinationPath: typeof AGENT_SETTINGS_PATH;
   /** Translated label for that link. */
   destinationLabel: string;
 }
@@ -31,7 +29,6 @@ export interface AcpModelContext {
  */
 export function useAcpModelContext(): AcpModelContext {
   const { t } = useTranslation("openhands");
-  const { backend } = useActiveBackend();
   const { data: conversation } = useActiveConversation();
   const activeAgentKind = useActiveAgentKind();
 
@@ -39,16 +36,8 @@ export function useAcpModelContext(): AcpModelContext {
   const isHomeAcp = !conversation && activeAgentKind === "acp";
   const isAcpContext = isActiveAcpConversation || isHomeAcp;
 
-  const destinationPath = isAcpContext
-    ? AGENT_SETTINGS_PATH
-    : LLM_SETTINGS_PATH;
-  const destinationLabel = t(
-    isAcpContext
-      ? I18nKey.SETTINGS$NAV_AGENT
-      : backend.kind === "cloud"
-        ? I18nKey.SETTINGS$LLM_SETTINGS
-        : I18nKey.SETTINGS$LLM_PROFILES,
-  );
+  const destinationPath = AGENT_SETTINGS_PATH;
+  const destinationLabel = t(I18nKey.SETTINGS$NAV_AGENT);
 
   return {
     isActiveAcpConversation,
