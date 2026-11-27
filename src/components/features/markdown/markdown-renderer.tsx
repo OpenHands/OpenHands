@@ -2,10 +2,13 @@ import React from "react";
 import Markdown, { Components, defaultUrlTransform } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkBreaks from "remark-breaks";
+import remarkMath from "remark-math";
 import rehypeRaw from "rehype-raw";
 import rehypeSanitize, { defaultSchema } from "rehype-sanitize";
+import rehypeKatex from "rehype-katex";
 import type { Schema } from "hast-util-sanitize";
 import type { PluggableList } from "unified";
+import "katex/dist/katex.min.css";
 import { code } from "./code";
 import { ul, ol, li } from "./list";
 import { paragraph } from "./paragraph";
@@ -143,15 +146,24 @@ const remarkPlugins: PluggableList = [
   remarkGithubAlerts,
   remarkGfm,
   remarkBreaks,
+  remarkMath,
 ];
 
 // `rehype-raw` parses raw HTML embedded in the markdown into the rehype
 // tree. `rehype-sanitize` then strips anything dangerous (scripts,
 // event handlers, `javascript:` URLs, etc.). The order matters: sanitize
 // must run *after* raw so it sees the parsed HTML nodes.
+//
+// `rehype-katex` runs *after* sanitize in the HTML path: KaTeX's output is
+// rich markup (MathML, spans with classes and inline styles) that the
+// sanitize schema would strip, while the math source itself is plain text
+// and passes through sanitize untouched. The renderer keeps the default
+// `throwOnError: false` behavior, so invalid TeX renders as error text
+// instead of crashing the tree walk.
 const htmlRehypePlugins: PluggableList = [
   rehypeRaw,
   [rehypeSanitize, MARKDOWN_SANITIZE_SCHEMA],
+  rehypeKatex,
 ];
 
 const urlTransform = (url: string) =>
@@ -160,6 +172,10 @@ const urlTransform = (url: string) =>
 // Conversation mentions open in place whichever link renderer is in use.
 const standardLink = withConversationMentions(anchor);
 const plainLink = withConversationMentions();
+
+// The sanitized path shares the schema; the plain path has no sanitizer,
+// so KaTeX simply runs on the parsed math nodes.
+const plainRehypePlugins: PluggableList = [rehypeKatex];
 
 function MarkdownBlockComponent({
   source,
@@ -293,7 +309,7 @@ function MarkdownRendererComponent({
     content ?? children ?? "",
     streaming,
   );
-  const rehypePlugins = allowHtml ? htmlRehypePlugins : undefined;
+  const rehypePlugins = allowHtml ? htmlRehypePlugins : plainRehypePlugins;
 
   // Blocks render as siblings in one wrapper, joined by the newline the
   // parser puts between top-level blocks, so the DOM (and `first:` / `last:`
