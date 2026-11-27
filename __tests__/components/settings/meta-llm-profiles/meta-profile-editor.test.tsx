@@ -427,4 +427,118 @@ describe("MetaProfileEditor", () => {
       "conn-openhands",
     );
   });
+
+  it("keeps a typed custom classifier in create mode and allows saving it", async () => {
+    const user = userEvent.setup();
+    const onSave = vi.fn();
+    renderWithProviders(
+      <MetaProfileEditor
+        mode="create"
+        initialConfig={FILLED}
+        availableProfiles={AVAILABLE}
+        isSaving={false}
+        onSave={onSave}
+        onCancel={vi.fn()}
+      />,
+    );
+
+    const input = screen.getByTestId("meta-profile-classifier-input");
+    await user.clear(input);
+    await user.type(input, "qa-classifier");
+
+    expect(input).toHaveValue("qa-classifier");
+
+    // Click outside to verify value persists on blur
+    await user.click(screen.getByTestId("meta-profile-name-input"));
+    expect(input).toHaveValue("qa-classifier");
+
+    const save = screen.getByTestId("meta-profile-save");
+    expect(save).toBeEnabled();
+
+    await user.click(save);
+    expect(onSave).toHaveBeenCalledWith(
+      DEFAULT_ROUTER_PRO_META_PROFILE_NAME,
+      expect.objectContaining({
+        classifier_model: "qa-classifier",
+      }),
+      null,
+    );
+  });
+
+  it("keeps a typed custom classifier in edit mode without reverting to previous profile", async () => {
+    const user = userEvent.setup();
+    const onSave = vi.fn();
+    renderWithProviders(
+      <MetaProfileEditor
+        mode="edit"
+        initialName="balanced"
+        initialConfig={FILLED}
+        availableProfiles={AVAILABLE}
+        isSaving={false}
+        onSave={onSave}
+        onCancel={vi.fn()}
+      />,
+    );
+
+    const input = screen.getByTestId("meta-profile-classifier-input");
+    expect(input).toHaveValue("minimax");
+
+    await user.clear(input);
+    await user.type(input, "qa-classifier");
+
+    expect(input).toHaveValue("qa-classifier");
+
+    // Click outside to verify value persists on blur and does not snap back
+    await user.click(screen.getByTestId("meta-profile-prompt-template"));
+    expect(input).toHaveValue("qa-classifier");
+
+    const save = screen.getByTestId("meta-profile-save");
+    expect(save).toBeEnabled();
+
+    await user.click(save);
+    expect(onSave).toHaveBeenCalledWith(
+      "balanced",
+      expect.objectContaining({
+        classifier_model: "qa-classifier",
+      }),
+      null,
+    );
+  });
+
+  it("sets classifier when selecting a listed profile from the dropdown", async () => {
+    const user = userEvent.setup();
+    const onSave = vi.fn();
+    renderWithProviders(
+      <MetaProfileEditor
+        mode="edit"
+        initialName="balanced"
+        initialConfig={{
+          ...FILLED,
+          classifier_model: "",
+        }}
+        availableProfiles={AVAILABLE}
+        isSaving={false}
+        onSave={onSave}
+        onCancel={vi.fn()}
+      />,
+    );
+
+    const input = screen.getByTestId("meta-profile-classifier-input");
+    await user.click(input);
+    await user.click(screen.getByRole("option", { name: "deepseek" }));
+
+    expect(input).toHaveValue("deepseek");
+
+    const save = screen.getByTestId("meta-profile-save");
+    expect(save).toBeEnabled();
+
+    await user.click(save);
+    expect(onSave).toHaveBeenCalledWith(
+      "balanced",
+      expect.objectContaining({
+        classifier_model: "deepseek",
+      }),
+      null,
+    );
+  });
 });

@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import React, { useState } from "react";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { SettingsDropdownInput } from "#/components/features/settings/settings-dropdown-input";
@@ -198,6 +199,51 @@ describe("SettingsDropdownInput", () => {
     expect(input).toHaveValue("Klingon");
     expect(onInputChange).toHaveBeenLastCalledWith("Klingon");
     expect(onSelectionChange).not.toHaveBeenCalledWith("Klingon");
+  });
+
+  it("keeps a typed custom value under a controlled selectedKey that matches no item", async () => {
+    // Arrange
+    const user = userEvent.setup();
+    const onSelectionChange = vi.fn();
+    const onInputChange = vi.fn();
+
+    function ControlledInput() {
+      const [value, setValue] = useState("custom-initial");
+      return (
+        <div>
+          <SettingsDropdownInput
+            allowsCustomValue
+            items={items}
+            label="Language"
+            name="language"
+            selectedKey={value}
+            inputValue={value}
+            onInputChange={(next) => {
+              setValue(next);
+              onInputChange(next);
+            }}
+            onSelectionChange={onSelectionChange}
+            testId="language-input"
+          />
+          <button type="button">Outside</button>
+        </div>
+      );
+    }
+
+    render(<ControlledInput />);
+
+    // Act
+    const input = screen.getByLabelText("Language");
+    expect(input).toHaveValue("custom-initial");
+
+    await user.click(input);
+    await user.clear(input);
+    await user.keyboard("Klingon");
+    await user.click(screen.getByText("Outside"));
+
+    // Assert: controlled inputValue keeps custom typed characters despite selectedKey matching no item
+    expect(input).toHaveValue("Klingon");
+    expect(onInputChange).toHaveBeenLastCalledWith("Klingon");
   });
 
   it("discards a non-matching value on blur without allowsCustomValue", async () => {
