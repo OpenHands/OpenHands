@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+<title>Failed browser/glob/grep/file-editor results — repro evidence</title>
+</head>
+<body>
+  <h1>Reproduction evidence for #17492</h1>
+  <p>
+    Focused vitest for <code>get-observation-result.test.ts</code> +
+    <code>success-indicator.test.tsx</code>: on main logic,
+    Browser/Glob/Grep/Planning/FileEditor observations with
+    <code>is_error=true</code> map to <code>"success"</code>; with this fix,
+    19/19 pass and error results render a red x-circle.
+  </p>
+  <pre style="background:#111;color:#eee;padding:1rem;overflow:auto;white-space:pre-wrap">=== ON MAIN LOGIC (getObservationResult without is_error branches) ===
+     × maps browser, glob, and grep tool failures to error 5ms
+     × maps planning and current-wire file editor failures to error 1ms
+     × maps editor errors and successful editor outcomes 1ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  __tests__/components/conversation-events/chat/event-content-helpers/get-observation-result.test.ts &gt; getObservationResult &gt; maps browser, glob, and grep tool failures to error
+AssertionError: expected &#x27;success&#x27; to be &#x27;error&#x27; // Object.is equality
+Expected: &quot;error&quot;
+Received: &quot;success&quot;
+ FAIL  __tests__/components/conversation-events/chat/event-content-helpers/get-observation-result.test.ts &gt; getObservationResult &gt; maps planning and current-wire file editor failures to error
+AssertionError: expected &#x27;success&#x27; to be &#x27;error&#x27; // Object.is equality
+Expected: &quot;error&quot;
+Received: &quot;success&quot;
+ FAIL  __tests__/components/conversation-events/chat/event-content-helpers/get-observation-result.test.ts &gt; getObservationResult &gt; maps editor errors and successful editor outcomes
+AssertionError: expected &#x27;success&#x27; to be &#x27;error&#x27; // Object.is equality
+Expected: &quot;error&quot;
+Received: &quot;success&quot;
+ Test Files  1 failed (1)
+      Tests  3 failed | 13 passed (16)
+
+=== WITH FIX ===
+
+&gt; @openhands/agent-canvas@1.20.0 test
+&gt; npm run make-i18n &amp;&amp; vitest run __tests__/components/conversation-events/chat/event-content-helpers/get-observation-result.test.ts __tests__/components/features/chat/success-indicator.test.tsx
+
+
+&gt; @openhands/agent-canvas@1.20.0 make-i18n
+&gt; node scripts/make-i18n-translations.cjs
+
+
+ RUN  v4.1.10 /workspace/OpenHands
+
+
+ Test Files  2 passed (2)
+      Tests  19 passed (19)
+   Start at  20:36:19
+   Duration  1.32s (transform 534ms, setup 892ms, import 152ms, tests 121ms, environment 1.12s)
+
+</pre>
+</body>
+</html>
