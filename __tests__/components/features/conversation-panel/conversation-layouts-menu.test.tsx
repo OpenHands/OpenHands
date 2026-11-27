@@ -9,6 +9,7 @@ import { UNNAMED_AUTOMATION_FACET } from "#/components/features/conversation-pan
 beforeEach(() => {
   useConversationPanelPreferencesStore.setState({
     organizeMode: "chronological",
+    groupBy: "location",
     conversationSort: "updated",
     threadScope: "all",
     showOlderConversations: true,
@@ -90,6 +91,35 @@ describe("ConversationLayoutsMenu", () => {
     expect(screen.getByTestId("layout-preset-by-workspace")).toHaveAttribute(
       "aria-checked",
       "true",
+    );
+  });
+
+  it("switches between grouping by location and by tag", async () => {
+    const user = userEvent.setup();
+    renderMenu();
+
+    await user.click(screen.getByTestId("layout-preset-by-tag"));
+    expect(screen.getByTestId("layout-preset-by-tag")).toHaveAttribute(
+      "aria-checked",
+      "true",
+    );
+    expect(useConversationPanelPreferencesStore.getState()).toMatchObject({
+      organizeMode: "grouped",
+      groupBy: "tag",
+    });
+    expect(screen.getByTestId("layout-preset-by-workspace")).toHaveAttribute(
+      "aria-checked",
+      "false",
+    );
+
+    await user.click(screen.getByTestId("layout-preset-by-workspace"));
+    expect(useConversationPanelPreferencesStore.getState()).toMatchObject({
+      organizeMode: "grouped",
+      groupBy: "location",
+    });
+    expect(screen.getByTestId("layout-preset-by-tag")).toHaveAttribute(
+      "aria-checked",
+      "false",
     );
   });
 

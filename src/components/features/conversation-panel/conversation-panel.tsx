@@ -63,10 +63,12 @@ import {
   applyTagConversationFilter,
   collectAutomationNameFacets,
   collectTagFacets,
+  formatTagFacetLabel,
   DEFAULT_OLDER_CONVERSATION_CUTOFF,
   filterOutPinnedConversations,
   getGroupDiscoveryConversationIds,
   groupConversations,
+  groupConversationsByTag,
   isOlderConversationCutoff,
   MAX_PAGES_PER_LOAD_MORE_CLICK,
   nestSubConversations,
@@ -189,6 +191,9 @@ export function ConversationPanel({
   const isInMobileDrawer = useBreakpoint(SIDEBAR_RAIL_COLLAPSE_MAX_WIDTH);
   const organizeMode = useConversationPanelPreferencesStore(
     (state) => state.organizeMode,
+  );
+  const groupBy = useConversationPanelPreferencesStore(
+    (state) => state.groupBy,
   );
   const conversationSort = useConversationPanelPreferencesStore(
     (state) => state.conversationSort,
@@ -743,6 +748,8 @@ export function ConversationPanel({
     () => ({
       emptyWorkspace: t(I18nKey.CONVERSATION_PANEL$NO_WORKSPACE),
       emptyRepository: t(I18nKey.CONVERSATION_PANEL$NO_REPOSITORY),
+      emptyTag: t(I18nKey.CONVERSATION_PANEL$NO_TAG),
+      formatTag: (facet: string) => formatTagFacetLabel(facet, t),
     }),
     [t],
   );
@@ -770,6 +777,13 @@ export function ConversationPanel({
     // Keep every loaded conversation in the group model. Folder discovery only
     // freezes the collapsed preview — expanding a folder must reach later-page
     // rows for that same workspace/repo.
+    if (groupBy === "tag") {
+      return groupConversationsByTag(
+        groupedSourceConversations,
+        conversationSort,
+        groupLabels,
+      );
+    }
     return groupConversations(
       groupedSourceConversations,
       activeBackend.kind,
@@ -780,6 +794,7 @@ export function ConversationPanel({
   }, [
     activeBackend.kind,
     conversationSort,
+    groupBy,
     groupLabels,
     groupedSourceConversations,
     allWorkspacesForGrouping,
@@ -793,12 +808,13 @@ export function ConversationPanel({
       groupedSourceConversations,
       conversationPageById,
       activeBackend.kind,
-      { forceIncludeConversationId: activeRootConversationId },
+      { forceIncludeConversationId: activeRootConversationId, groupBy },
     );
   }, [
     activeBackend.kind,
     activeRootConversationId,
     conversationPageById,
+    groupBy,
     groupedSourceConversations,
   ]);
 

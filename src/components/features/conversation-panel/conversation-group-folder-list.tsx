@@ -20,7 +20,7 @@ interface ConversationGroup {
   id: string;
   label: string;
   conversations: AppConversation[];
-  launch: ConversationGroupLaunch;
+  launch: ConversationGroupLaunch | null;
 }
 
 interface ConversationGroupFolderListProps {
@@ -182,7 +182,9 @@ export function ConversationGroupFolderList({
             handleDrop(group.id, computeDropPosition(event));
           }}
           onTogglePreviewExpanded={() => onToggleGroupPreviewExpanded(group.id)}
-          onLaunchFromGroup={() => onLaunchFromGroup(group.launch)}
+          onLaunchFromGroup={() => {
+            if (group.launch) onLaunchFromGroup(group.launch);
+          }}
           renderConversationCard={renderConversationCard}
         />
       ))}
