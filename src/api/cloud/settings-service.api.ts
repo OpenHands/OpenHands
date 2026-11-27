@@ -271,6 +271,11 @@ export interface CloudIntegrationsConfig {
   isOauthV2LoginEnabled: boolean;
   /** Whether the instance turns Factories on (`feature_flags.enable_factories`). */
   isFactoriesEnabled: boolean;
+  /**
+   * Whether the instance serves organization-approved Apps
+   * (`feature_flags.enable_canvas_apps`).
+   */
+  isCanvasAppsEnabled?: boolean;
 }
 
 export async function fetchCloudIntegrationsConfig(): Promise<CloudIntegrationsConfig> {
@@ -288,6 +293,7 @@ export async function fetchCloudIntegrationsConfig(): Promise<CloudIntegrationsC
       enable_service_accounts?: boolean;
       enable_oauth_v2_login?: boolean;
       enable_factories?: boolean;
+      enable_canvas_apps?: boolean;
     };
   }>({
     backend,
@@ -309,6 +315,7 @@ export async function fetchCloudIntegrationsConfig(): Promise<CloudIntegrationsC
       config.feature_flags?.enable_service_accounts === true,
     isOauthV2LoginEnabled: config.feature_flags?.enable_oauth_v2_login === true,
     isFactoriesEnabled: config.feature_flags?.enable_factories === true,
+    isCanvasAppsEnabled: config.feature_flags?.enable_canvas_apps === true,
   };
 }
 

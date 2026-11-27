@@ -1,6 +1,7 @@
 import {
   AgentServerClient,
   CanvasExtensionsClient,
+  CloudClient,
 } from "@openhands/typescript-client/clients";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import CanvasExtensionsService, {
@@ -17,6 +18,7 @@ import type { InstalledCanvasExtensionInfo } from "#/types/canvas-extension";
 vi.mock("@openhands/typescript-client/clients", () => ({
   AgentServerClient: vi.fn(),
   CanvasExtensionsClient: vi.fn(),
+  CloudClient: vi.fn(),
 }));
 
 const getBackendStatus = vi.fn();
@@ -31,6 +33,7 @@ const getServerInfo = vi.fn();
 const createAppBackendSession = vi.fn();
 const revokeAppBackendSession = vi.fn();
 const closeAppBackendClient = vi.fn();
+const cloudRequest = vi.fn();
 
 const localBackend: Backend = {
   id: "local",
@@ -38,6 +41,14 @@ const localBackend: Backend = {
   host: "http://127.0.0.1:8000",
   apiKey: "session-key",
   kind: "local",
+};
+
+const cloudBackend: Backend = {
+  id: "cloud",
+  name: "Cloud",
+  host: "https://app.example.test",
+  apiKey: "",
+  kind: "cloud",
 };
 
 const extension: InstalledCanvasExtensionInfo = {
@@ -93,6 +104,9 @@ beforeEach(() => {
       };
     } as never,
   );
+  vi.mocked(CloudClient).mockImplementation(function MockCloudClient() {
+    return { request: cloudRequest };
+  } as unknown as typeof CloudClient);
 });
 
 afterEach(() => {
@@ -435,3 +449,116 @@ it.each(["status", "revoke", "enable"] as const)(
     );
   },
 );
+
+describe("CanvasExtensionsService on a cloud backend with an organization selected", () => {
+  const appsPath = "/api/organizations/org-1/canvas-extensions";
+
+  beforeEach(() => {
+    setRegisteredBackends([cloudBackend]);
+    setActiveSelection({ backendId: cloudBackend.id, orgId: "org-1" });
+  });
+
+  it("lists the Apps approved for the organization", async () => {
+    // Arrange
+    cloudRequest.mockResolvedValue({ canvas_extensions: [extension] });
+
+    // Act
+    const installed = await CanvasExtensionsService.listInstalled();
+
+    // Assert
+    expect(installed).toEqual([extension]);
+    expect(cloudRequest).toHaveBeenCalledWith(
+      expect.objectContaining({
+        method: "GET",
+        path: `${appsPath}/installed`,
+        headers: { "X-Org-Id": "org-1" },
+      }),
+    );
+    expect(AgentServerClient).not.toHaveBeenCalled();
+  });
+
+  it("sends an App's coordinates as given and allows for the backend's clone", async () => {
+    // Arrange
+    const coordinates = {
+      source: "acme/canvas-apps",
+      ref: "v1.2.0",
+      repo_path: "apps/board",
+    };
+    cloudRequest.mockResolvedValue(extension);
+
+    // Act
+    await CanvasExtensionsService.install(coordinates);
+
+    // Assert
+    expect(cloudRequest).toHaveBeenCalledWith(
+      expect.objectContaining({
+        method: "POST",
+        path: `${appsPath}/install`,
+        body: coordinates,
+        timeoutSeconds: 120,
+      }),
+    );
+  });
+
+  it.each([true, false])(
+    "switches an App to enabled=%s for the current user",
+    async (enabled) => {
+      // Arrange
+      cloudRequest.mockResolvedValue({ name: "a/b", enabled });
+
+      // Act
+      const state = await CanvasExtensionsService.setEnabled(
+        "a/b",
+        enabled,
+        undefined,
+        cloudBackend,
+      );
+
+      // Assert
+      expect(state).toEqual({ name: "a/b", enabled });
+      expect(cloudRequest).toHaveBeenCalledWith(
+        expect.objectContaining({
+          method: "PATCH",
+          path: `${appsPath}/installed/a%2Fb`,
+          body: { enabled },
+        }),
+      );
+    },
+  );
+
+  it("removes an App from the organization", async () => {
+    // Arrange
+    cloudRequest.mockResolvedValue({ message: "uninstalled" });
+
+    // Act
+    await CanvasExtensionsService.uninstall(extension.name);
+
+    // Assert
+    expect(cloudRequest).toHaveBeenCalledWith(
+      expect.objectContaining({
+        method: "DELETE",
+        path: `${appsPath}/installed/demo-extension`,
+      }),
+    );
+  });
+
+  it("fetches the bundle the organization's backend stored", async () => {
+    // Arrange
+    cloudRequest.mockResolvedValue("export const activate = () => {};");
+
+    // Act
+    const bundle = await CanvasExtensionsService.fetchBundle(
+      extension.name,
+      cloudBackend,
+    );
+
+    // Assert
+    expect(bundle).toContain("activate");
+    expect(cloudRequest).toHaveBeenCalledWith(
+      expect.objectContaining({
+        method: "GET",
+        path: `${appsPath}/installed/demo-extension/bundle`,
+      }),
+    );
+  });
+});

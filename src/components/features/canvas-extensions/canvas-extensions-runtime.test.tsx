@@ -197,6 +197,31 @@ describe("CanvasExtensionsRuntimeProvider", () => {
     expect(disposeActivation).toHaveBeenCalledTimes(1);
   });
 
+  it("says the App is unavailable once it is removed while its page is open", async () => {
+    // Arrange
+    const { queryClient } = renderRuntime(
+      async () => ({
+        activate: (host: CanvasExtensionHost) => {
+          host.registerPage("dashboard", ({ container }) => {
+            container.append(document.createTextNode("Dashboard mounted"));
+          });
+        },
+      }),
+      "/extensions/demo-extension/dashboard",
+    );
+    await screen.findByText("Dashboard mounted");
+
+    // Act
+    vi.mocked(CanvasExtensionsService.listInstalled).mockResolvedValue([]);
+    await queryClient.invalidateQueries();
+
+    // Assert
+    expect(
+      await screen.findByText("SETTINGS$APPS_PAGE_UNAVAILABLE"),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Dashboard mounted")).not.toBeInTheDocument();
+  });
+
   it("rejects registrations that were not declared in the manifest", async () => {
     const moduleLoader = vi.fn().mockResolvedValue({
       activate: (host: CanvasExtensionHost) => {

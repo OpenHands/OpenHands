@@ -19,9 +19,12 @@ import {
   CanvasExtensionsUnsupportedError,
   isCanvasExtensionsUnsupportedError,
 } from "#/api/canvas-extensions-service";
-import { isNoBackend } from "#/api/backend-registry/active-store";
 import { useActiveBackend } from "#/contexts/active-backend-context";
-import { useCanvasExtensions } from "#/hooks/query/use-canvas-extensions";
+import {
+  useCanvasExtensions,
+  useCanvasExtensionsSupported,
+} from "#/hooks/query/use-canvas-extensions";
+import { useCanManageCanvasApps } from "#/hooks/use-can-manage-canvas-apps";
 import {
   useRefreshCanvasExtension,
   useSetCanvasExtensionEnabled,
@@ -121,11 +124,11 @@ export default function CanvasExtensionsScreen() {
   const uninstall = useUninstallCanvasExtension();
   const refresh = useRefreshCanvasExtension();
 
-  const backendCanSupportExtensions =
-    !isNoBackend(backend) && backend.kind === "local";
+  const support = useCanvasExtensionsSupported();
+  const canManage = useCanManageCanvasApps();
   const unsupported =
-    !backendCanSupportExtensions ||
-    isCanvasExtensionsUnsupportedError(query.error);
+    !support.isLoading &&
+    (!support.isSupported || isCanvasExtensionsUnsupportedError(query.error));
   const isBusy =
     setEnabled.isPending || uninstall.isPending || refresh.isPending;
 
@@ -199,18 +202,20 @@ export default function CanvasExtensionsScreen() {
                 <ExternalLink className="size-3.5" aria-hidden />
               </a>
             </div>
-            <BrandButton
-              type="button"
-              variant="secondary"
-              testId="canvas-extensions-add-button"
-              isDisabled={
-                !backendCanSupportExtensions || unsupported || query.isLoading
-              }
-              className="flex-shrink-0 whitespace-nowrap"
-              onClick={() => setShowAddModal(true)}
-            >
-              {t(I18nKey.SETTINGS$APPS_ADD_BUTTON)}
-            </BrandButton>
+            {canManage && (
+              <BrandButton
+                type="button"
+                variant="secondary"
+                testId="canvas-extensions-add-button"
+                isDisabled={
+                  !support.isSupported || unsupported || query.isLoading
+                }
+                className="flex-shrink-0 whitespace-nowrap"
+                onClick={() => setShowAddModal(true)}
+              >
+                {t(I18nKey.SETTINGS$APPS_ADD_BUTTON)}
+              </BrandButton>
+            )}
           </div>
 
           <div className="rounded-xl border border-warning/40 bg-warning-soft px-4 py-3 text-sm text-warning-soft-foreground dark:border-warning/30 dark:bg-warning/5 dark:text-feedback-warning">
@@ -236,7 +241,7 @@ export default function CanvasExtensionsScreen() {
                         .message}
               </p>
             </div>
-          ) : query.isLoading ? (
+          ) : support.isLoading || query.isLoading ? (
             <div className="flex flex-col gap-4">
               {[1, 2].map((index) => (
                 <div
@@ -280,9 +285,16 @@ export default function CanvasExtensionsScreen() {
                         setPendingAction({ type: "enable", extension });
                       }
                     }}
-                    onRefresh={() => refresh.mutate(extension)}
-                    onUninstall={() =>
-                      setPendingAction({ type: "uninstall", extension })
+                    onRefresh={
+                      backend.kind === "cloud"
+                        ? undefined
+                        : () => refresh.mutate(extension)
+                    }
+                    onUninstall={
+                      canManage
+                        ? () =>
+                            setPendingAction({ type: "uninstall", extension })
+                        : undefined
                     }
                   />
                 ))}
