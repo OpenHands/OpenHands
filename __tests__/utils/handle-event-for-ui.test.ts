@@ -19,6 +19,7 @@ import {
   appendStreamingDeltas,
   clearStreamingSlots,
   handleEventForUI,
+  handleEventsForUI,
   openStreamingSlot,
 } from "#/utils/handle-event-for-ui";
 
@@ -163,6 +164,53 @@ describe("handleEventForUI", () => {
     tool_call_id: action.tool_call_id,
     rejection_reason: "User rejected the action",
     action_id: action.id,
+  });
+
+  it("batch projection keeps terminal observations after their action index is retired", () => {
+    const secondObservation = {
+      ...mockObservationEvent,
+      id: "second-observation",
+    };
+    const initial = [mockMessageEvent];
+
+    const result = handleEventsForUI(
+      [mockActionEvent, mockObservationEvent, secondObservation],
+      initial,
+    );
+
+    expect(result).toEqual([
+      mockMessageEvent,
+      mockObservationEvent,
+      secondObservation,
+    ]);
+    expect(initial).toEqual([mockMessageEvent]);
+  });
+
+  it("batch projection retains thought and finish actions while resolving a rejected tool", () => {
+    const thought: ActionEvent = {
+      ...mockActionEvent,
+      id: "thought",
+      action: { kind: "ThinkAction", thought: "Consider the next step" },
+    };
+    const rejection = makeRejection(mockActionEvent);
+    const finishObservation: ObservationEvent = {
+      ...mockObservationEvent,
+      id: "finish-observation",
+      action_id: mockFinishActionEvent.id,
+      observation: { kind: "FinishObservation", content: [], is_error: false },
+    };
+
+    const result = handleEventsForUI([
+      thought,
+      makeRejection(thought),
+      mockFinishActionEvent,
+      finishObservation,
+      makeRejection(mockFinishActionEvent),
+      mockActionEvent,
+      rejection,
+    ]);
+
+    expect(result).toEqual([thought, mockFinishActionEvent, rejection]);
   });
 
   it("should replace corresponding action with its UserRejectObservation", () => {
