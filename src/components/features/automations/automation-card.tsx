@@ -17,7 +17,10 @@ import { formatRelativeTime } from "#/utils/format-relative-time";
 import { buildAutomationMetadataPills } from "./build-automation-pills";
 import { buildAutomationMenuItems } from "./build-automation-menu-items";
 import { automationIconActionButtonClassName } from "./automation-action-button-classes";
-import { AutomationRunStats } from "./automation-run-insights";
+import {
+  AutomationPendingRunCount,
+  AutomationRunStats,
+} from "./automation-run-insights";
 import { automationCardStatusStripClassName } from "./automation-view-mode";
 import {
   extensionModuleCardInteractiveClassName,
@@ -232,6 +235,11 @@ export function AutomationCard({
                   status={display?.badgeStatus ?? latestRun.status}
                   iconOnly
                   showLabel
+                />
+
+                <AutomationPendingRunCount
+                  automationId={automation.id}
+                  state={insights.state}
                 />
 
                 {showPhase ? (
