@@ -747,6 +747,9 @@ async function cmdLaunch({ flags }) {
     DO_NOT_TRACK: "1",
     VITE_DO_NOT_TRACK: "1",
     OPENHANDS_SUPPRESS_BANNER: "1",
+    // The loopback ingress answers 403 to a Host that is neither loopback nor
+    // listed here (OpenHands/OpenHands#20061), so the run's lanUrl needs it.
+    OH_ALLOWED_HOSTS: LAN_HOST,
   });
   if (flags["sdk-path"])
     env.OH_AGENT_SERVER_LOCAL_PATH = resolve(flags["sdk-path"]);
@@ -978,6 +981,8 @@ function spawnLauncher(run) {
   env.LOCAL_BACKEND_API_KEY = readFileSync(join(priv, "session-key"), "utf8");
   env.OH_SECRET_KEY = readFileSync(join(priv, "encryption-key"), "utf8");
   if (saved.TMUX_TMPDIR) env.TMUX_TMPDIR = tmuxDirFor(run.dir);
+  // A run launched before lanUrl needed it gets it on its next restart.
+  env.OH_ALLOWED_HOSTS ??= LAN_HOST;
   const logFd = openSync(join(priv, "stack.log"), "a", 0o600);
   const child = spawn(process.execPath, run.launcherArgs, {
     cwd: repoRoot,
@@ -5179,7 +5184,9 @@ resolves to 127.0.0.1 itself. A page opened there is plain HTTP outside a
 secure context, as it is for a user who reaches the app over a LAN or VPN
 address: \`browser goto "$OH_VERIFY_LAN_URL/"\` (no --allow-external), then
 \`browser eval isSecureContext\` reads false. It needs no network interface
-and the services stay bound to loopback.
+and the services stay bound to loopback: launch lists the name in the
+launcher's OH_ALLOWED_HOSTS, without which the loopback ingress and static
+server answer 403 Forbidden to it.
 Idempotent: an alive current run is reused unless --new is given.
 --print-run prints only the run directory, for
   export OH_VERIFY_RUN=$(control-openhands launch --new --print-run)
