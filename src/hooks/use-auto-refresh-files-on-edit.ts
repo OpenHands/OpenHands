@@ -1,8 +1,10 @@
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 
 import { useEventStore, type OHEvent } from "#/stores/use-event-store";
 import { useWorkspaceMutationCounter } from "#/stores/use-workspace-mutation-counter";
+
+const REFRESH_THROTTLE_MS = 2000;
 
 // `kind` values we treat as a file-mutation observation.
 const FILE_EDIT_OBSERVATION_KINDS = new Set([
@@ -65,8 +67,9 @@ function isBashObservation(event: OHEvent): boolean {
  * open.
  *
  * Mount this hook inside any component that should drive auto-refresh —
- * the Files tab is the obvious caller. Multiple mounts are safe because
- * React Query coalesces overlapping invalidations.
+ * the Files tab is the obvious caller. Each mount refreshes at most once per
+ * `REFRESH_THROTTLE_MS`, so a burst of events (such as a history replay)
+ * produces one leading and one trailing refresh rather than one per event.
  */
 export function useAutoRefreshFilesOnEdit(): void {
   const queryClient = useQueryClient();
@@ -102,6 +105,50 @@ export function useAutoRefreshFilesOnEdit(): void {
   //    store clears.
   const processedIdsRef = useRef<Set<string | number>>(new Set());
   const processedEventsRef = useRef<WeakSet<OHEvent>>(new WeakSet());
+  const pendingRef = useRef({ fileEdits: false, bashCommands: false });
+  const lastRefreshAtRef = useRef(Number.NEGATIVE_INFINITY);
+  const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const refresh = useCallback(() => {
+    refreshTimerRef.current = null;
+    lastRefreshAtRef.current = Date.now();
+    const { fileEdits, bashCommands } = pendingRef.current;
+    pendingRef.current = { fileEdits: false, bashCommands: false };
+
+    // Editor and bash mutations both change what the git Diff view shows —
+    // including the per-file diff content of an already-expanded file.
+    // The commits list refreshes too (a `git commit` arrives as a bash
+    // observation); per-commit queries (`commit_changes` /
+    // `commit_file_diff`) are sha-addressed and immutable, so they are
+    // deliberately NOT invalidated.
+    queryClient.invalidateQueries({ queryKey: ["file_changes"] });
+    queryClient.invalidateQueries({ queryKey: ["file_diff"] });
+    queryClient.invalidateQueries({ queryKey: ["git_commits"] });
+
+    if (fileEdits || bashCommands) {
+      queryClient.invalidateQueries({ queryKey: ["workspace-files"] });
+    }
+
+    if (fileEdits) {
+      queryClient.invalidateQueries({ queryKey: ["workspace-file-content"] });
+      // Force iframes / <img> tags pointing at the static workspace
+      // fileserver to re-fetch. Without this they happily keep showing the
+      // stale (browser-cached) bytes even after the agent has rewritten the
+      // file on disk — e.g. tweaking style.css would silently have no
+      // visible effect on the rendered index.html until the user reloaded
+      // the whole canvas.
+      bumpWorkspaceMutationCounter();
+    }
+  }, [queryClient, bumpWorkspaceMutationCounter]);
+
+  useEffect(
+    () => () => {
+      if (refreshTimerRef.current !== null) {
+        clearTimeout(refreshTimerRef.current);
+      }
+    },
+    [],
+  );
 
   useEffect(() => {
     let hasNewFileEdits = false;
@@ -127,29 +174,15 @@ export function useAutoRefreshFilesOnEdit(): void {
 
     if (!hasNewFileEdits && !hasNewBashCommands) return;
 
-    // Editor and bash mutations both change what the git Diff view shows —
-    // including the per-file diff content of an already-expanded file.
-    // The commits list refreshes too (a `git commit` arrives as a bash
-    // observation); per-commit queries (`commit_changes` /
-    // `commit_file_diff`) are sha-addressed and immutable, so they are
-    // deliberately NOT invalidated.
-    queryClient.invalidateQueries({ queryKey: ["file_changes"] });
-    queryClient.invalidateQueries({ queryKey: ["file_diff"] });
-    queryClient.invalidateQueries({ queryKey: ["git_commits"] });
+    pendingRef.current.fileEdits ||= hasNewFileEdits;
+    pendingRef.current.bashCommands ||= hasNewBashCommands;
+    if (refreshTimerRef.current !== null) return;
 
-    if (hasNewFileEdits || hasNewBashCommands) {
-      queryClient.invalidateQueries({ queryKey: ["workspace-files"] });
+    const wait = lastRefreshAtRef.current + REFRESH_THROTTLE_MS - Date.now();
+    if (wait <= 0) {
+      refresh();
+    } else {
+      refreshTimerRef.current = setTimeout(refresh, wait);
     }
-
-    if (hasNewFileEdits) {
-      queryClient.invalidateQueries({ queryKey: ["workspace-file-content"] });
-      // Force iframes / <img> tags pointing at the static workspace
-      // fileserver to re-fetch. Without this they happily keep showing the
-      // stale (browser-cached) bytes even after the agent has rewritten the
-      // file on disk — e.g. tweaking style.css would silently have no
-      // visible effect on the rendered index.html until the user reloaded
-      // the whole canvas.
-      bumpWorkspaceMutationCounter();
-    }
-  }, [events, queryClient, bumpWorkspaceMutationCounter]);
+  }, [events, refresh]);
 }

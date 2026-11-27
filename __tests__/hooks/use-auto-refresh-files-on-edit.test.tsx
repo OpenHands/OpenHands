@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { act, renderHook } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import React from "react";
@@ -12,6 +12,12 @@ function makeWrapper(client: QueryClient) {
   return ({ children }: { children: React.ReactNode }) => (
     <QueryClientProvider client={client}>{children}</QueryClientProvider>
   );
+}
+
+function advancePastRefreshThrottle() {
+  act(() => {
+    vi.advanceTimersByTime(2000);
+  });
 }
 
 function makeObservationEvent(
@@ -40,12 +46,17 @@ function makeObservationEvent(
 
 describe("useAutoRefreshFilesOnEdit", () => {
   beforeEach(() => {
+    vi.useFakeTimers();
     act(() => {
       useEventStore.getState().clearEvents();
       // Reset the workspace mutation counter so per-test counter assertions
       // don't see ticks bled over from earlier tests.
       useWorkspaceMutationCounter.setState({ count: 0 });
     });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it("invalidates workspace queries when a mutating file editor observation arrives", () => {
@@ -206,6 +217,7 @@ describe("useAutoRefreshFilesOnEdit", () => {
     });
     expect(useWorkspaceMutationCounter.getState().count).toBe(1);
 
+    advancePastRefreshThrottle();
     act(() => {
       useEventStore
         .getState()
@@ -269,6 +281,7 @@ describe("useAutoRefreshFilesOnEdit", () => {
     expect(callsAfterInitial).toBeGreaterThan(0);
     const countAfterInitial = useWorkspaceMutationCounter.getState().count;
     expect(countAfterInitial).toBe(1);
+    advancePastRefreshThrottle();
 
     // Now insert an OLDER event (id "5" → earliest timestamp). The store
     // re-sorts so the events array becomes [e5, e10, e20]. The previous
@@ -332,11 +345,13 @@ describe("useAutoRefreshFilesOnEdit", () => {
     });
     expect(useWorkspaceMutationCounter.getState().count).toBe(1);
 
+    advancePastRefreshThrottle();
     act(() => {
       useEventStore.getState().addEvent(idlessEvent(2));
     });
     expect(useWorkspaceMutationCounter.getState().count).toBe(2);
 
+    advancePastRefreshThrottle();
     act(() => {
       useEventStore.getState().addEvent(idlessEvent(3));
     });
@@ -429,6 +444,39 @@ describe("useAutoRefreshFilesOnEdit", () => {
       useEventStore.getState().addEvent({ ...numericEvent });
     });
     expect(useWorkspaceMutationCounter.getState().count).toBe(afterFirst);
+  });
+
+  it("coalesces a burst of observations into one leading and one trailing file-tree refresh", () => {
+    // Arrange
+    const client = new QueryClient();
+    const spy = vi.spyOn(client, "invalidateQueries");
+    renderHook(() => useAutoRefreshFilesOnEdit(), {
+      wrapper: makeWrapper(client),
+    });
+    const workspaceFileRefreshes = () =>
+      spy.mock.calls.filter(
+        (call) =>
+          (call[0] as { queryKey: unknown[] }).queryKey[0] ===
+          "workspace-files",
+      ).length;
+
+    // Act — a history replay delivers many bash observations back to back.
+    for (let i = 1; i <= 50; i += 1) {
+      act(() => {
+        useEventStore
+          .getState()
+          .addEvent(
+            makeObservationEvent(String(i), "TerminalObservation", "ls"),
+          );
+      });
+    }
+
+    // Assert
+    expect(workspaceFileRefreshes()).toBe(1);
+    advancePastRefreshThrottle();
+    expect(workspaceFileRefreshes()).toBe(2);
+    advancePastRefreshThrottle();
+    expect(workspaceFileRefreshes()).toBe(2);
   });
 
   it("only invalidates once per new event batch", () => {
