@@ -20,6 +20,15 @@ describe("formatEventTimestamp", () => {
       formatEventTimestamp("2026-04-16T19:32:29.828069Z", "en"),
     );
   });
+  it("preserves explicit timezone offsets (+00:00, -03:00, +02:00)", () => {
+    const timestamp = "2026-11-08T22:00:00.123456-03:00";
+    expect(formatEventTimestamp(timestamp, "en")).toBe(
+      new Date(timestamp).toLocaleString("en", {
+        dateStyle: "medium",
+        timeStyle: "short",
+      }),
+    );
+  });
 });
 
 describe("formatRelativeEventTimestamp", () => {
@@ -95,5 +104,61 @@ describe("formatRelativeEventTimestamp", () => {
         now,
       ),
     ).toBe("Just now");
+  });
+
+  it("renders offset-aware timestamps from local and remote agent servers as current and preserves UTC fallback", () => {
+    // Current instant is 2026-11-09T01:00:20Z (22:00:20 local wall clock for a UTC-3 user)
+    const testNow = Date.parse("2026-11-09T01:00:20Z");
+
+    // Local agent-server emitting explicit local offset (-03:00) or UTC (+00:00)
+    // for a message sent 20s ago:
+    expect(
+      formatRelativeEventTimestamp(
+        "2026-11-08T22:00:00.000-03:00",
+        "en",
+        "Just now",
+        testNow,
+      ),
+    ).toBe("Just now");
+    expect(
+      formatRelativeEventTimestamp(
+        "2026-11-09T01:00:00.000+00:00",
+        "en",
+        "Just now",
+        testNow,
+      ),
+    ).toBe("Just now");
+
+    // Message sent 5m ago with explicit offset:
+    expect(
+      formatRelativeEventTimestamp(
+        "2026-11-08T21:55:20.000-03:00",
+        "en",
+        "Just now",
+        testNow,
+      ),
+    ).toBe("5 minutes ago");
+
+    // Remote agent-server in different zone (UTC+2 observed from anywhere):
+    // 03:00:00+02:00 = 01:00:00Z -> 20s ago
+    expect(
+      formatRelativeEventTimestamp(
+        "2026-11-09T03:00:00.000+02:00",
+        "en",
+        "Just now",
+        testNow,
+      ),
+    ).toBe("Just now");
+
+    // Legacy naive timestamp without offset falls back to UTC:
+    // 22:00 local without offset is read as 22:00Z, which is 3 hours before 01:00Z (the issue repro)
+    expect(
+      formatRelativeEventTimestamp(
+        "2026-11-08T22:00:00.000",
+        "en",
+        "Just now",
+        testNow,
+      ),
+    ).toBe("3 hours ago");
   });
 });
