@@ -21,8 +21,7 @@ interface ChatInterfaceWrapperProps {
   composerPlaceholder?: string;
 }
 
-const THREAD_CLASSNAME =
-  "w-full min-w-0 max-w-200 h-full flex flex-col min-h-0";
+const THREAD_CLASSNAME = "w-full min-w-0 h-full flex flex-col min-h-0";
 
 export function ChatInterfaceWrapper({
   isRightPanelShown: _isRightPanelShown,
