@@ -106,6 +106,7 @@ export function parseArgs(argv = process.argv.slice(2), env = process.env) {
     vscodeBasePath: null,
     // Also settable via the --disable-telemetry flag below.
     disableTelemetry: isEnvFlagEnabled(env.AGENT_CANVAS_DISABLE_TELEMETRY),
+    skipOnboarding: isEnvFlagEnabled(env.AGENT_CANVAS_SKIP_ONBOARDING),
   };
 
   for (let i = 0; i < argv.length; i++) {
@@ -166,6 +167,9 @@ export function parseArgs(argv = process.argv.slice(2), env = process.env) {
         break;
       case "--disable-telemetry":
         config.disableTelemetry = true;
+        break;
+      case "--skip-onboarding":
+        config.skipOnboarding = true;
         break;
       case "--allow-lan-session-key":
         config.allowLanSessionKey = true;
@@ -287,6 +291,10 @@ OPTIONS:
                                baked in. Injects
                                window.__AGENT_CANVAS_DO_NOT_TRACK__ = true.
                                Equivalent to AGENT_CANVAS_DISABLE_TELEMETRY=1.
+  --skip-onboarding           Skip first-run onboarding on a pre-configured
+                               shared server. Does not skip authentication or
+                               locked-to-Cloud login. Equivalent to
+                               AGENT_CANVAS_SKIP_ONBOARDING=1.
   --base-path <path>           Mount the SPA under <path> (default: /).
                                For example, --base-path /canvas serves
                                index.html and assets under /canvas.
@@ -387,6 +395,7 @@ function makeConfigInjectionScript(
   basePath,
   vscodeBasePath,
   disableTelemetry,
+  skipOnboarding,
 ) {
   const parts = [];
 
@@ -446,6 +455,10 @@ function makeConfigInjectionScript(
     parts.push(`window.__AGENT_CANVAS_DO_NOT_TRACK__=true;`);
   }
 
+  if (skipOnboarding) {
+    parts.push(`window.__AGENT_CANVAS_SKIP_ONBOARDING__=true;`);
+  }
+
   if (parts.length === 0) return "";
 
   return `<script>(function(){${parts.join("")}}());</script>`;
@@ -467,6 +480,7 @@ async function serveInjectedIndexHtml(
     basePath,
     vscodeBasePath,
     disableTelemetry,
+    skipOnboarding,
   } = {},
 ) {
   let content;
@@ -484,6 +498,7 @@ async function serveInjectedIndexHtml(
     basePath,
     vscodeBasePath,
     disableTelemetry,
+    skipOnboarding,
   );
   // Inject right before </head> so the key is available before any app code runs.
   // replace() targets the first (and only) </head> in well-formed HTML.
@@ -534,6 +549,7 @@ function needsRuntimeInjection(injectionOpts) {
     injectionOpts.lockToCloud ||
     injectionOpts.vscodeBasePath ||
     injectionOpts.disableTelemetry ||
+    injectionOpts.skipOnboarding ||
     (injectionOpts.basePath && injectionOpts.basePath !== "/"),
   );
 }
@@ -689,6 +705,7 @@ export function startStaticServer(config) {
     basePath: normalizeBasePath(config.basePath),
     vscodeBasePath: config.vscodeBasePath || null,
     disableTelemetry: config.disableTelemetry || false,
+    skipOnboarding: config.skipOnboarding || false,
   };
   const basePath = injectionOpts.basePath;
   const rejectPrefixes = config.rejectPrefixes ?? [];

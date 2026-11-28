@@ -75,6 +75,10 @@ Public skills are loaded from the `@openhands/extensions` npm package at build t
 Bundled catalog skills use the persisted `enabled_skills` allow-list defaulted from `DEFAULT_ENABLED_SKILL_NAMES`. User and project skills remain enabled unless listed in `disabled_skills`. Keep this logic centralized in `src/utils/skill-enablement.ts`. The Agent Server no longer clones the extensions repository or uses `EXTENSIONS_REF` for public skills.
 
 
+## Onboarding
+
+- `AGENT_CANVAS_SKIP_ONBOARDING=1|true` (or static server `--skip-onboarding`) injects an operator opt-in for pre-configured shared servers. Both first-run gates read `isOnboardingSkippedByOperator()`; it never writes `openhands-onboarded` or changes the sidebar checklist's persisted completion state. The root ignores it in locked-to-Cloud mode, authentication remains required, and `OnboardingHost` keeps `?previewOnboardingStep=0..3` ahead of the skip gate.
+
 ## Shared motion recipes
 
 `src/utils/form-control-classes.ts` uses named shell and transform recipes.
