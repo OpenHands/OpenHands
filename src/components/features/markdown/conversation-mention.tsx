@@ -16,10 +16,23 @@ const CONVERSATION_MENTION =
 
 const CONVERSATION_SCHEME = /^conversation:/i;
 
-/** The conversation id a link points at, or null for any other link. */
+/**
+ * The conversation id a link points at, or null for any other link. Mentions
+ * carry the id as 32 hex digits; it comes back in the dashed form Canvas uses
+ * for conversation routes, so the opened page matches the conversation list
+ * (current row, event stream) as if it had been opened from the sidebar.
+ */
 export function conversationMentionId(href: string | undefined | null) {
   const match = CONVERSATION_MENTION.exec(href ?? "");
-  return match ? match[1].toLowerCase().replace(/-/g, "") : null;
+  if (!match) return null;
+  const hex = match[1].toLowerCase().replace(/-/g, "");
+  return [
+    hex.slice(0, 8),
+    hex.slice(8, 12),
+    hex.slice(12, 16),
+    hex.slice(16, 20),
+    hex.slice(20),
+  ].join("-");
 }
 
 const MENTION_TITLE_MAX = 80;
