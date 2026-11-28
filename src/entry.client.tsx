@@ -15,6 +15,10 @@ import { installMarsWebBridge } from "./api/mars/mars-web-bridge";
 import { waitForI18n } from "./i18n";
 import { shouldStartMockWorker } from "./mocks/should-start-mock-worker";
 import { withBasePathSlash } from "./utils/base-path-url";
+import { installBrowserTranslationDomPatch } from "./utils/browser-translation-dom-patch";
+
+// Guard DOM removal/insertion against browser translation mutations (#19755).
+installBrowserTranslationDomPatch();
 
 // Sign-in lands on the bare base path; the router only matches it with a
 // trailing slash, so add the slash before hydrating.

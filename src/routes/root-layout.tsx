@@ -105,7 +105,10 @@ function MobileNavBackgroundContent({
 function ErrorShell({ children }: { children: React.ReactNode }) {
   const showTitleBarBand = useShowTitleBarBand();
   return (
-    <div className={cn(showTitleBarBand && "app-shell-titlebar-inset")}>
+    <div
+      translate="no"
+      className={cn(showTitleBarBand && "app-shell-titlebar-inset")}
+    >
       <TitleBarDragRegion />
       {children}
     </div>
