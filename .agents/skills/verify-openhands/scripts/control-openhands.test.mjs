@@ -2175,7 +2175,11 @@ test.skipIf(process.platform === "win32")(
     });
     let childPid;
     try {
-      for (let attempts = 0; attempts < 50 && !existsSync(ownBeat); attempts++)
+      for (
+        let attempts = 0;
+        attempts < 50 && !(existsSync(ownBeat) && existsSync(otherBeat));
+        attempts++
+      )
         await delay(20);
       childPid = Number(readFileSync(childPidFile, "utf8"));
       assert.ok(existsSync(ownBeat) && existsSync(otherBeat));
