@@ -45,8 +45,16 @@ vi.mock("#/components/shared/action-tooltip", () => ({
 }));
 
 vi.mock("#/components/shared/risk-alert", () => ({
-  RiskAlert: ({ content, title }: { content: ReactNode; title: string }) => (
-    <div data-testid="risk-alert">
+  RiskAlert: ({
+    content,
+    severity,
+    title,
+  }: {
+    content: ReactNode;
+    severity: string;
+    title: string;
+  }) => (
+    <div data-testid="risk-alert" data-severity={severity}>
       {title}: {content}
     </div>
   ),
@@ -202,6 +210,10 @@ describe("conversation confirmation controls", () => {
 
     render(<ConversationConfirmationButtons />);
 
+    expect(screen.getByTestId("risk-alert")).toHaveAttribute(
+      "data-severity",
+      "high",
+    );
     expect(screen.getByTestId("risk-alert")).toHaveTextContent(
       "COMMON$HIGH_RISK: CHAT_INTERFACE$HIGH_RISK_WARNING",
     );
@@ -211,6 +223,34 @@ describe("conversation confirmation controls", () => {
       conversationId: "conv-1",
       conversationUrl: "",
       sessionApiKey: null,
+      accept: true,
+    });
+  });
+
+  it("shows medium-risk alert for a MEDIUM-labeled action", () => {
+    setupState();
+    eventState.events = [actionEvent("medium-action", SecurityRisk.MEDIUM)];
+    activeConversationState.data = {
+      id: "conv-1",
+      conversation_url: "https://runtime.example.com",
+      session_api_key: "session-key",
+    };
+
+    render(<ConversationConfirmationButtons />);
+
+    expect(screen.getByTestId("risk-alert")).toHaveAttribute(
+      "data-severity",
+      "medium",
+    );
+    expect(screen.getByTestId("risk-alert")).toHaveTextContent(
+      "COMMON$MEDIUM_RISK: CHAT_INTERFACE$MEDIUM_RISK_WARNING",
+    );
+    fireEvent.click(screen.getByTestId("action-confirm-button"));
+    expect(addSubmittedEventIdMock).toHaveBeenCalledWith("medium-action");
+    expect(respondToConfirmationMock).toHaveBeenCalledWith({
+      conversationId: "conv-1",
+      conversationUrl: "https://runtime.example.com",
+      sessionApiKey: "session-key",
       accept: true,
     });
   });

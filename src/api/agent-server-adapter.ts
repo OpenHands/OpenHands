@@ -838,6 +838,10 @@ function getConversationConfirmationPolicy(
   }
 
   if (conversationSettings.security_analyzer === "llm") {
+    // threshold: "HIGH" with confirm_unknown: true is intentional on the Canvas
+    // side; elevating unrequested sudo, --break-system-packages, TLS-off edits,
+    // and workspace-credential reuse to HIGH belongs in software-agent-sdk
+    // (LLMSecurityAnalyzer / PolicyRailSecurityAnalyzer / PatternSecurityAnalyzer).
     return { kind: "ConfirmRisky", threshold: "HIGH", confirm_unknown: true };
   }
 

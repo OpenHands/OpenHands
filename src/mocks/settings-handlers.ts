@@ -399,6 +399,8 @@ const MOCK_CONVERSATION_SETTINGS_SCHEMA: NonNullable<
           default: "llm",
           choices: [
             { label: "llm", value: "llm" },
+            { label: "pattern", value: "pattern" },
+            { label: "policy_rail", value: "policy_rail" },
             { label: "none", value: "none" },
           ],
           depends_on: ["confirmation_mode"],
@@ -757,7 +759,7 @@ export const SETTINGS_HANDLERS = [
       agents: ["CodeActAgent"],
       default_agent: "CodeActAgent",
       models: MOCK_MODELS,
-      security_analyzers: ["llm", "none"],
+      security_analyzers: ["llm", "pattern", "policy_rail", "none"],
     }),
   ),
 
