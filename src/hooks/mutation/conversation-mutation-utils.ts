@@ -110,6 +110,24 @@ export const startGoal = async (
 };
 
 /**
+ * Force condensation ("compact") of a V1 conversation's history via
+ * `POST /api/conversations/{id}/condense`. The condensed history replaces the
+ * running context on the agent server; the client only waits for the call to
+ * finish.
+ */
+export const condenseConversation = async (
+  conversationId: string,
+): Promise<void> => {
+  const { conversationUrl, sessionApiKey } =
+    await fetchConversationData(conversationId);
+  await AgentServerConversationService.condenseConversation(
+    conversationId,
+    conversationUrl,
+    sessionApiKey,
+  );
+};
+
+/**
  * Stop the active `/goal` loop. The backend only cancels the background loop
  * (recording an `interrupted` status so {@link resumeGoal} can continue it) and
  * deliberately leaves the in-flight agent turn running, so callers should also
