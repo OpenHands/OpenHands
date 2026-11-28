@@ -359,6 +359,90 @@ describe("useLoadOlderEvents", () => {
     });
   });
 
+  it("anchors on the oldest main event when planner events are older", async () => {
+    // The planner socket replays its whole log into the same store, so its
+    // events can predate the main conversation's REST tail.
+    act(() => {
+      useEventStore
+        .getState()
+        .addEvents([makeEvent("evt-main-tail", "2024-06-01T00:00:00Z")]);
+      useEventStore.getState().addEvent({
+        ...makeEvent("evt-planner", "2024-05-01T00:00:00Z"),
+        isFromPlanningAgent: true,
+      });
+    });
+    const spy = vi
+      .spyOn(EventService, "searchEvents")
+      .mockResolvedValue(makePage([], null));
+
+    const { result } = renderHook(() => useLoadOlderEvents("conv-1"), {
+      wrapper,
+    });
+
+    await act(async () => {
+      await result.current.loadOlder();
+    });
+
+    expect(spy).toHaveBeenCalledWith(
+      "conv-1",
+      "https://example.com/conv-test",
+      "secret",
+      expect.objectContaining({ timestampLt: "2024-06-01T00:00:00Z" }),
+    );
+  });
+
+  it("defers when the store holds only planner events", async () => {
+    // The planner replay can land before the main REST tail. Anchoring on that
+    // planner event, or marking pagination exhausted, would hide the main
+    // conversation's older history permanently.
+    act(() => {
+      useEventStore.getState().addEvent({
+        ...makeEvent("evt-planner-only", "2024-05-01T00:00:00Z"),
+        isFromPlanningAgent: true,
+      });
+    });
+
+    const spy = vi.spyOn(EventService, "searchEvents");
+    const { result } = renderConversationHook("conv-1");
+
+    await act(async () => {
+      await result.current.loadOlder();
+    });
+
+    expect(spy).not.toHaveBeenCalled();
+    expect(result.current.hasMore).toBe(true);
+  });
+
+  it("keeps the server cursor when planner events predate the loaded tail", async () => {
+    act(() => {
+      useEventStore
+        .getState()
+        .addEvents([makeUserMessage("evt-main-tail", "2024-06-01T00:00:00Z")], {
+          nextPageId: "cursor-1",
+          hasMore: true,
+        });
+      useEventStore.getState().addEvent({
+        ...makeEvent("evt-planner", "2024-05-01T00:00:00Z"),
+        isFromPlanningAgent: true,
+      });
+    });
+
+    const spy = vi
+      .spyOn(EventService, "searchEvents")
+      .mockResolvedValue(makePage([]));
+
+    const { result } = renderConversationHook("conv-1");
+
+    await act(async () => {
+      await result.current.loadOlder();
+    });
+
+    expect(spy.mock.calls[0][3]).toEqual(
+      expect.objectContaining({ pageId: "cursor-1" }),
+    );
+    expect(spy.mock.calls[0][3]?.timestampLt).toBeUndefined();
+  });
+
   it("seeds inline model-switch messages for switches in a paginated older page", async () => {
     // A successful SwitchLLMObservation is hidden as a card and surfaced via an
     // inline "Switched to" message seeded from history. The initial preload only

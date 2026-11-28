@@ -119,7 +119,22 @@ export const useLoadOlderEvents = (
     const pageId = pagination
       ? pagination.nextPageId
       : initialHistory?.nextPageId;
-    const oldestTimestamp = getEventTimestamp(oldest);
+
+    // The planner sub-conversation replays its whole log into this same
+    // store, so its events can predate the main conversation's REST tail.
+    // Only the timestamp fallback needs a main-conversation anchor; the
+    // server cursor never reads event timestamps.
+    const oldestMainEvent = events.find((event) => !event.isFromPlanningAgent);
+
+    // A store holding only planner events must wait for the REST tail: firing
+    // a planner-anchored request or marking pagination exhausted here would
+    // hide the main conversation's older history for good.
+    if (!pageId && !oldestMainEvent) return;
+
+    const oldestTimestamp =
+      pageId || !oldestMainEvent
+        ? undefined
+        : getEventTimestamp(oldestMainEvent);
     if (!pageId && !oldestTimestamp) {
       // Nothing paginate-able — treat as exhausted rather than surfacing an
       // error banner on brand-new conversations.
