@@ -2047,6 +2047,20 @@ describe("AgentSettingsScreen — system prompt", () => {
     });
   });
 
+  it("has the accessible name 'System prompt' on the mode combobox", async () => {
+    renderAgentSettingsScreen({
+      agentSettingsOverride: OPENHANDS_PROFILE,
+    });
+    const modeInput = await screen.findByTestId(
+      "agent-settings-system-prompt-mode",
+    );
+    expect(
+      screen.getByRole("combobox", {
+        name: "SETTINGS$AGENT_PROFILE_SYSTEM_PROMPT",
+      }),
+    ).toBe(modeInput);
+  });
+
   it.each([
     ["system_message_suffix", "append"],
     ["persona", "custom"],

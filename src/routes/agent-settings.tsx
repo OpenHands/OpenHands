@@ -1198,6 +1198,7 @@ export function AgentSettingsScreen({
             testId="agent-settings-system-prompt-mode"
             name="agent-system-prompt-mode"
             label=""
+            ariaLabel={t(I18nKey.SETTINGS$AGENT_PROFILE_SYSTEM_PROMPT)}
             items={[
               {
                 key: "standard",
