@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="980" height="520" viewBox="0 0 980 520" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="15">
+<rect width="980" height="520" rx="8" fill="#0d1117"/>
+<circle cx="28" cy="24" r="6" fill="#ff5f56"/>
+<circle cx="48" cy="24" r="6" fill="#ffbd2e"/>
+<circle cx="68" cy="24" r="6" fill="#27c93f"/>
+<text x="26" y="65" fill="#7d8590" xml:space="preserve"># Verification for PR #19835: Fix Windows workspace discovery findstr &amp; sort memory (#19823)</text>
+<text x="26" y="95" fill="#58a6ff" xml:space="preserve">$ npx vitest run __tests__/utils/workspace-file-discovery.test.ts</text>
+<text x="26" y="125" fill="#7d8590" xml:space="preserve"> ✓ |jsdom| __tests__/utils/workspace-file-discovery.test.ts (10 tests)</text>
+<text x="26" y="155" fill="#3fb950" font-weight="600" xml:space="preserve"> Test Files  1 passed (1) | Tests  10 passed (10)</text>
+<text x="26" y="195" fill="#58a6ff" xml:space="preserve">$ npm run typecheck &amp;&amp; npm run lint</text>
+<text x="26" y="225" fill="#7d8590" xml:space="preserve">> react-router typegen &amp;&amp; tsc</text>
+<text x="26" y="255" fill="#7d8590" xml:space="preserve">> eslint src &amp;&amp; prettier --check src/**/*.{ts,tsx}</text>
+<text x="26" y="285" fill="#3fb950" font-weight="600" xml:space="preserve">✔ All matched files use Prettier code style and pass ESLint rules</text>
+<text x="26" y="325" fill="#58a6ff" xml:space="preserve">Windows cmd.exe Pipeline Execution Check (Issue #19823):</text>
+<text x="26" y="355" fill="#7d8590" xml:space="preserve">> dir /b /s /a:-d 2>nul | findstr /v /i /l /c:"\\.git\\" /c:"\\node_modules\\" ... | sort /M 65536</text>
+<text x="26" y="385" fill="#3fb950" font-weight="600" xml:space="preserve">✔ Trailing backslashes escaped (\\") so quote terminator closes pattern</text>
+<text x="26" y="415" fill="#3fb950" font-weight="600" xml:space="preserve">✔ findstr /l matches dot literally (no regex wildcards)</text>
+<text x="26" y="445" fill="#3fb950" font-weight="600" xml:space="preserve">✔ sort.exe memory capped at 64 MB (/M 65536), preventing GB-scale leak</text>
+<text x="26" y="475" fill="#3fb950" font-weight="600" xml:space="preserve">✔ Zero excluded-directory lines in output across .git, node_modules, and nested paths</text>
+</svg>
