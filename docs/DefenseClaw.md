@@ -53,7 +53,7 @@ flowchart TD
 
 ## Installation
 
-### 1. Install and initialise DefenseClaw
+### 1. Install and initialize DefenseClaw
 
 ```bash
 # Install from the release script
@@ -103,7 +103,7 @@ curl -fsSL https://raw.githubusercontent.com/cisco-ai-defense/defenseclaw/main/s
 
 The Agent Server loads skills from these directories automatically at conversation start. No restart of the server is required for user-level skills; project-level skills are loaded when the conversation workspace is opened.
 
-**What this achieves:** The agent's system prompt is augmented with the full CodeGuard rule set. Code it generates will pre-emptively avoid the patterns that the downstream `defenseclaw codeguard scan` would flag.
+**What this achieves:** The agent's system prompt is augmented with the full CodeGuard rule set. Code it generates will preemptively avoid the patterns that the downstream `defenseclaw codeguard scan` would flag.
 
 ---
 
