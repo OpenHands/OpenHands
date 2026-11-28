@@ -57,4 +57,17 @@ describe("tooltip trigger semantics", () => {
     await user.tab();
     expect(document.body).toHaveFocus();
   });
+
+  it("wraps tooltip text at spaces instead of inside words", async () => {
+    const user = userEvent.setup();
+    render(
+      <StyledTooltip content="This does not enable analytics.">
+        <button>{actionLabel}</button>
+      </StyledTooltip>,
+    );
+    await user.tab();
+    const tooltip = await screen.findByRole("tooltip");
+    // Overrides HeroUI's `break-all` on `.tooltip`.
+    expect(tooltip).toHaveClass("break-normal", "wrap-break-word");
+  });
 });
