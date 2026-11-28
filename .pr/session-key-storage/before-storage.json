@@ -1,0 +1,5 @@
+{
+  "localStorage_openhands_backends": "[{\"name\":\"Remote Demo Server\",\"host\":\"https://remote-demo.example.com\",\"apiKey\":\"sk-demo-not-a-real-key-0123456789\",\"kind\":\"local\",\"id\":\"a2ff5114-4b50-4e4b-ba24-85023bd2c5a6\"}]",
+  "localStorage_openhands_active_backend": "{\"backendId\":\"a2ff5114-4b50-4e4b-ba24-85023bd2c5a6\",\"orgId\":null}",
+  "sessionStorage_openhands_session_keys": null
+}

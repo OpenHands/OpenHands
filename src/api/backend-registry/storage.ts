@@ -3,6 +3,12 @@ import {
   makeDefaultLocalBackend,
   makeLockedCloudBackend,
 } from "./default-backend";
+import {
+  isLoopbackUrl,
+  readSessionApiKey,
+  shouldPersistApiKeyInRecord,
+  syncSessionApiKeys,
+} from "./session-key-store";
 import type {
   Backend,
   BackendAuthMode,
@@ -37,20 +43,6 @@ function isValidBackend(value: unknown): value is Backend {
         Number.isSafeInteger(v.connectionRevision) &&
         v.connectionRevision >= 0))
   );
-}
-
-function isLoopbackUrl(value: string): boolean {
-  try {
-    const { hostname } = new URL(value);
-    return (
-      hostname === "localhost" ||
-      hostname === "127.0.0.1" ||
-      hostname === "::1" ||
-      hostname === "[::1]"
-    );
-  } catch {
-    return false;
-  }
 }
 
 function shouldSyncLauncherDefaultLocalBackend(
@@ -94,8 +86,18 @@ function syncLauncherDefaultLocalBackend(backends: Backend[]): Backend[] {
 
 export function writeStoredBackends(backends: Backend[]): void {
   if (typeof window === "undefined") return;
+  // Single writer for both layers: the tab-scoped mirror sees the real keys,
+  // the persisted record never does for keys governed by
+  // `shouldPersistApiKeyInRecord`.
+  syncSessionApiKeys(backends);
+  const persistable = backends.map((backend) =>
+    shouldPersistApiKeyInRecord(backend) ? backend : { ...backend, apiKey: "" },
+  );
   try {
-    window.localStorage.setItem(BACKENDS_STORAGE_KEY, JSON.stringify(backends));
+    window.localStorage.setItem(
+      BACKENDS_STORAGE_KEY,
+      JSON.stringify(persistable),
+    );
   } catch {
     /* ignore quota / serialization errors */
   }
@@ -142,7 +144,29 @@ export function readStoredBackends(): Backend[] {
     }
 
     const synced = syncLauncherDefaultLocalBackend(valid);
-    return synced;
+
+    // Hydrate tab-scoped keys into the in-memory view. Records written
+    // before session-key scoping carried plaintext keys for every backend;
+    // rewriting them through `writeStoredBackends` mirrors the real keys to
+    // sessionStorage and persists the records blanked, which migrates them
+    // in one pass without losing the key or any record field.
+    const hydrated = synced.map((backend) => {
+      if (shouldPersistApiKeyInRecord(backend)) return backend;
+      return {
+        ...backend,
+        apiKey: backend.apiKey || readSessionApiKey(backend.id) || "",
+      };
+    });
+    if (
+      synced.some(
+        (backend) =>
+          !shouldPersistApiKeyInRecord(backend) && backend.apiKey !== "",
+      )
+    ) {
+      writeStoredBackends(hydrated);
+    }
+
+    return hydrated;
   } catch {
     return [];
   }

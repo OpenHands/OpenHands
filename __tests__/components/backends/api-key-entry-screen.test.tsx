@@ -9,6 +9,10 @@ import {
   readStoredActiveBackend,
   writeStoredActiveBackend,
 } from "#/api/backend-registry/storage";
+import {
+  isLoopbackUrl,
+  SESSION_KEYS_STORAGE_KEY,
+} from "#/api/backend-registry/session-key-store";
 import type { Backend } from "#/api/backend-registry/types";
 import { __resetActiveStoreForTests } from "#/api/backend-registry/active-store";
 import { ActiveBackendProvider } from "#/contexts/active-backend-context";
@@ -264,19 +268,45 @@ describe("ApiKeyEntryScreen", () => {
       );
       expect(stored).toHaveLength(4);
       expect(readStoredActiveBackend()?.backendId).toBe(guest.id);
-      for (const unchanged of [guest, ...otherBackends]) {
-        expect(stored.find((backend) => backend.id === unchanged.id)).toEqual(
-          unchanged,
-        );
+
+      // The persisted record keeps plaintext keys only where the policy
+      // allows (loopback hosts and the MARS guest record); tab-scoped keys
+      // are blanked there and mirrored to the session-key store.
+      const loopbackOrigin = isLoopbackUrl(origin);
+      const sessionKeys = JSON.parse(
+        window.sessionStorage.getItem(SESSION_KEYS_STORAGE_KEY) ?? "{}",
+      ) as Record<string, string>;
+      const mirrored: Record<string, string> = {};
+      for (const record of [guest, ...otherBackends]) {
+        const storedRecord = stored.find(
+          (backend) => backend.id === record.id,
+        ) as Backend;
+        const persistable =
+          record.marsSessionId !== undefined ||
+          record.marsConfigId !== undefined ||
+          isLoopbackUrl(record.host);
+        if (persistable) {
+          expect(storedRecord).toEqual(record);
+        } else {
+          expect(storedRecord).toEqual({ ...record, apiKey: "" });
+          mirrored[record.id] = record.apiKey;
+        }
       }
-      expect(
-        stored.find((backend) => backend.host === window.location.origin),
-      ).toMatchObject({
+      const rootRecord = stored.find(
+        (backend) => backend.host === window.location.origin,
+      ) as Backend;
+      expect(rootRecord).toMatchObject({
         ...(hasRootBackend ? { id: root.id } : {}),
         name: "My Canvas",
-        apiKey: "new-key",
         kind: "local",
       });
+      if (loopbackOrigin) {
+        expect(rootRecord.apiKey).toBe("new-key");
+      } else {
+        expect(rootRecord.apiKey).toBe("");
+        mirrored[rootRecord.id] = "new-key";
+      }
+      expect(sessionKeys).toEqual(mirrored);
     },
   );
 

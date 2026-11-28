@@ -7,6 +7,7 @@ import {
   writeStoredActiveBackend,
   writeStoredBackends,
 } from "#/api/backend-registry/storage";
+import { SESSION_KEYS_STORAGE_KEY } from "#/api/backend-registry/session-key-store";
 import type { Backend } from "#/api/backend-registry/types";
 
 const ORIGINAL_LOCATION = window.location;
@@ -361,5 +362,118 @@ describe("backend-registry storage", () => {
   it("returns null active selection when storage is malformed", () => {
     window.localStorage.setItem(ACTIVE_BACKEND_STORAGE_KEY, "{broken");
     expect(readStoredActiveBackend()).toBeNull();
+  });
+});
+
+describe("backend-registry session key persistence", () => {
+  const REMOTE_BACKEND: Backend = {
+    id: "remote-agent",
+    name: "Remote Agent Server",
+    host: "https://agent.example.com",
+    apiKey: "remote-session-key",
+    kind: "local",
+  };
+
+  const CLOUD_TOKEN_BACKEND: Backend = {
+    id: "cloud-token",
+    name: "Cloud (API key)",
+    host: "https://app.all-hands.dev",
+    apiKey: "oauth-access-token",
+    kind: "cloud",
+    authMode: "api-key",
+  };
+
+  const LOOPBACK_BACKEND: Backend = {
+    id: "local-agent",
+    name: "Local Agent Server",
+    host: "http://127.0.0.1:8000",
+    apiKey: "loopback-session-key",
+    kind: "local",
+  };
+
+  const MARS_BACKEND: Backend = {
+    id: "mars-session",
+    name: "MARS Session",
+    host: "https://mars.example.com",
+    apiKey: "mars-guest-key",
+    kind: "local",
+    marsSessionId: "session-1",
+  };
+
+  function readPersistedBackends(): Backend[] {
+    const raw = window.localStorage.getItem(BACKENDS_STORAGE_KEY);
+    return raw === null ? [] : (JSON.parse(raw) as Backend[]);
+  }
+
+  function readSessionKeyMap(): Record<string, string> {
+    const raw = window.sessionStorage.getItem(SESSION_KEYS_STORAGE_KEY);
+    return raw === null ? {} : (JSON.parse(raw) as Record<string, string>);
+  }
+
+  afterEach(() => {
+    window.localStorage.clear();
+    window.sessionStorage.clear();
+  });
+
+  it("persists only tab-scoped keys outside the record while keeping the in-memory view lossless", () => {
+    writeStoredBackends([
+      REMOTE_BACKEND,
+      CLOUD_TOKEN_BACKEND,
+      LOOPBACK_BACKEND,
+    ]);
+
+    expect(readPersistedBackends()).toEqual([
+      { ...REMOTE_BACKEND, apiKey: "" },
+      { ...CLOUD_TOKEN_BACKEND, apiKey: "" },
+      LOOPBACK_BACKEND,
+    ]);
+    expect(readSessionKeyMap()).toEqual({
+      "remote-agent": "remote-session-key",
+      "cloud-token": "oauth-access-token",
+    });
+    expect(readStoredBackends()).toEqual([
+      REMOTE_BACKEND,
+      CLOUD_TOKEN_BACKEND,
+      LOOPBACK_BACKEND,
+    ]);
+  });
+
+  it("migrates a legacy plaintext record on read without losing the key or fields", () => {
+    window.localStorage.setItem(
+      BACKENDS_STORAGE_KEY,
+      JSON.stringify([{ ...REMOTE_BACKEND, connectionRevision: 3 }]),
+    );
+
+    expect(readStoredBackends()).toEqual([
+      { ...REMOTE_BACKEND, connectionRevision: 3 },
+    ]);
+    expect(readPersistedBackends()).toEqual([
+      { ...REMOTE_BACKEND, connectionRevision: 3, apiKey: "" },
+    ]);
+    expect(readSessionKeyMap()).toEqual({
+      "remote-agent": "remote-session-key",
+    });
+  });
+
+  it("surfaces a blank record when the tab-scoped key is gone", () => {
+    writeStoredBackends([REMOTE_BACKEND]);
+    window.sessionStorage.clear();
+
+    expect(readStoredBackends()).toEqual([{ ...REMOTE_BACKEND, apiKey: "" }]);
+  });
+
+  it("drops the tab-scoped key when the backend is removed", () => {
+    writeStoredBackends([REMOTE_BACKEND]);
+    writeStoredBackends([LOOPBACK_BACKEND]);
+
+    expect(readSessionKeyMap()).toEqual({});
+  });
+
+  it("keeps the public MARS guest key in the persisted record", () => {
+    writeStoredBackends([MARS_BACKEND]);
+
+    expect(readPersistedBackends()).toEqual([MARS_BACKEND]);
+    expect(readSessionKeyMap()).toEqual({});
+    expect(readStoredBackends()).toEqual([MARS_BACKEND]);
   });
 });
