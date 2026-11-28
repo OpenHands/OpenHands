@@ -732,7 +732,11 @@ class AgentServerConversationService {
       throw new Error("A local conversation needs an agent profile.");
     }
     const [settings, profiles] = await Promise.all([
-      SettingsService.getSettings(),
+      // Best-effort: a settings hiccup must not block creating the
+      // conversation; the title-profile preference falls back gracefully.
+      SettingsService.getSettingsWithDefaults
+        ? SettingsService.getSettingsWithDefaults()
+        : SettingsService.getSettings(),
       ProfilesService.listProfiles().catch(() => undefined),
     ]);
     const titleLlmProfile = resolveTitleLlmProfile(

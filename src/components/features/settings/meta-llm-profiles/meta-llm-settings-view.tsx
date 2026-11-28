@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { HttpError } from "@openhands/typescript-client";
 import { BrandButton } from "#/components/features/settings/brand-button";
+import { SettingsLoadError } from "#/components/features/settings/settings-load-error";
 import { ApiKeyModalBase } from "#/components/features/settings/api-key-modal-base";
 import { LoadingSpinner } from "#/components/shared/loading-spinner";
 import { useMetaProfiles } from "#/hooks/query/use-meta-profiles";
@@ -61,7 +62,12 @@ export function MetaLlmSettingsView() {
   const saveMetaProfile = useSaveMetaProfile();
   const saveLlmProfile = useSaveLlmProfile();
   const activateMetaProfile = useActivateMetaProfile();
-  const { data: settings } = useSettings();
+  const {
+    data: settings,
+    isError: settingsLoadFailed,
+    error: settingsLoadError,
+    refetch: refetchSettings,
+  } = useSettings();
   const { mutate: saveSettings, mutateAsync: saveSettingsAsync } =
     useSaveSettings();
 
@@ -311,6 +317,19 @@ export function MetaLlmSettingsView() {
         onSave={handleSave}
         onCancel={handleCancel}
         onProviderConnectionCreated={handleProviderConnectionCreated}
+      />
+    );
+  }
+
+  // A failed settings load must not render as an editable list of defaults:
+  // the run-router toggle would save over server state the user never saw.
+  // The profile editor branch above stays available; it saves profiles, not
+  // settings.
+  if (settingsLoadFailed) {
+    return (
+      <SettingsLoadError
+        error={settingsLoadError}
+        onRetry={() => refetchSettings()}
       />
     );
   }

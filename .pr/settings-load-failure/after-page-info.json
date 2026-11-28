@@ -1,0 +1,8 @@
+{
+  "href": "http://localhost:3004/settings/app",
+  "die": {
+    "died": true
+  },
+  "aliveText": "Search commands CTRL+K New Chat Customize Automate Conversations No conversations found Getting started 1 complete Add LLM API key Configure a subscription agent Start your first chat Schedule a task Customize your agent Connect an MCP integration Join the OpenHands Slack Settings Agent LLM Model Router Agent Context Verification Runtime Application Secrets Experimental Agent Canvas Up to date Version 1.43.0 These settings are synced from Local Stub backend (http://localhost:8123) Application Language, theme, notifications, and Git identity. Language Color Theme Send anonymous usage data Sound Notifications Show Getting Started checklist Show Recommended automations Conversation titles Choos",
+  "deadText": "Manage backends Local Stub http://localhost:8123 Disconnected (check URL or network) Disconnected (check URL or network). Check that the backend URL is correct and the backend server is reachable. If the backend is on another origin, check that it allows this frontend origin. LOCAL Add Backend"
+}

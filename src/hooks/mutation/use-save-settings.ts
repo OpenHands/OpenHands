@@ -64,11 +64,20 @@ export const useSaveSettings = (
 ) => {
   const { trackMcpConfigUpdated } = useTracking();
   const queryClient = useQueryClient();
-  const { data: currentSettings } = useSettings(scope);
+  const { data: currentSettings, isError: settingsLoadFailed } =
+    useSettings(scope);
 
   return useMutation({
     ...(retry === undefined ? {} : { retry }),
     mutationFn: async (settings: SettingsUpdate) => {
+      // Saving from a failed load state would overwrite server state the
+      // user never saw; the surfaces show an error + retry instead.
+      if (settingsLoadFailed) {
+        throw new Error(
+          "Cannot save settings because the latest settings load failed.",
+        );
+      }
+
       const nextMcpConfig = settings.mcp_config as MCPConfig | undefined;
       const currentMcpConfig = currentSettings?.mcp_config as
         MCPConfig | undefined;

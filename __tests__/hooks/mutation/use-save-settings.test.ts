@@ -98,3 +98,25 @@ describe("useSaveSettings - MCP tracking", () => {
     });
   });
 });
+
+describe("useSaveSettings - failed load guard", () => {
+  it("refuses to save while the settings load has failed", async () => {
+    // Arrange: the settings query is in a failed state, so the form's values
+    // never came from the server.
+    vi.spyOn(SettingsService, "saveSettings").mockResolvedValue(true);
+    useSettingsMock.mockReturnValue({
+      data: {},
+      isError: true,
+      error: new Error("load failed"),
+    });
+    const { result } = renderHook(() => useSaveSettings(), {
+      wrapper: createWrapper(),
+    });
+
+    // Act + Assert
+    await expect(
+      result.current.mutateAsync({ llm_model: "new-model" }),
+    ).rejects.toThrow();
+    expect(SettingsService.saveSettings).not.toHaveBeenCalled();
+  });
+});
