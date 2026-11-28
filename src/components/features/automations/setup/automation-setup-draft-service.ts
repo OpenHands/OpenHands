@@ -14,6 +14,7 @@ import type {
 } from "#/manifests/types";
 import { I18nKey } from "#/i18n/declaration";
 import { getApiErrorBody } from "#/utils/api-error-message";
+import { scheduleFields } from "#/utils/automation-edit-draft";
 import type { AutomationRun } from "#/types/automation";
 
 function asRecord(value: unknown): Record<string, unknown> | null {
@@ -122,12 +123,11 @@ export function setupDraftFromServerDraft(
     form.setupScriptPath = savedSetupScriptPath;
   }
   if (trigger) {
-    form.triggerKind =
-      getStringField(trigger, "type") === "event" ? "event" : "cron";
+    const isEvent = getStringField(trigger, "type") === "event";
+    form.triggerKind = isEvent ? "event" : "cron";
     const schedule = getStringField(trigger, "schedule");
-    if (schedule) {
-      form.frequency = "custom";
-      form.customSchedule = schedule;
+    if (!isEvent && schedule) {
+      Object.assign(form, scheduleFields(schedule));
     }
     const savedTimezone = getStringField(trigger, "timezone");
     if (savedTimezone !== undefined) form.timezone = savedTimezone;
@@ -181,9 +181,14 @@ export function formFromServerDraft(
           },
         ].filter((entry) => entry.source || entry.ref);
   const endpointKind = kindForDraftEndpoint(saved.endpoint);
+  const isEvent = getStringField(trigger ?? {}, "type") === "event";
+  const schedule = getStringField(trigger ?? {}, "schedule");
+  const parsedSchedule =
+    !isEvent && schedule ? scheduleFields(schedule) : undefined;
 
   return {
     ...base,
+    ...parsedSchedule,
     kind: endpointKind,
     name: saved.name ?? getStringField(body, "name") ?? base.name,
     runAsUserId: getStringField(body, "run_as_user_id") ?? "",
@@ -201,13 +206,7 @@ export function formFromServerDraft(
     entrypoint: getStringField(body, "entrypoint") ?? base.entrypoint,
     setupScriptPath:
       getStringField(body, "setup_script_path") ?? base.setupScriptPath,
-    triggerKind:
-      getStringField(trigger ?? {}, "type") === "event" ? "event" : "cron",
-    frequency: getStringField(trigger ?? {}, "schedule")
-      ? "custom"
-      : base.frequency,
-    customSchedule:
-      getStringField(trigger ?? {}, "schedule") ?? base.customSchedule,
+    triggerKind: isEvent ? "event" : "cron",
     timezone: getStringField(trigger ?? {}, "timezone") ?? base.timezone,
     eventSource: getStringField(trigger ?? {}, "source") ?? base.eventSource,
     eventKey: trigger
