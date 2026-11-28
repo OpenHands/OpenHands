@@ -1,4 +1,4 @@
-import { renderHook } from "@testing-library/react";
+import { act, renderHook } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import useMetricsStore, { type MetricsState } from "#/stores/metrics-store";
 import type { TokenUsage } from "#/api/conversation-service/agent-server-conversation-service.types";
@@ -101,6 +101,23 @@ describe("useContextWindowUsage", () => {
       perTurnToken: 500,
       contextWindow: 128_000,
     });
+  });
+
+  it("hides stale usage after the conversation metrics store is reset", () => {
+    useMetricsStore.setState({ usage: storeUsage(128_000, 500) });
+
+    const { result } = renderHook(() => useContextWindowUsage());
+
+    expect(result.current).toEqual({
+      perTurnToken: 500,
+      contextWindow: 128_000,
+    });
+
+    act(() => {
+      useMetricsStore.getState().resetMetrics();
+    });
+
+    expect(result.current).toBeNull();
   });
 
   it("returns null when no source reports a positive context window", () => {
