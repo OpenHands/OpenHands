@@ -50,6 +50,16 @@ describe("parseGitTreeUrl", () => {
   });
 
   it.each([
+    "https://github.com/o/r/tree/main%/apps/demo",
+    "https://gitlab.com/group/repo/-/tree/main/apps/%E0%A4%A",
+  ])(
+    "returns null rather than throwing on malformed percent escapes in %s",
+    (url) => {
+      expect(parseGitTreeUrl(url)).toBeNull();
+    },
+  );
+
+  it.each([
     "https://github.com/o/r",
     "https://gitlab.com/o/r.git",
     "git@gitlab.com:o/r.git",
