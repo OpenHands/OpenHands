@@ -16,6 +16,7 @@ import {
 } from "#/api/backend-registry/active-store";
 import { ActiveBackendProvider } from "#/contexts/active-backend-context";
 import { OnboardingModal } from "#/components/features/onboarding/onboarding-modal";
+import { CheckBackendStep } from "#/components/features/onboarding/steps/check-backend-step";
 import { ONBOARDING_DEFAULT_LLM_MODEL } from "#/components/features/onboarding/steps/setup-llm-step";
 import { SIDEBAR_ONBOARDING_CHECKLIST_DISMISSED_STORAGE_KEY } from "#/components/features/sidebar/sidebar-onboarding-checklist.constants";
 import { NavigationProvider } from "#/context/navigation-context";
@@ -133,18 +134,25 @@ vi.mock("#/components/features/backends/device-flow-auth", async () => {
     DeviceFlowAuth: ({
       onSuccess,
       testIdRoot,
+      idleFooter,
     }: {
       onSuccess: (apiKey: string) => void;
       testIdRoot: string;
+      idleFooter?: React.ReactNode;
     }) =>
       React.createElement(
-        "button",
-        {
-          type: "button",
-          "data-testid": `${testIdRoot}-login-button`,
-          onClick: () => onSuccess("cloud-session-key"),
-        },
-        "Login with OpenHands Cloud",
+        React.Fragment,
+        null,
+        React.createElement(
+          "button",
+          {
+            type: "button",
+            "data-testid": `${testIdRoot}-login-button`,
+            onClick: () => onSuccess("cloud-session-key"),
+          },
+          "Login with OpenHands Cloud",
+        ),
+        idleFooter,
       ),
   };
 });
@@ -422,6 +430,93 @@ describe("OnboardingModal", () => {
     ).not.toBeInTheDocument();
     expect(screen.getByTestId("onboarding-backend-cloud-title")).toBeVisible();
     expect(screen.getByTestId("onboarding-backend-login-button")).toBeVisible();
+  });
+
+  it("enforces at least a 24px target size on backend radio options and disclosures in compiled CSS", async () => {
+    const compiler = await compile(
+      await readFile(resolve("src/tailwind.css"), "utf8"),
+      { base: resolve("src"), onDependency: () => {} },
+    );
+    const hasMin24 = (css: string, prop: "min-height" | "min-width") =>
+      new RegExp(
+        `${prop}:\\s*(?:1\\.5rem|24px|calc\\(var\\(--spacing\\)\\s*\\*\\s*6\\))`,
+      ).test(css);
+
+    window.localStorage.clear();
+    vi.stubEnv("VITE_BACKEND_BASE_URL", "");
+    vi.stubEnv("VITE_SESSION_API_KEY", "");
+    delete (window as unknown as Record<string, unknown>)
+      .__AGENT_CANVAS_SESSION_API_KEY__;
+    __resetActiveStoreForTests();
+
+    const user = userEvent.setup();
+    const { unmount } = renderModal();
+
+    const localRadio = screen.getByTestId(
+      "onboarding-backend-kind-option-local",
+    );
+    const cloudRadio = screen.getByTestId(
+      "onboarding-backend-kind-option-cloud",
+    );
+    for (const radio of [localRadio, cloudRadio]) {
+      const radioCss = compiler.build([...radio.classList]);
+      expect(hasMin24(radioCss, "min-height")).toBe(true);
+      expect(hasMin24(radioCss, "min-width")).toBe(true);
+    }
+
+    await user.click(cloudRadio);
+    expect(cloudRadio).toHaveAttribute("aria-checked", "true");
+    expect(localRadio).toHaveAttribute("aria-checked", "false");
+
+    const advancedToggle = screen.getByTestId(
+      "onboarding-backend-advanced-toggle",
+    );
+    expect(
+      hasMin24(compiler.build([...advancedToggle.classList]), "min-height"),
+    ).toBe(true);
+    await user.click(advancedToggle);
+    expect(advancedToggle).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByTestId("onboarding-backend-cloud-host")).toBeVisible();
+    unmount();
+
+    const connectedLocal = {
+      id: "connected-local",
+      name: "Local",
+      host: "http://127.0.0.1:8000",
+      apiKey: "token",
+      kind: "local" as const,
+    };
+    setRegisteredBackends([connectedLocal]);
+    setActiveSelection({ backendId: connectedLocal.id, orgId: null });
+    __resetActiveStoreForTests();
+
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const navigationValue = {
+      currentPath: "/",
+      conversationId: null,
+      isNavigating: false,
+      navigate: vi.fn(),
+    };
+    render(
+      <QueryClientProvider client={queryClient}>
+        <ActiveBackendProvider>
+          <NavigationProvider value={navigationValue}>
+            <CheckBackendStep onNext={vi.fn()} />
+          </NavigationProvider>
+        </ActiveBackendProvider>
+      </QueryClientProvider>,
+    );
+
+    const showConfigButton = await screen.findByTestId(
+      "onboarding-backend-show-configuration",
+    );
+    expect(
+      hasMin24(compiler.build([...showConfigButton.classList]), "min-height"),
+    ).toBe(true);
+    await user.click(showConfigButton);
+    expect(showConfigButton).toHaveAttribute("aria-expanded", "true");
   });
 
   it("locks no-backend onboarding to Cloud login when VITE_LOCK_TO_CLOUD is set", () => {

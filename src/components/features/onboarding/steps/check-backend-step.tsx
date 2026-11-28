@@ -264,7 +264,7 @@ export function CheckBackendStep({
           onClick={() => setConfigurationOpen((open) => !open)}
           aria-expanded={configurationOpen}
           data-testid="onboarding-backend-show-configuration"
-          className="flex w-full cursor-pointer items-center justify-center gap-1 text-center text-xs text-muted transition-colors hover:text-content-2"
+          className="flex min-h-6 w-full cursor-pointer items-center justify-center gap-1 py-1 text-center text-xs text-muted transition-colors hover:text-content-2"
         >
           <span>
             {configurationOpen

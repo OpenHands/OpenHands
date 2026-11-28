@@ -661,6 +661,35 @@ describe("AddBackendModal – connection chooser", () => {
     expect(loginButton.textContent?.trim()).not.toMatch(/^🔑/);
     expect(loginButton.textContent).not.toContain("🔑");
   });
+
+  it("enforces at least a 24px target size on Advanced and Agent-server location controls in compiled CSS", async () => {
+    const compiler = await compile(
+      await readFile(resolve("src/tailwind.css"), "utf8"),
+      { base: resolve("src"), onDependency: () => {} },
+    );
+    const hasMin24 = (css: string, prop: "min-height" | "min-width") =>
+      new RegExp(
+        `${prop}:\\s*(?:1\\.5rem|24px|calc\\(var\\(--spacing\\)\\s*\\*\\s*6\\))`,
+      ).test(css);
+
+    renderWithProviders(<AddBackendModal onClose={vi.fn()} />);
+
+    const advancedToggle = screen.getByTestId("add-backend-advanced-toggle");
+    const advancedCss = compiler.build([...advancedToggle.classList]);
+    expect(hasMin24(advancedCss, "min-height")).toBe(true);
+
+    await selectAgentServer();
+
+    for (const testId of [
+      "add-backend-location-option-local",
+      "add-backend-location-option-remote",
+    ]) {
+      const option = screen.getByTestId(testId);
+      const optionCss = compiler.build([...option.classList]);
+      expect(hasMin24(optionCss, "min-height")).toBe(true);
+      expect(hasMin24(optionCss, "min-width")).toBe(true);
+    }
+  });
 });
 
 // @spec BM-002 — adding a backend auto-switches the active selection, so a
