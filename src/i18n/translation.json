@@ -20195,6 +20195,24 @@
     "uk": "Пісочниця цієї розмови зустріла помилку. Наведена вище історія доступна лише для читання.",
     "id": "Sandbox percakapan ini mengalami kesalahan. Riwayat di atas bersifat hanya-baca."
   },
+  "CHAT_INTERFACE$CLOUD_SANDBOX_ERROR_DESCRIPTION": {
+    "en": "This sandbox cannot be resumed. You can still read this conversation.",
+    "ja": "このサンドボックスは再開できません。会話の履歴は引き続き閲覧できます。",
+    "zh-CN": "此沙盒无法恢复。你仍可查看此对话的历史记录。",
+    "zh-TW": "此沙盒無法恢復。你仍可查看此對話的歷史紀錄。",
+    "ko-KR": "이 샌드박스는 다시 시작할 수 없습니다. 대화 기록은 계속 볼 수 있습니다.",
+    "no": "Denne sandkassen kan ikke gjenopptas. Du kan fortsatt lese samtalen.",
+    "ar": "لا يمكن استئناف بيئة الاختبار هذه. لا يزال بإمكانك قراءة المحادثة.",
+    "de": "Diese Sandbox lässt sich nicht fortsetzen. Du kannst den Gesprächsverlauf weiterhin lesen.",
+    "fr": "Cette sandbox ne peut pas être relancée. Vous pouvez toujours lire la conversation.",
+    "it": "Questa sandbox non può essere riattivata. Puoi ancora leggere la conversazione.",
+    "pt": "Não é possível retomar esta sandbox. Você ainda pode ler a conversa.",
+    "es": "Este entorno aislado no se puede reanudar. Puedes seguir leyendo la conversación.",
+    "ca": "Aquest entorn aïllat no es pot reprendre. Pots continuar llegint la conversa.",
+    "tr": "Bu sandbox yeniden başlatılamaz. Konuşma geçmişini hâlâ okuyabilirsiniz.",
+    "uk": "Роботу цієї пісочниці неможливо відновити. Ви й далі можете читати цю розмову.",
+    "id": "Sandbox ini tidak dapat dilanjutkan. Anda tetap dapat membaca percakapan ini."
+  },
   "HOME$SELECT_OR_INSERT_URL": {
     "en": "Select or insert a URL",
     "ja": "URLを選択または挿入",
