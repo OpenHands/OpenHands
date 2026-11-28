@@ -42,6 +42,15 @@ contextBridge.exposeInMainWorld("desktopShell", {
     listeners.add(cb);
     return () => listeners.delete(cb);
   },
+  /**
+   * Notify the main process of the active color theme appearance ("dark" | "light")
+   * so native window chrome and application menus match on Windows and Linux.
+   */
+  setAppearance(appearance) {
+    if (appearance === "dark" || appearance === "light") {
+      ipcRenderer.send("theme:appearance:set", appearance);
+    }
+  },
 });
 
 contextBridge.exposeInMainWorld("marsBridge", {
