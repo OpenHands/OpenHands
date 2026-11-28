@@ -18,11 +18,14 @@ export const markdownFence = (content: string, language = ""): string => {
 /**
  * Inline-code counterpart of {@link markdownFence}: the delimiter is one
  * backtick longer than any run inside ``content``, and content that starts or
- * ends with a backtick is padded with a space (which CommonMark strips) so it
- * can't merge with the delimiter.
+ * ends with a backtick—or both starts and ends with a space (unless all spaces)—is
+ * padded with a space so that CommonMark's strip rule doesn't swallow characters
+ * from the content itself.
  */
 export const markdownInlineCode = (content: string): string => {
   const ticks = "`".repeat(longestBacktickRun(content) + 1);
-  const padded = /^`|`$/.test(content) ? ` ${content} ` : content;
+  const edgeSpaces =
+    content.startsWith(" ") && content.endsWith(" ") && /[^ ]/.test(content);
+  const padded = /^`|`$/.test(content) || edgeSpaces ? ` ${content} ` : content;
   return `${ticks}${padded}${ticks}`;
 };
