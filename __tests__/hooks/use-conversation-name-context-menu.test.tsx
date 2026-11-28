@@ -604,7 +604,7 @@ describe("useConversationNameContextMenu", () => {
 
       await waitFor(() => {
         expect(harness.displayErrorToast).toHaveBeenCalledWith(
-          I18nKey.CHAT_INTERFACE$CHAT_MESSAGE_COPY_FAILED,
+          I18nKey.CLIPBOARD$COPY_FAILED,
         );
       });
       expect(harness.displaySuccessToast).not.toHaveBeenCalled();

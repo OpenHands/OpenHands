@@ -34,12 +34,20 @@ export async function copyToClipboard(text: string): Promise<boolean> {
   const container = active?.closest('[role="dialog"]') ?? document.body;
   container.appendChild(textarea);
 
+  const onCopy = (event: ClipboardEvent) => {
+    event.preventDefault();
+    event.clipboardData?.setData("text/plain", text);
+  };
+  document.addEventListener("copy", onCopy);
+
   try {
     textarea.select();
+    textarea.setSelectionRange(0, text.length);
     return document.execCommand("copy");
   } catch {
     return false;
   } finally {
+    document.removeEventListener("copy", onCopy);
     textarea.remove();
     if (previousRange && selection) {
       selection.removeAllRanges();
