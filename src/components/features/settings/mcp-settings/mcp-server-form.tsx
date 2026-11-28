@@ -214,8 +214,8 @@ export function MCPServerForm({
   const validateTimeout = (timeoutStr: string): string | null => {
     if (!timeoutStr.trim()) return null; // Optional field
 
-    const timeout = parseInt(timeoutStr.trim(), 10);
-    if (Number.isNaN(timeout)) {
+    const timeout = Number(timeoutStr.trim());
+    if (Number.isNaN(timeout) || !Number.isFinite(timeout)) {
       return t(I18nKey.SETTINGS$MCP_ERROR_TIMEOUT_INVALID_NUMBER);
     }
     if (timeout <= 0) {
@@ -392,11 +392,11 @@ export function MCPServerForm({
         ...(auth && { auth }),
       };
 
-      // Only add timeout for SHTTP servers
+      // Only add timeout for SHTTP servers (persisted in milliseconds per FastMCP)
       if (serverType === "shttp" && timeoutStr) {
-        const timeoutValue = parseInt(timeoutStr, 10);
-        if (!Number.isNaN(timeoutValue)) {
-          serverConfig.timeout = timeoutValue;
+        const timeoutSeconds = Number(timeoutStr);
+        if (!Number.isNaN(timeoutSeconds)) {
+          serverConfig.timeout = Math.round(timeoutSeconds * 1000);
         }
       }
 
@@ -450,7 +450,24 @@ export function MCPServerForm({
       setError(validationError);
       return;
     }
-    onTest(buildConfig(formData));
+    const config = buildConfig(formData);
+    if (serverType === "shttp") {
+      const timeoutStr = formData.get("timeout")?.toString().trim();
+      if (timeoutStr) {
+        const timeoutSeconds = Number(timeoutStr);
+        if (!Number.isNaN(timeoutSeconds)) {
+          const isNonOAuth = config.auth?.strategy !== "oauth2";
+          onTest({
+            ...config,
+            timeout: isNonOAuth
+              ? Math.min(timeoutSeconds, 120)
+              : timeoutSeconds,
+          });
+          return;
+        }
+      }
+    }
+    onTest(config);
   };
 
   const formTestId =
@@ -619,10 +636,15 @@ export function MCPServerForm({
               label={t(I18nKey.SETTINGS$MCP_TIMEOUT_LABEL)}
               className="w-full min-w-0"
               showOptionalTag
-              defaultValue={server?.timeout?.toString() || ""}
+              defaultValue={
+                server?.timeout !== undefined && server.timeout !== null
+                  ? (server.timeout / 1000).toString()
+                  : ""
+              }
               placeholder="60"
               min={1}
               max={3600}
+              step="any"
             />
           )}
         </>
