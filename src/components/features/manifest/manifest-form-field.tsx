@@ -86,6 +86,7 @@ export function SetupFormField({
   const { providers: connectedProviders } = useUserProviders();
   const providerHosts = useSettings().data?.provider_tokens_set;
   const testId = `setup-field-${name}`;
+  const errorId = error ? `${testId}-error` : undefined;
   const help = <p className="text-xs text-muted">{field.help}</p>;
 
   const provider: SetupGitProvider = field.provider ?? "github";
@@ -118,7 +119,7 @@ export function SetupFormField({
 
   if (field.type === "repo-picker" && field.multiple) {
     return (
-      <div className="flex w-full flex-col gap-2.5">
+      <div className="flex w-full flex-col gap-2.5" data-setup-field={name}>
         <FieldLabel field={field} />
         <SetupRepositoryList
           name={name}
@@ -128,6 +129,8 @@ export function SetupFormField({
           repositoryAddress={repositoryAddress}
           placeholder={repositoryPlaceholder}
           disabled={disabled}
+          errorId={errorId}
+          invalid={!!error}
           onChange={onChange}
           onBlur={onBlur}
         />
@@ -139,7 +142,7 @@ export function SetupFormField({
 
   if (field.type === "repo-picker" && canListRepositories) {
     return (
-      <div className="flex w-full flex-col gap-2.5">
+      <div className="flex w-full flex-col gap-2.5" data-setup-field={name}>
         <FieldLabel field={field} />
         <GitRepoDropdown
           provider={provider}
@@ -147,6 +150,8 @@ export function SetupFormField({
           repositoryName={repository?.full_name ?? fieldText(value) ?? null}
           placeholder={field.placeholder}
           disabled={disabled}
+          ariaDescribedBy={errorId}
+          ariaInvalid={!!error}
           onChange={(selected) => {
             onRepositoryChange(selected ?? null);
             onChange(selected ? repositoryAddress(selected) : "");
@@ -192,6 +197,8 @@ export function SetupFormField({
           isDisabled={disabled || profileOptionsUnavailable}
           isLoading={isOptionsLoading}
           required={field.required}
+          ariaDescribedBy={errorId}
+          ariaInvalid={!!error}
           onSelectionChange={(key) => {
             onChange(key === null ? "" : String(key));
             onBlur();
@@ -215,6 +222,7 @@ export function SetupFormField({
           placeholder={field.placeholder}
           disabled={disabled}
           aria-invalid={!!error}
+          aria-describedby={errorId}
           onChange={(event) => onChange(event.target.value)}
           onBlur={onBlur}
           className={cn(
@@ -239,6 +247,7 @@ export function SetupFormField({
           accept=".tar,.tar.gz,.tgz,application/gzip,application/x-tar"
           disabled={disabled}
           aria-invalid={!!error}
+          aria-describedby={errorId}
           onChange={(event) => {
             onChange(event.target.files?.[0] ?? "");
             onBlur();
@@ -270,6 +279,7 @@ export function SetupFormField({
           placeholder={field.placeholder}
           disabled={disabled}
           aria-invalid={!!error}
+          aria-describedby={errorId}
           onChange={(event) => onChange(event.target.value)}
           onBlur={onBlur}
           className={cn(
@@ -339,6 +349,7 @@ function FieldError({ testId, error }: { testId: string; error?: string }) {
   if (!error) return null;
   return (
     <p
+      id={`${testId}-error`}
       role="alert"
       data-testid={`${testId}-error`}
       className="-mt-1 text-xs text-feedback-error"

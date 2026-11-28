@@ -825,4 +825,20 @@ describe("GitRepoDropdown", () => {
       expect(container.querySelector(".animate-spin")).toBeInTheDocument();
     });
   });
+
+  describe("validation feedback", () => {
+    it("describes the error the caller renders", () => {
+      renderDropdown({
+        ariaDescribedBy: "setup-field-repository-error",
+        ariaInvalid: true,
+      });
+
+      const input = screen.getByTestId("git-repo-dropdown");
+      expect(input).toHaveAttribute("aria-invalid", "true");
+      expect(input).toHaveAttribute(
+        "aria-describedby",
+        "setup-field-repository-error",
+      );
+    });
+  });
 });

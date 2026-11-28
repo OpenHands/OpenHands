@@ -14,6 +14,9 @@ interface SettingsDropdownInputProps {
   items: { key: React.Key; label: string }[];
   label?: ReactNode;
   ariaLabel?: string;
+  /** The error rendered by the caller, which this input should describe. */
+  ariaDescribedBy?: string;
+  ariaInvalid?: boolean;
   wrapperClassName?: string;
   placeholder?: string;
   showOptionalTag?: boolean;
@@ -77,6 +80,8 @@ function OpenOnClickInput({
   className,
   placeholder,
   ariaLabel,
+  ariaDescribedBy,
+  ariaInvalid,
   onFocus,
 }: {
   testId: string;
@@ -84,6 +89,8 @@ function OpenOnClickInput({
   className?: string;
   placeholder?: string;
   ariaLabel?: string;
+  ariaDescribedBy?: string;
+  ariaInvalid?: boolean;
   onFocus?: React.FocusEventHandler<HTMLInputElement>;
 }) {
   const state = useContext(ComboBoxStateContext);
@@ -94,6 +101,8 @@ function OpenOnClickInput({
       className={className}
       placeholder={placeholder}
       aria-label={ariaLabel}
+      aria-describedby={ariaDescribedBy}
+      aria-invalid={ariaInvalid || undefined}
       onFocus={onFocus}
       onClick={() => {
         if (state && !state.isOpen) state.open(null, "manual");
@@ -106,6 +115,8 @@ export function SettingsDropdownInput({
   testId,
   label,
   ariaLabel,
+  ariaDescribedBy,
+  ariaInvalid,
   wrapperClassName,
   name,
   items,
@@ -172,6 +183,8 @@ export function SettingsDropdownInput({
             className="border-0 bg-transparent shadow-none outline-none focus:ring-0 focus-visible:ring-0 data-[focused=true]:ring-0"
             placeholder={isLoading ? t(I18nKey.HOME$LOADING) : placeholder}
             ariaLabel={ariaLabel}
+            ariaDescribedBy={ariaDescribedBy}
+            ariaInvalid={ariaInvalid}
           />
           <ClearButton
             isClearable={isClearable}
