@@ -36,6 +36,7 @@ import {
 } from "#/components/features/home/featured-automations/automation-run-health";
 import type { AutomationInsightsProps } from "./automation-card";
 import { toLatestRunState } from "./to-latest-run-state";
+import { AutomationFactoryPill } from "./automation-factory-pill";
 import { AutomationTagPill } from "./automation-tag-pill";
 import { resolveAutomationImpactStatement } from "#/utils/automation-catalog";
 import { isDraftAutomation } from "#/utils/automation-state";
@@ -49,6 +50,8 @@ interface AutomationListRowProps {
   onDelete: (id: string) => void;
   onExport: (automation: Automation) => void;
   onEdit?: (id: string) => void;
+  /** When provided, the menu offers Change factory. */
+  onChangeFactory?: (id: string) => void;
   insights?: AutomationInsightsProps;
 }
 
@@ -60,6 +63,7 @@ export function AutomationListRow({
   onDelete,
   onExport,
   onEdit,
+  onChangeFactory,
   insights,
 }: AutomationListRowProps) {
   const { navigate } = useNavigation();
@@ -85,6 +89,7 @@ export function AutomationListRow({
     onView: handleView,
     onExport,
     onEdit,
+    onChangeFactory,
     onToggle,
     onDelete,
   });
@@ -161,6 +166,13 @@ export function AutomationListRow({
               </span>
               {showDraftBadge ? (
                 <ActiveStatusBadge automation={automation} compact />
+              ) : null}
+              {automation.factory_id &&
+              automation.factory_id !== factoryContext ? (
+                <AutomationFactoryPill
+                  factoryId={automation.factory_id}
+                  className="px-1.5 py-0 text-text-secondary"
+                />
               ) : null}
               {automation.tags?.length ? (
                 // Tags take only the room the name leaves (zero flex basis)

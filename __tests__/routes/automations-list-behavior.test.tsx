@@ -14,8 +14,7 @@ const mocks = vi.hoisted(() => ({
   },
   automationsState: {
     data: { automations: [], total: 0 } as
-      | { automations: Automation[]; total: number }
-      | undefined,
+      { automations: Automation[]; total: number } | undefined,
     isLoading: false,
     isError: false,
     refetch: vi.fn(),
@@ -98,6 +97,11 @@ vi.mock("#/hooks/query/use-automation-run-summaries", () => ({
 // that gates its Service accounts option is never read.
 vi.mock("#/hooks/query/use-cloud-integrations-config", () => ({
   useCloudIntegrationsConfig: () => ({ data: undefined }),
+}));
+
+// This plain list renders without a QueryClient, and Factories is off here.
+vi.mock("#/hooks/query/use-factories", () => ({
+  useFactoriesSupported: () => ({ isLoading: false, isSupported: false }),
 }));
 
 vi.mock("#/hooks/query/use-automation-health", () => ({

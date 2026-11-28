@@ -31,6 +31,7 @@ interface AutomationGroupProps {
   onDelete: (id: string) => void;
   onExport: (automation: Automation) => void;
   onEdit?: (id: string) => void;
+  onChangeFactory?: (id: string) => void;
   insights?: AutomationGroupInsights;
 }
 
@@ -45,6 +46,7 @@ export function AutomationGroup({
   onDelete,
   onExport,
   onEdit,
+  onChangeFactory,
   insights,
 }: AutomationGroupProps) {
   if (automations.length === 0) return null;
@@ -68,6 +70,7 @@ export function AutomationGroup({
                 onDelete={onDelete}
                 onExport={onExport}
                 onEdit={onEdit}
+                onChangeFactory={onChangeFactory}
                 insights={
                   insights && {
                     spec: insights.spec,
@@ -90,6 +93,7 @@ export function AutomationGroup({
               onDelete={onDelete}
               onExport={onExport}
               onEdit={onEdit}
+              onChangeFactory={onChangeFactory}
               insights={
                 insights && {
                   spec: insights.spec,

@@ -1,3 +1,4 @@
+import { Factory } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { I18nKey } from "#/i18n/declaration";
 import type { Automation } from "#/types/automation";
@@ -8,6 +9,8 @@ import ClockIcon from "#/icons/clock.svg?react";
 import CalendarIcon from "#/icons/calendar.svg?react";
 import LockIcon from "#/icons/lock.svg?react";
 import { formatCompactDuration } from "#/manifests/automation-insights";
+import { NavigationLink } from "#/components/shared/navigation-link";
+import { factoryPath } from "#/constants/factories";
 import { formatDate } from "#/utils/format-relative-time";
 import { SectionCard } from "./section-card";
 import { ConfigField } from "./config-field";
@@ -30,6 +33,16 @@ interface SettingsSectionProps {
    * account); omitted/null hides the field.
    */
   createdBy?: string | null;
+  /**
+   * The factory the automation is in. Omitted hides the field (Factories is
+   * off). `id` is null when it is in none, and `name` is unset until the
+   * factory list has loaded. `onChange` shows a Change factory button.
+   */
+  factory?: {
+    id: string | null;
+    name?: string;
+    onChange?: () => void;
+  };
 }
 
 /** How the automation runs, rather than what it does or when. */
@@ -38,6 +51,7 @@ export function SettingsSection({
   runsAs,
   runsAsServiceAccount = false,
   createdBy,
+  factory,
 }: SettingsSectionProps) {
   const { t, i18n } = useTranslation("openhands");
 
@@ -74,6 +88,42 @@ export function SettingsSection({
             label={t(I18nKey.AUTOMATIONS$DETAIL$CREATED_BY)}
           >
             <span className="break-all">{createdBy}</span>
+          </ConfigField>
+        ) : null}
+
+        {factory ? (
+          <ConfigField
+            icon={<Factory className="size-3.5" aria-hidden />}
+            label={t(I18nKey.AUTOMATIONS$CHANGE_FACTORY_TARGET)}
+          >
+            <span className="flex flex-wrap items-center gap-2">
+              {factory.id === null ? (
+                <span
+                  data-testid="automation-factory-none"
+                  className="text-muted"
+                >
+                  {t(I18nKey.AUTOMATIONS$CHANGE_FACTORY_NONE)}
+                </span>
+              ) : (
+                <NavigationLink
+                  to={factoryPath(factory.id)}
+                  data-testid="automation-factory-link"
+                  className="break-all underline-offset-2 hover:underline"
+                >
+                  {factory.name ?? t(I18nKey.HOME$LOADING)}
+                </NavigationLink>
+              )}
+              {factory.onChange ? (
+                <button
+                  type="button"
+                  data-testid="automation-factory-change"
+                  onClick={factory.onChange}
+                  className="rounded-md border border-border px-2 py-0.5 text-xs font-medium text-content hover:bg-surface-raised"
+                >
+                  {t(I18nKey.AUTOMATIONS$CHANGE_FACTORY)}
+                </button>
+              ) : null}
+            </span>
           </ConfigField>
         ) : null}
 

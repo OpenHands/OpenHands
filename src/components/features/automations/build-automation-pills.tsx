@@ -16,13 +16,22 @@ import {
   getTriggerEventLabel,
   getTriggerSource,
 } from "#/components/features/home/featured-automations/automation-run-health";
+import { AutomationFactoryPill } from "./automation-factory-pill";
 import { AutomationTagPill } from "./automation-tag-pill";
 
 export function buildAutomationMetadataPills(
   automation: Automation,
   scheduleLabel: string,
+  { showFactory = false }: { showFactory?: boolean } = {},
 ): SkillCardPill[] {
   const pills: SkillCardPill[] = [];
+
+  if (showFactory && automation.factory_id) {
+    pills.push({
+      id: "factory",
+      node: <AutomationFactoryPill factoryId={automation.factory_id} />,
+    });
+  }
 
   // The service returns repositories, lifted from preset metadata; only an
   // imported file shape carries the single `repository`.

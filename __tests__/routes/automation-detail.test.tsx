@@ -1241,18 +1241,58 @@ describe("AutomationDetail — runs as a service account", () => {
       );
     });
 
-    async function openChangeFactory() {
+    async function openChangeFactory(via: "field" | "menu" = "field") {
       const user = userEvent.setup();
       renderDetail();
       await screen.findByText(automation.name);
+      if (via === "field") {
+        await user.click(
+          await screen.findByTestId("automation-factory-change"),
+        );
+        return user;
+      }
       await user.click(screen.getByLabelText(I18nKey.AUTOMATIONS$ACTIONS_MENU));
       await user.click(
-        screen.getByRole("button", {
-          name: I18nKey.AUTOMATIONS$CHANGE_FACTORY,
-        }),
+        screen
+          .getAllByRole("button", { name: I18nKey.AUTOMATIONS$CHANGE_FACTORY })
+          .find(
+            (button) =>
+              button.getAttribute("data-testid") === "context-menu-list-item",
+          )!,
       );
       return user;
     }
+
+    it("shows no factory until the automation is put in one", async () => {
+      // Act
+      renderDetail();
+      await screen.findByText(automation.name);
+
+      // Assert
+      expect(
+        await screen.findByTestId("automation-factory-none"),
+      ).toBeVisible();
+    });
+
+    it("names the factory the automation is in and links to it", async () => {
+      // Arrange
+      vi.mocked(AutomationService.getAutomation).mockResolvedValue({
+        ...automation,
+        factory_id: "f-core",
+      });
+
+      // Act
+      renderDetail();
+      await screen.findByText(automation.name);
+
+      // Assert
+      const link = await screen.findByTestId("automation-factory-link");
+      await waitFor(() => expect(link).toHaveTextContent(coreFactory.name));
+      expect(link).toHaveAttribute(
+        "href",
+        expect.stringContaining("/factories/f-core"),
+      );
+    });
 
     it("puts the automation in the chosen factory", async () => {
       // Arrange + Act
@@ -1281,7 +1321,7 @@ describe("AutomationDetail — runs as a service account", () => {
       });
 
       // Act
-      const user = await openChangeFactory();
+      const user = await openChangeFactory("menu");
       await screen.findByRole("option", { name: coreFactory.name });
       await user.selectOptions(
         screen.getByTestId("change-factory-target"),
