@@ -58,6 +58,8 @@ interface ProfileSeed {
   baseConfig: Record<string, unknown>;
   /** The form values that show that profile. */
   initialValues: SettingsFormValues;
+  /** Existing LLM profile names on the backend when the seed was loaded. */
+  existingNames?: readonly string[];
 }
 
 /**
@@ -73,6 +75,7 @@ interface ProfileSeed {
 async function loadOnboardingProfile(): Promise<{
   profileName: string | null;
   config: Record<string, unknown>;
+  existingNames: string[];
 }> {
   const agentProfiles = await AgentProfilesService.listProfiles().catch(
     () => null,
@@ -86,11 +89,18 @@ async function loadOnboardingProfile(): Promise<{
     [llmProfiles.active_profile, defaultAgentRef].find(
       (name): name is string => !!name && existing.has(name),
     ) ?? null;
-  if (!profileName) return { profileName: null, config: {} };
+  if (!profileName) {
+    return {
+      profileName: null,
+      config: {},
+      existingNames: Array.from(existing),
+    };
+  }
   const detail = await ProfilesService.getProfile(profileName, "encrypted");
   return {
     profileName,
     config: (detail.config ?? {}) as Record<string, unknown>,
+    existingNames: Array.from(existing),
   };
 }
 
@@ -148,6 +158,7 @@ function useOnboardingProfileSeed(isLocalBackend: boolean): {
         profileName: profile.data.profileName,
         baseConfig: profile.data.config,
         initialValues: profileConfigToFormValues(schema, profile.data.config),
+        existingNames: profile.data.existingNames,
       },
     });
   }, [enabled, seed, backend.id, profile.data, isSchemaSettled, schema]);
@@ -189,6 +200,45 @@ function useOnboardingProfileSeed(isLocalBackend: boolean): {
  * step. Users who do reach it are first-time installs (Cloud or Local)
  * who want the OpenHands default pre-filled.
  */
+/**
+ * Pick the profile name to save under on a local backend.
+ *
+ * When the derived name from the selected model is already in use by another
+ * profile, never overwrite that unrelated profile:
+ * - If the step started by editing an existing profile, save in place under that
+ *   starting profile name instead.
+ * - If the step started from a fresh profile (or has no starting name), append
+ *   a numeric suffix (-2, -3, ...) to yield an unused name.
+ *
+ * Otherwise (no collision, or the derived name is the profile currently being
+ * edited), use the derived name.
+ */
+export function resolveOnboardingProfileName({
+  derivedName,
+  startingProfileName,
+  existingNames,
+}: {
+  derivedName: string;
+  startingProfileName: string | null;
+  existingNames: ReadonlySet<string>;
+}): string {
+  if (!existingNames.has(derivedName) || derivedName === startingProfileName) {
+    return derivedName;
+  }
+
+  if (startingProfileName) {
+    return startingProfileName;
+  }
+
+  let suffix = 2;
+  let candidate = `${derivedName}-${suffix}`;
+  while (existingNames.has(candidate)) {
+    suffix += 1;
+    candidate = `${derivedName}-${suffix}`;
+  }
+  return candidate;
+}
+
 export function SetupLlmStep({ onBack, onNext }: SetupLlmStepProps) {
   const { t } = useTranslation("openhands");
   const { backend } = useActiveBackend();
@@ -297,7 +347,12 @@ export function SetupLlmStep({ onBack, onNext }: SetupLlmStepProps) {
       displayErrorToast(t(I18nKey.SETTINGS$MODEL_REQUIRED));
       return;
     }
-    const profileName = deriveProfileNameFromModel(model);
+    const existingNames = new Set<string>(profileSeed.existingNames ?? []);
+    const profileName = resolveOnboardingProfileName({
+      derivedName: deriveProfileNameFromModel(model),
+      startingProfileName: profileSeed.profileName,
+      existingNames,
+    });
 
     setIsFinalizing(true);
     try {
