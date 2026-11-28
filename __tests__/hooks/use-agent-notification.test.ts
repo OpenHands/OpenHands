@@ -103,4 +103,31 @@ describe("useAgentNotification", () => {
 
     expect(mockPlay).not.toHaveBeenCalled();
   });
+  it("does not play sound when an already finished or idle conversation is opened", () => {
+    const { rerender } = renderHook(
+      ({ state }) => useAgentNotification(state, "conversation-a"),
+      { initialProps: { state: AgentState.FINISHED } },
+    );
+    rerender({ state: AgentState.LOADING });
+    rerender({ state: AgentState.AWAITING_USER_INPUT });
+
+    expect(mockPlay).not.toHaveBeenCalled();
+  });
+
+  it("does not play sound when switching from a running conversation to a finished one", () => {
+    const { rerender } = renderHook(
+      ({ state, conversationId }) =>
+        useAgentNotification(state, conversationId),
+      {
+        initialProps: {
+          state: AgentState.RUNNING,
+          conversationId: "conversation-a",
+        },
+      },
+    );
+
+    rerender({ state: AgentState.FINISHED, conversationId: "conversation-b" });
+
+    expect(mockPlay).not.toHaveBeenCalled();
+  });
 });

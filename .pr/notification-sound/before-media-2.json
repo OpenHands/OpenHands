@@ -1,0 +1,14 @@
+{
+  "ok": true,
+  "plays": [
+    {
+      "src": "http://127.0.0.1:18800/assets/notification-Cyeyy5ud.mp3",
+      "ts": "2026-11-21T11:27:40.435Z"
+    },
+    {
+      "src": "http://127.0.0.1:18800/assets/notification-Cyeyy5ud.mp3",
+      "ts": "2026-11-21T11:27:45.678Z"
+    }
+  ],
+  "reducedMotion": "no-preference"
+}

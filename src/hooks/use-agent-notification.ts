@@ -10,15 +10,22 @@ const NOTIFICATION_STATES: AgentState[] = [
 ];
 
 /**
- * Hook that plays a notification sound when the agent transitions into a
- * state that requires user attention. The browser tab title itself is
- * managed by `useAppTitle`, which prefixes the title with an emoji that
- * reflects the current agent state.
+ * Hook that plays a notification sound when the agent stops running and now
+ * needs the user's attention. Opening, reloading or switching to a
+ * conversation that is already idle or finished is not such a transition.
+ * The browser tab title itself is managed by `useAppTitle`, which prefixes
+ * the title with an emoji that reflects the current agent state.
  */
-export function useAgentNotification(curAgentState: AgentState) {
+export function useAgentNotification(
+  curAgentState: AgentState,
+  conversationId?: string | null,
+) {
   const { data: settings } = useSettings();
   const audioRef = useRef<HTMLAudioElement | undefined>(undefined);
-  const prevStateRef = useRef<AgentState | undefined>(undefined);
+  const prevRef = useRef<{
+    conversationId?: string | null;
+    state: AgentState;
+  }>(undefined);
 
   // Initialize audio only in browser environment, inside useEffect to
   // avoid side effects during render (React 18 strict mode, SSR safety).
@@ -31,13 +38,19 @@ export function useAgentNotification(curAgentState: AgentState) {
 
   const isSoundEnabled = settings?.enable_sound_notifications ?? false;
 
-  // Trigger notification only on actual state transitions into a
-  // notification-worthy state — not when unrelated deps (e.g. settings) change.
+  // Trigger notification only when this conversation's agent leaves RUNNING
+  // for a notification-worthy state — not when unrelated deps (e.g. settings)
+  // change.
   useEffect(() => {
-    if (prevStateRef.current === curAgentState) return;
-    prevStateRef.current = curAgentState;
+    const prev = prevRef.current;
+    prevRef.current = { conversationId, state: curAgentState };
 
-    if (!NOTIFICATION_STATES.includes(curAgentState)) return;
+    if (
+      prev?.state !== AgentState.RUNNING ||
+      prev.conversationId !== conversationId ||
+      !NOTIFICATION_STATES.includes(curAgentState)
+    )
+      return;
 
     if (isSoundEnabled && audioRef.current) {
       audioRef.current.currentTime = 0;
@@ -45,5 +58,5 @@ export function useAgentNotification(curAgentState: AgentState) {
         // Ignore autoplay errors (browsers may block autoplay)
       });
     }
-  }, [curAgentState, isSoundEnabled]);
+  }, [curAgentState, conversationId, isSoundEnabled]);
 }
