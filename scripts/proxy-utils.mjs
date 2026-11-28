@@ -1,5 +1,6 @@
 import { request as httpRequest } from "node:http";
 import { request as httpsRequest } from "node:https";
+import { isIP } from "node:net";
 import { createProxyServer } from "httpxy";
 
 const DEFAULT_PROXY_TIMEOUT_MS = 120_000;
@@ -36,6 +37,90 @@ export function createRouter(routes, defaultBackend = null) {
 
 export function isBenignSocketError(err) {
   return Boolean(err && BENIGN_SOCKET_ERRORS.has(err.code));
+}
+
+function firstForwardedEntry(value) {
+  return typeof value === "string" ? value.split(",")[0].trim() : "";
+}
+
+/**
+ * The client-facing host/port/protocol of a request: what the browser
+ * connected to, taken from the first `X-Forwarded-*` entry when a reverse
+ * proxy is in front, else the Host header and the connection itself. These
+ * values are only as trustworthy as whatever set them — with direct
+ * exposure the client controls them exactly as it controls Host — so the
+ * upstream's own checks remain the authority. Returns `null` when there
+ * is no usable host entry to forward.
+ */
+function clientFacingIdentity(req) {
+  const forwardedHost = req.headers["x-forwarded-host"];
+  const host = forwardedHost
+    ? firstForwardedEntry(forwardedHost)
+    : typeof req.headers.host === "string"
+      ? req.headers.host
+      : "";
+  // Don't turn a nonempty forwarded list with a blank first entry into Host:
+  // the editor proxy would reject that list. Leave the original header alone.
+  if (!host) return null;
+  const proto =
+    firstForwardedEntry(req.headers["x-forwarded-proto"]) ||
+    (req.socket && req.socket.encrypted ? "https" : "http");
+  let port = firstForwardedEntry(req.headers["x-forwarded-port"]);
+  if (!port) {
+    try {
+      const parsed = new URL(`${proto}://${host}`);
+      if (parsed.port) port = parsed.port;
+    } catch {
+      // A malformed Host: fall through to the protocol's default port.
+    }
+  }
+  if (!port) port = proto === "https" ? "443" : "80";
+  return { host, port, proto };
+}
+
+/**
+ * `X-Forwarded-*` headers describing that client-facing identity, for
+ * proxies whose upstream validates the browser's Origin against it — the
+ * agent-server editor proxy checks `x-forwarded-host || Host`, and
+ * code-server can also use the forwarded port. On the direct Docker path,
+ * rewriting Host without forwarding it broke the Origin check (#19945).
+ */
+function clientForwardedHeaders(req) {
+  const identity = clientFacingIdentity(req);
+  if (!identity) return {};
+  const headers = {
+    "x-forwarded-host": identity.host,
+    "x-forwarded-port": identity.port,
+    "x-forwarded-proto": identity.proto,
+  };
+  const forwardedFor =
+    typeof req.headers["x-forwarded-for"] === "string"
+      ? req.headers["x-forwarded-for"]
+      : "";
+  const remoteAddress = req.socket && req.socket.remoteAddress;
+  if (remoteAddress) {
+    headers["x-forwarded-for"] = forwardedFor
+      ? `${forwardedFor},${remoteAddress}`
+      : remoteAddress;
+  } else if (forwardedFor) {
+    headers["x-forwarded-for"] = forwardedFor;
+  }
+  return headers;
+}
+
+function clientIdentityProxyOptions(req, target, headers) {
+  const url = new URL(target);
+  const options = {
+    target: url,
+    headers: { ...clientForwardedHeaders(req), ...headers },
+  };
+  if (url.protocol === "https:" || url.protocol === "wss:") {
+    const hostname = url.hostname.replace(/^\[|\]$/g, "");
+    // httpxy seeds its outgoing request options from ssl. Pin the TLS name
+    // to the target, not the preserved HTTP Host; omit SNI for IP literals.
+    options.ssl = { servername: isIP(hostname) ? "" : hostname };
+  }
+  return options;
 }
 
 function parseBackendUrl(backendUrl) {
@@ -272,12 +357,31 @@ function writeProxyError(res, message, errorBody) {
   res.destroy();
 }
 
+function emptyProxyMetrics() {
+  return {
+    activeHttpRequests: 0,
+    activeWebSockets: 0,
+    totalHttpRequests: 0,
+    totalWebSockets: 0,
+    totalErrors: 0,
+  };
+}
+
 /**
  * @param {object} [options]
  * @param {string} [options.label] Prefix for log lines and metrics
+ * @param {ReturnType<typeof emptyProxyMetrics>} [options.metrics] Share counters
+ *   between handlers exposed through one diagnostics listener.
  * @param {number} [options.timeout] Client socket idle timeout in ms; 0 = none
  * @param {number} [options.proxyTimeout] Upstream response timeout in ms; 0 = none
  * @param {boolean} [options.xfwd] Add X-Forwarded-* headers upstream
+ * @param {boolean} [options.forwardClientIdentity] Forward the client-facing
+ *   Host and X-Forwarded-* identity (host/port/proto/for) to the upstream on
+ *   both proxied HTTP requests and WebSocket upgrades, instead of rewriting
+ *   Host to the local hop. For upstreams that validate the browser's Origin
+ *   against that identity — the agent-server editor proxy and code-server
+ *   behind it (#19945). Replaces httpxy's own xfwd pass, which would fill
+ *   x-forwarded-port/proto from the local hop.
  * @param {(message: string) => { contentType: string, body: string }} [options.errorBody]
  *   The 502 written when the upstream fails before a response started
  * @param {(proxySocket: import("node:net").Socket) => void} [options.onProxySocket]
@@ -288,24 +392,33 @@ export function createProxyHandlers({
   timeout = DEFAULT_PROXY_TIMEOUT_MS,
   proxyTimeout = DEFAULT_PROXY_TIMEOUT_MS,
   xfwd = true,
+  forwardClientIdentity = false,
+  metrics = emptyProxyMetrics(),
   errorBody = textErrorBody,
   onProxySocket,
 } = {}) {
   const proxy = createProxyServer({
     ws: true,
-    changeOrigin: true,
-    xfwd,
+    changeOrigin: !forwardClientIdentity,
+    xfwd: forwardClientIdentity ? false : xfwd,
     timeout,
     proxyTimeout,
   });
   if (onProxySocket) proxy.on("proxySocket", onProxySocket);
-  const metrics = {
-    activeHttpRequests: 0,
-    activeWebSockets: 0,
-    totalHttpRequests: 0,
-    totalWebSockets: 0,
-    totalErrors: 0,
-  };
+  if (forwardClientIdentity) {
+    // The upstream's non-101 answer to an upgrade (e.g. the editor proxy's
+    // 401 for a mismatched Origin) is piped to the client, but nothing logs
+    // it; without a line here the rejection is invisible server-side. Keep
+    // both the request query and the configured target out of the log.
+    proxy.on("proxyReqWs", (proxyReq, req) => {
+      proxyReq.once("response", (proxyRes) => {
+        const path = (req.url ?? "/").split("?", 1)[0];
+        console.error(
+          `[${label}:editor] WebSocket upstream rejected ${path}: HTTP ${proxyRes.statusCode}`,
+        );
+      });
+    });
+  }
 
   /** Per-request `onResponse` handlers; see proxyHttp. */
   const responseHandlers = new WeakMap();
@@ -362,12 +475,14 @@ export function createProxyHandlers({
       finish();
     };
 
-    const options = { target, headers };
-    if (onResponse) {
-      responseHandlers.set(req, onResponse);
-      options.selfHandleResponse = true;
-    }
     try {
+      const options = forwardClientIdentity
+        ? clientIdentityProxyOptions(req, target, headers)
+        : { target, headers };
+      if (onResponse) {
+        responseHandlers.set(req, onResponse);
+        options.selfHandleResponse = true;
+      }
       proxy.web(req, res, options).catch(handleProxyError);
     } catch (err) {
       handleProxyError(err);
@@ -384,17 +499,26 @@ export function createProxyHandlers({
     socket.on("error", finish);
 
     try {
-      proxy.ws(req, socket, { target }, head).catch((err) => {
-        metrics.totalErrors += 1;
-        if (!isBenignSocketError(err)) {
-          console.error(
-            `[${label}] WebSocket proxy error for ${req.url} -> ${target}:`,
-            err,
-          );
-        }
-        socket.destroy();
-        finish();
-      });
+      proxy
+        .ws(
+          req,
+          socket,
+          forwardClientIdentity
+            ? clientIdentityProxyOptions(req, target)
+            : { target },
+          head,
+        )
+        .catch((err) => {
+          metrics.totalErrors += 1;
+          if (!isBenignSocketError(err)) {
+            console.error(
+              `[${label}] WebSocket proxy error for ${req.url} -> ${target}:`,
+              err,
+            );
+          }
+          socket.destroy();
+          finish();
+        });
     } catch (err) {
       metrics.totalErrors += 1;
       if (!isBenignSocketError(err)) {

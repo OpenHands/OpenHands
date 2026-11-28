@@ -1,4 +1,16 @@
-import { createServer, request, type Server } from "node:http";
+import {
+  createServer,
+  request,
+  type IncomingMessage,
+  type Server,
+} from "node:http";
+import {
+  connect as netConnect,
+  type Server as NetServer,
+  type Socket,
+} from "node:net";
+import type { Duplex } from "node:stream";
+import { createServer as createTlsServer } from "node:tls";
 import {
   mkdirSync,
   mkdtempSync,
@@ -17,7 +29,7 @@ import {
 } from "../../scripts/static-server.mjs";
 
 describe("static-server.mjs", () => {
-  const servers: Server[] = [];
+  const servers: NetServer[] = [];
   const tempDirs: string[] = [];
 
   afterEach(async () => {
@@ -56,7 +68,7 @@ describe("static-server.mjs", () => {
     return `http://127.0.0.1:${address.port}`;
   }
 
-  async function startHttpServer(server: Server) {
+  async function startHttpServer(server: NetServer) {
     await new Promise<void>((resolve, reject) => {
       server.once("error", reject);
       server.listen(0, "127.0.0.1", () => {
@@ -96,9 +108,9 @@ describe("static-server.mjs", () => {
     });
   }
 
-  async function getText(url: string) {
+  async function getText(url: string, headers?: Record<string, string>) {
     return new Promise<{ status: number; body: string }>((resolve, reject) => {
-      const req = request(url, { method: "GET" }, (res) => {
+      const req = request(url, { method: "GET", headers }, (res) => {
         let body = "";
         res.setEncoding("utf8");
         res.on("data", (chunk) => {
@@ -1087,6 +1099,628 @@ describe("static-server.mjs", () => {
     expect(response.body).toContain("Bad Gateway");
     expect(response.body).toContain("Invalid URL");
     expect(server.listening).toBe(true);
+  });
+
+  describe("proxied client identity (editor origin checks)", () => {
+    // The agent-server editor proxy (software-agent-sdk,
+    // openhands/agent_server/code_server_proxy.cjs) accepts a proxied
+    // WebSocket upgrade only when the browser's Origin host matches the
+    // client-facing host it is shown — `x-forwarded-host` or Host — and
+    // code-server behind it re-checks the forwarded identity. On direct
+    // access, httpxy rewrote Host to the local hop without setting
+    // X-Forwarded-Host on upgrades (#19945). This fixture tests forwarding
+    // against the editor proxy's Origin check, not cookie auth or code-server.
+    type CapturedRequest = {
+      url: string;
+      headers: Record<string, string | string[] | undefined>;
+    };
+    const upstreamRequests: CapturedRequest[] = [];
+    const upstreamSockets: Duplex[] = [];
+    const clientSockets: Socket[] = [];
+
+    const validOrigin = (req: IncomingMessage) => {
+      if (!req.headers.origin) return true;
+      try {
+        const host = (
+          (req.headers["x-forwarded-host"] as string | undefined) ||
+          req.headers.host ||
+          ""
+        )
+          .split(",")[0]
+          .trim();
+        return new URL(req.headers.origin as string).host === host;
+      } catch {
+        return false;
+      }
+    };
+
+    const capture = (req: IncomingMessage) => {
+      upstreamRequests.push({
+        url: req.url ?? "",
+        headers: { ...req.headers },
+      });
+    };
+
+    // The editor's origin check applies on the editor route; the same
+    // upstream doubles as a plain backend for other routes.
+    const isEditorPath = (req: IncomingMessage) =>
+      (req.url ?? "").startsWith("/vscode");
+
+    function startEditorUpstream() {
+      const upstream = createServer((req, res) => {
+        capture(req);
+        if (isEditorPath(req) && !validOrigin(req)) {
+          res.writeHead(403).end();
+          return;
+        }
+        res.writeHead(200, { "Content-Type": "text/plain" });
+        res.end("editor");
+      });
+      upstream.on("upgrade", (req, socket) => {
+        capture(req);
+        if (isEditorPath(req) && !validOrigin(req)) {
+          socket.end("HTTP/1.1 401 Unauthorized\r\nConnection: close\r\n\r\n");
+          return;
+        }
+        upstreamSockets.push(socket);
+        socket.write(
+          "HTTP/1.1 101 Switching Protocols\r\n" +
+            "Upgrade: websocket\r\n" +
+            "Connection: Upgrade\r\n\r\n",
+        );
+      });
+      return upstream;
+    }
+
+    function makeBuildDir() {
+      const buildDir = mkdtempSync(path.join(tmpdir(), "agent-canvas-build-"));
+      tempDirs.push(buildDir);
+      writeFileSync(
+        path.join(buildDir, "index.html"),
+        "<html><head></head><body>app</body></html>",
+      );
+      return buildDir;
+    }
+
+    // These fixtures model the README Docker path and a TLS edge or reverse
+    // proxy in front of the static server, where the listener is reached
+    // off-loopback (the container binds `::`). The loopback Host and Origin
+    // guard in bind-host.mjs (#20060) is permissive on such binds by design,
+    // so these requests reach the editor route; the loopback-bind composition
+    // is pinned by its own test below.
+    async function startEditorServer(
+      overrides: Partial<Parameters<typeof startStaticServer>[0]> = {},
+    ) {
+      return startServer(makeBuildDir(), { host: "0.0.0.0", ...overrides });
+    }
+
+    async function startEditorProxyRoute(upstreamQuery = "") {
+      const upstreamOrigin = await startHttpServer(startEditorUpstream());
+      return startEditorServer({
+        routes: { "/vscode": `${upstreamOrigin}${upstreamQuery}` },
+        vscodeBasePath: "/vscode",
+      });
+    }
+
+    afterEach(() => {
+      for (const socket of clientSockets.splice(0)) socket.destroy();
+      for (const socket of upstreamSockets.splice(0)) socket.destroy();
+      upstreamRequests.length = 0;
+    });
+
+    /**
+     * Opens a raw WebSocket handshake against the static server, the way a
+     * browser workbench does (Origin is always present), and resolves with
+     * the response's status line once the upstream answers or closes.
+     */
+    function openUpgrade(
+      origin: string,
+      headers: Record<string, string>,
+      path = "/vscode/?reconnectionToken=t&reconnection=false&skipWebSocketFrames=false",
+    ): Promise<{ statusLine: string; buffered: string }> {
+      const url = new URL(origin);
+      return new Promise((resolve, reject) => {
+        let buffered = "";
+        let settled = false;
+        const watchdog = setTimeout(() => {
+          if (settled) return;
+          settled = true;
+          reject(new Error(`upgrade handshake timed out: ${buffered}`));
+        }, 8000);
+        const finish = (outcome: { statusLine: string; buffered: string }) => {
+          if (settled) return;
+          settled = true;
+          clearTimeout(watchdog);
+          resolve(outcome);
+        };
+        const socket = netConnect(
+          { host: url.hostname, port: Number(url.port) },
+          () => {
+            const lines = [
+              `GET ${path} HTTP/1.1`,
+              `Host: ${headers.Host ?? url.host}`,
+              "Upgrade: websocket",
+              "Connection: Upgrade",
+              "Sec-WebSocket-Version: 13",
+              "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==",
+            ];
+            for (const [name, value] of Object.entries(headers)) {
+              if (name !== "Host") lines.push(`${name}: ${value}`);
+            }
+            socket.write(`${lines.join("\r\n")}\r\n\r\n`);
+          },
+        );
+        clientSockets.push(socket);
+        socket.on("error", (err) => {
+          if (settled) return;
+          settled = true;
+          clearTimeout(watchdog);
+          reject(new Error(`${err}: ${buffered}`));
+        });
+        socket.on("data", (chunk: Buffer) => {
+          buffered += chunk.toString("utf8");
+          if (buffered.includes("\r\n")) {
+            finish({
+              statusLine: buffered.split("\r\n", 1)[0] ?? "",
+              buffered,
+            });
+          }
+        });
+        socket.on("close", () => {
+          finish({
+            statusLine: buffered.split("\r\n", 1)[0] ?? "",
+            buffered,
+          });
+        });
+      });
+    }
+
+    it("forwards the client's Host and Origin on an editor WebSocket upgrade", async () => {
+      const origin = await startEditorProxyRoute();
+      const clientHost = new URL(origin).host;
+
+      const { statusLine } = await openUpgrade(origin, {
+        Origin: `http://${clientHost}`,
+      });
+
+      expect(statusLine).toBe("HTTP/1.1 101 Switching Protocols");
+      const upgrade = upstreamRequests.at(-1);
+      // The client-facing Host must reach the upstream — not the local hop
+      // the request was forwarded to.
+      expect(upgrade?.headers.host).toBe(clientHost);
+      expect(upgrade?.headers.origin).toBe(`http://${clientHost}`);
+      expect(upgrade?.headers["x-forwarded-host"]).toBe(clientHost);
+      expect(upgrade?.headers["x-forwarded-port"]).toBe(new URL(origin).port);
+      expect(upgrade?.headers["x-forwarded-proto"]).toBe("http");
+    });
+
+    it("keeps rejecting an upgrade whose Origin does not match the client-facing host", async () => {
+      const origin = await startEditorProxyRoute();
+      const clientHost = new URL(origin).host;
+      const errorLog = vi.spyOn(console, "error").mockImplementation(() => {});
+
+      try {
+        const { buffered } = await openUpgrade(origin, {
+          Origin: "http://evil.example",
+        });
+
+        // The editor proxy's origin check (kept intact upstream) answers
+        // 401, and the rejection is passed back and logged.
+        expect(buffered).toMatch(/^HTTP\/1\.1 401/);
+        const upgrade = upstreamRequests.at(-1);
+        expect(upgrade?.headers.host).toBe(clientHost);
+        expect(upgrade?.headers.origin).toBe("http://evil.example");
+        expect(errorLog.mock.calls).toEqual([
+          ["[static:0:editor] WebSocket upstream rejected /vscode/: HTTP 401"],
+        ]);
+      } finally {
+        errorLog.mockRestore();
+      }
+    });
+
+    it("keeps the existing error label for editor proxy failures without an upstream response", async () => {
+      const origin = await startEditorServer({
+        routes: { "/vscode": "not-a-url" },
+        vscodeBasePath: "/vscode",
+      });
+      const errorLog = vi.spyOn(console, "error").mockImplementation(() => {});
+
+      try {
+        expect((await getText(`${origin}/vscode/`)).status).toBe(502);
+        expect((await openUpgrade(origin, {}, "/vscode/")).statusLine).toBe("");
+        expect(errorLog.mock.calls.map(([line]) => line)).toEqual([
+          expect.stringMatching(/^\[static:0\] Proxy error for \/vscode\//),
+          expect.stringMatching(
+            /^\[static:0\] WebSocket proxy error for \/vscode\//,
+          ),
+        ]);
+      } finally {
+        errorLog.mockRestore();
+      }
+    });
+
+    it.each([
+      { host: "public.example", proto: "https", port: "443" },
+      { host: "public.example", proto: "http", port: "80" },
+      { host: "[2001:db8::2]:8443", proto: "https", port: "8443" },
+    ])(
+      "forwards $proto://$host with client-facing port $port instead of the local port",
+      async ({ host, proto, port }) => {
+        const origin = await startEditorProxyRoute();
+        const { statusLine } = await openUpgrade(origin, {
+          Host: host,
+          Origin: `${proto}://${host}`,
+          ...(proto === "https" ? { "X-Forwarded-Proto": proto } : {}),
+        });
+
+        expect(statusLine).toBe("HTTP/1.1 101 Switching Protocols");
+        expect(upstreamRequests.at(-1)?.headers).toMatchObject({
+          host,
+          "x-forwarded-host": host,
+          "x-forwarded-port": port,
+          "x-forwarded-proto": proto,
+        });
+      },
+    );
+
+    it.each([
+      {
+        host: "public.example:9443",
+        forwardedPort: "8443, 3001",
+        expectedPort: "8443",
+      },
+      {
+        host: "public.example:9443",
+        forwardedPort: ", 3001",
+        expectedPort: "9443",
+      },
+      {
+        host: "public.example",
+        forwardedPort: ", 3001",
+        expectedPort: "443",
+      },
+    ])(
+      "forwards port $expectedPort for Host $host and X-Forwarded-Port '$forwardedPort'",
+      async ({ host, forwardedPort, expectedPort }) => {
+        const origin = await startEditorProxyRoute();
+
+        // Check the wire metadata independently of the upstream Origin check.
+        const { statusLine } = await openUpgrade(origin, {
+          Host: host,
+          "X-Forwarded-Proto": "https",
+          "X-Forwarded-Port": forwardedPort,
+        });
+
+        expect(statusLine).toBe("HTTP/1.1 101 Switching Protocols");
+        expect(upstreamRequests.at(-1)?.headers["x-forwarded-port"]).toBe(
+          expectedPort,
+        );
+      },
+    );
+
+    it("still proxies plain HTTP requests with the client-facing identity", async () => {
+      const origin = await startEditorProxyRoute();
+      const clientHost = new URL(origin).host;
+
+      const response = await new Promise<{ status: number; body: string }>(
+        (resolve, reject) => {
+          const req = request(
+            `${origin}/vscode/`,
+            { headers: { Origin: `http://${clientHost}` } },
+            (res) => {
+              let body = "";
+              res.setEncoding("utf8");
+              res.on("data", (chunk) => {
+                body += chunk;
+              });
+              res.on("end", () => {
+                resolve({ status: res.statusCode ?? 0, body });
+              });
+            },
+          );
+          req.on("error", reject);
+          req.end();
+        },
+      );
+
+      expect(response.status).toBe(200);
+      expect(response.body).toBe("editor");
+      const captured = upstreamRequests.at(-1);
+      expect(captured?.headers.host).toBe(clientHost);
+      expect(captured?.headers.origin).toBe(`http://${clientHost}`);
+      expect(captured?.headers["x-forwarded-host"]).toBe(clientHost);
+      expect(captured?.headers["x-forwarded-port"]).toBe(new URL(origin).port);
+      expect(captured?.headers["x-forwarded-proto"]).toBe("http");
+      expect(captured?.headers["x-forwarded-for"]).toBe("127.0.0.1");
+    });
+
+    it.each([
+      { scheme: "https", hostname: "localhost", serverName: "localhost" },
+      { scheme: "wss", hostname: "localhost", serverName: "localhost" },
+      { scheme: "https", hostname: "127.0.0.1", serverName: null },
+      { scheme: "wss", hostname: "127.0.0.1", serverName: null },
+    ])(
+      "keys upstream TLS to $scheme://$hostname for HTTP and upgrades",
+      async ({ scheme, hostname, serverName }) => {
+        const serverNames: string[] = [];
+        let failedHandshakes = 0;
+        const upstream = createTlsServer({
+          SNICallback(servername, done) {
+            serverNames.push(servername);
+            // No test certificate or trust override: stop after observing SNI.
+            done(new Error("Test upstream stopped the handshake"));
+          },
+        });
+        upstream.on("tlsClientError", () => {
+          failedHandshakes += 1;
+        });
+        const address = new URL(await startHttpServer(upstream));
+        const origin = await startEditorServer({
+          routes: { "/vscode": `${scheme}://${hostname}:${address.port}` },
+          vscodeBasePath: "/vscode",
+        });
+        const host = "canvas.example";
+        const errorLog = vi
+          .spyOn(console, "error")
+          .mockImplementation(() => {});
+
+        try {
+          const response = await new Promise<number>((resolve, reject) => {
+            const req = request(
+              `${origin}/vscode/`,
+              { headers: { host } },
+              (res) => {
+                res.resume();
+                res.on("end", () => resolve(res.statusCode ?? 0));
+              },
+            );
+            req.on("error", reject);
+            req.end();
+          });
+          expect(response).toBe(502);
+          expect((await openUpgrade(origin, { Host: host })).statusLine).toBe(
+            "",
+          );
+          expect(failedHandshakes).toBe(2);
+          expect(serverNames).toEqual(
+            serverName ? [serverName, serverName] : [],
+          );
+        } finally {
+          errorLog.mockRestore();
+        }
+      },
+    );
+
+    it("accepts an editor upgrade without an Origin header (pinned upstream contract: no Origin means no check)", async () => {
+      const origin = await startEditorProxyRoute();
+
+      const { statusLine } = await openUpgrade(origin, {});
+
+      expect(statusLine).toBe("HTTP/1.1 101 Switching Protocols");
+      expect(upstreamRequests.at(-1)?.headers.host).toBe(new URL(origin).host);
+    });
+
+    it("still rejects an upgrade whose Origin is not a valid URL (pinned upstream contract)", async () => {
+      const origin = await startEditorProxyRoute();
+
+      const { buffered } = await openUpgrade(origin, {
+        Origin: "not a url",
+      });
+
+      expect(buffered).toMatch(/^HTTP\/1\.1 401/);
+    });
+
+    it("uses the first forwarded host, port and scheme while preserving Host and the address chain", async () => {
+      const origin = await startEditorProxyRoute();
+      const errorLog = vi.spyOn(console, "error").mockImplementation(() => {});
+
+      try {
+        const { statusLine } = await openUpgrade(origin, {
+          Host: "internal.example:3001",
+          Origin: "https://public.example:8443",
+          "X-Forwarded-Host": "public.example:8443, internal.example:3001",
+          "X-Forwarded-Proto": "https, http",
+          "X-Forwarded-Port": "8443, 3001",
+          "X-Forwarded-For": "192.0.2.10",
+        });
+
+        expect(statusLine).toBe("HTTP/1.1 101 Switching Protocols");
+        expect(upstreamRequests.at(-1)?.headers).toMatchObject({
+          host: "internal.example:3001",
+          origin: "https://public.example:8443",
+          "x-forwarded-host": "public.example:8443",
+          "x-forwarded-port": "8443",
+          "x-forwarded-proto": "https",
+          "x-forwarded-for": "192.0.2.10,127.0.0.1",
+        });
+        expect(errorLog).not.toHaveBeenCalled();
+      } finally {
+        errorLog.mockRestore();
+      }
+    });
+
+    it.each([200, 403])(
+      "returns HTTP %s using the forwarded authority when no forwarded port is set",
+      async (status) => {
+        const origin = await startEditorProxyRoute();
+        const host = "internal.example:3001";
+        const authority = "public.example:9443";
+        const clientOrigin = `https://${status === 200 ? authority : host}`;
+        const response = await getText(`${origin}/vscode/`, {
+          Host: host,
+          Origin: clientOrigin,
+          "X-Forwarded-Host": authority,
+          "X-Forwarded-Proto": "https",
+        });
+
+        expect(response.status).toBe(status);
+        expect(response.body).toBe(status === 200 ? "editor" : "");
+        expect(upstreamRequests.at(-1)?.headers).toMatchObject({
+          host,
+          origin: clientOrigin,
+          "x-forwarded-host": authority,
+          "x-forwarded-port": "9443",
+          "x-forwarded-proto": "https",
+        });
+      },
+    );
+
+    it("leaves an empty first forwarded host for the upstream to reject", async () => {
+      const origin = await startEditorProxyRoute();
+      const forwardedHost = `, ${new URL(origin).host}`;
+      const { statusLine } = await openUpgrade(origin, {
+        Origin: origin,
+        "X-Forwarded-Host": forwardedHost,
+      });
+
+      expect(statusLine).toMatch(/^HTTP\/1\.1 401/);
+      expect(upstreamRequests.at(-1)?.headers["x-forwarded-host"]).toBe(
+        forwardedHost,
+      );
+    });
+
+    it("keeps one static diagnostics line counting both proxy policies", async () => {
+      const upstream = await startHttpServer(startEditorUpstream());
+      const origin = await startEditorServer({
+        routes: { "/proxy-test": upstream, "/vscode": upstream },
+        vscodeBasePath: "/vscode",
+      });
+      expect((await getText(`${origin}/proxy-test`)).status).toBe(200);
+      expect((await openUpgrade(origin, { Origin: origin })).statusLine).toBe(
+        "HTTP/1.1 101 Switching Protocols",
+      );
+
+      const log = vi.spyOn(console, "log").mockImplementation(() => {});
+      try {
+        process.emit("SIGUSR1");
+        const diagnostics = log.mock.calls
+          .map(([line]) => String(line))
+          .filter((line) => line.includes("active_http="));
+        expect(diagnostics).toEqual([
+          "[static:0] active_http=0 active_ws=1 total_http=1 total_ws=1 total_errors=0",
+        ]);
+      } finally {
+        log.mockRestore();
+      }
+    });
+
+    it("logs an upstream rejection without either credential-carrying query", async () => {
+      const origin = await startEditorProxyRoute("?auth=TEST-UPSTREAM-TOKEN");
+      const errorLog = vi.spyOn(console, "error").mockImplementation(() => {});
+
+      try {
+        // `tkn` carries the editor token (static-server's own
+        // no-referrer-prefix comment): it must never reach the log line.
+        const { statusLine } = await openUpgrade(
+          origin,
+          { Origin: "http://evil.example" },
+          "/vscode/?tkn=SECRET-EDITOR-TOKEN",
+        );
+        expect(statusLine).toMatch(/^HTTP\/1\.1 401/);
+
+        const logged = errorLog.mock.calls
+          .map((call) => String(call[0]))
+          .find((line) => line.includes("WebSocket upstream rejected"));
+        expect(logged).toContain("/vscode/");
+        expect(logged).not.toContain("SECRET-EDITOR-TOKEN");
+        expect(logged).not.toContain("TEST-UPSTREAM-TOKEN");
+        expect(logged).not.toContain("?");
+      } finally {
+        errorLog.mockRestore();
+      }
+    });
+
+    it.each([
+      { path: "/proxy-test/conversations", advertiseEditor: true },
+      { path: "/vscode-extra/conversations", advertiseEditor: true },
+      { path: "/vscode/override/conversations", advertiseEditor: true },
+      { path: "/vscode/", advertiseEditor: false },
+    ])(
+      "keeps the previous proxy behavior on $path (editor advertised: $advertiseEditor)",
+      async ({ path: requestPath, advertiseEditor }) => {
+        // A neutral prefix: the test environment's request mocking intercepts
+        // node http calls on the product's /api paths, which would never reach
+        // this server.
+        const upstreamOrigin = await startHttpServer(startEditorUpstream());
+        const origin = await startEditorServer({
+          routes: {
+            "/proxy-test": upstreamOrigin,
+            "/vscode-extra": upstreamOrigin,
+            // Even if the target is the same, a more specific route is not the
+            // configured editor route and must keep its original proxy policy.
+            "/vscode/override": upstreamOrigin,
+            "/vscode": upstreamOrigin,
+          },
+          vscodeBasePath: advertiseEditor ? "/vscode" : null,
+        });
+        const upstreamHost = new URL(upstreamOrigin).host;
+
+        const response = await getText(`${origin}${requestPath}`);
+        expect(response.status).toBe(200);
+        expect(response.body).toBe("editor");
+        expect(upstreamRequests.at(-1)?.headers.host).toBe(upstreamHost);
+
+        // A WebSocket upgrade on a non-editor route keeps the previous
+        // behavior too: Host rewritten to the hop, and httpxy's own
+        // x-forwarded-* pass (port from the static server's own port), not
+        // the client-facing identity.
+        const { statusLine } = await openUpgrade(origin, {}, requestPath);
+        expect(statusLine).toBe("HTTP/1.1 101 Switching Protocols");
+        const upgrade = upstreamRequests.at(-1);
+        expect(upgrade?.headers.host).toBe(upstreamHost);
+        expect(upgrade?.headers["x-forwarded-host"]).toBeUndefined();
+        expect(upgrade?.headers["x-forwarded-port"]).toBe(new URL(origin).port);
+      },
+    );
+
+    it.each([
+      { name: "matching loopback authority", status: 101 },
+      { name: "foreign Host only", host: "public.example", status: 403 },
+      {
+        name: "foreign Origin only",
+        clientOrigin: "https://public.example",
+        status: 403,
+      },
+      {
+        name: "allowlisted proxy authority",
+        host: "public.example",
+        clientOrigin: "https://public.example",
+        allowedHosts: "public.example",
+        status: 101,
+      },
+    ])(
+      "composes the loopback guard and editor forwarding: $name",
+      async ({ host, clientOrigin, allowedHosts, status }) => {
+        vi.stubEnv("OH_ALLOWED_HOSTS", allowedHosts);
+        try {
+          const upstreamOrigin = await startHttpServer(startEditorUpstream());
+          const origin = await startEditorServer({
+            host: "127.0.0.1",
+            routes: { "/vscode": upstreamOrigin },
+            vscodeBasePath: "/vscode",
+          });
+          const authority = host ?? new URL(origin).host;
+
+          const { statusLine } = await openUpgrade(origin, {
+            Host: authority,
+            Origin: clientOrigin ?? origin,
+          });
+
+          if (status === 403) {
+            expect(statusLine).toBe("HTTP/1.1 403 Forbidden");
+            expect(upstreamRequests).toEqual([]);
+          } else {
+            expect(statusLine).toBe("HTTP/1.1 101 Switching Protocols");
+            expect(upstreamRequests).toHaveLength(1);
+            expect(upstreamRequests[0].headers["x-forwarded-host"]).toBe(
+              authority,
+            );
+          }
+        } finally {
+          vi.unstubAllEnvs();
+        }
+      },
+    );
   });
 });
 

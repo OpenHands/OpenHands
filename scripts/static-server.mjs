@@ -672,8 +672,28 @@ async function handleStatic(
 
 export function startStaticServer(config) {
   const host = config.host || DEFAULT_BIND_HOST;
-  const route = createRouter(config.routes);
-  const proxy = createProxyHandlers({ label: `static:${config.port}` });
+  // Apply editor identity forwarding only when the configured editor route
+  // wins. A more specific route can override it, even to the same backend.
+  const label = `static:${config.port}`;
+  const proxy = createProxyHandlers({ label });
+  const editorProxy = config.vscodeBasePath
+    ? createProxyHandlers({
+        label,
+        forwardClientIdentity: true,
+        metrics: proxy.metrics,
+      })
+    : null;
+  const route = createRouter(
+    Object.fromEntries(
+      Object.entries(config.routes).map(([prefix, backend]) => [
+        prefix,
+        {
+          backend,
+          handlers: prefix === config.vscodeBasePath ? editorProxy : proxy,
+        },
+      ]),
+    ),
+  );
   const dirAbs = resolve(config.dir);
   const policy = applySessionKeyPolicy({
     host,
@@ -695,6 +715,7 @@ export function startStaticServer(config) {
   const noReferrerPrefixes = config.noReferrerPrefixes ?? [];
   const staticMiddleware = createStaticMiddleware(dirAbs);
 
+  // Both proxy policies contribute to the existing static-server counters.
   const uninstallDiagnostics = proxy.installDiagnostics();
   // DigitalOcean Managed Agents for the browser: with MARS_WEB=1, host the MARS
   // bridge and proxies to sessions' tunnel listeners, behind the session key
@@ -716,8 +737,9 @@ export function startStaticServer(config) {
     }
     const url = req.url ?? "/";
     if (marsWeb?.handleHttp(req, res)) return;
-    const backend = route(url);
-    if (backend) {
+    const matchedRoute = route(url);
+    if (matchedRoute?.backend) {
+      const { backend, handlers } = matchedRoute;
       // The editor is advertised as `<origin><prefix>/?tkn=<token>`, and that
       // token is agent-server's session key. The workbench loads webviews,
       // previews and extension content from that document, so without this a
@@ -733,7 +755,7 @@ export function startStaticServer(config) {
         proxyServerInfoRequest(req, res, backend, config.runtimeServicesInfo);
         return;
       }
-      proxy.proxyHttp(req, res, backend);
+      handlers.proxyHttp(req, res, backend);
       return;
     }
     handleStatic(
@@ -759,9 +781,10 @@ export function startStaticServer(config) {
       return;
     }
     if (marsWeb?.handleUpgrade(req, socket, head)) return;
-    const backend = route(req.url ?? "/");
-    if (backend) {
-      proxy.proxyWebSocket(req, socket, head, backend);
+    const matchedRoute = route(req.url ?? "/");
+    if (matchedRoute?.backend) {
+      const { backend, handlers } = matchedRoute;
+      handlers.proxyWebSocket(req, socket, head, backend);
       return;
     }
     socket.destroy();
