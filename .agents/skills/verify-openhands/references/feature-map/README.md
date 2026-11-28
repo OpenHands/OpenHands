@@ -5,7 +5,7 @@ of Agent Canvas. Read this index before driving the app, then open the matching
 feature file and run its recipe with `control-openhands`. The map is not a claim
 that every row passes today; the run's evidence ledger is.
 
-Maintenance baseline: main@6deb332c3602329306180fd7a99b3534753909df (2026-11-26). The next maintenance pass starts from this commit; a pass proposes the next baseline in its PR, and merging that PR accepts it.
+Maintenance baseline: main@580c7f5dbfd0e2bc8607ffff1c2c7212cf9ba36f (2026-11-27). The next maintenance pass starts from this commit; a pass proposes the next baseline in its PR, and merging that PR accepts it.
 
 ## Baseline preconditions
 
@@ -255,15 +255,15 @@ How to write and prove new entries: [../mapping.md](../mapping.md).
 | F23 | [Automation detail, runs and editing](F23-automation-detail.md) | detail page, runs, logs, edit dialog, triggers, debug | `/automations/<id>` | LLM; runs | 46 |
 | F24 | [Automation Git Sync](F24-git-sync.md) | configure, sync cycles, encryption, status | `/automations/git-sync` | `fixture git-repo` | 27 |
 | F25 | [Backends, Cloud and sharing](F25-backends-and-cloud.md) | add, edit, remove and switch backends, per-backend consent, Cloud login, shared pages | backend selector | a second stack; Cloud account (blocked) | 36 |
-| F26 | [Launcher modes, Docker, desktop and library](F26-runtime-variants.md) | launcher flags, partial stacks, LAN bind, Docker, Electron, embeddable library | a terminal | Docker/Electron where available | 40 |
-| F27 | [Workspace tools](F27-workspace-tools.md) | terminal, browser, planner, task list, usage, `canvas_ui_control` | drawer tabs | LLM | 32 |
+| F26 | [Launcher modes, Docker, desktop and library](F26-runtime-variants.md) | launcher flags, partial stacks, LAN bind, Docker, Electron, embeddable library | a terminal | Docker/Electron where available | 43 |
+| F27 | [Workspace tools](F27-workspace-tools.md) | terminal, browser, planner, task list, usage, `canvas_ui_control` | drawer tabs | LLM | 34 |
 | F28 | [Automation setup page](F28-automation-setup-page.md) | blank form, kind toggle, schedule presets, event fields, timeout, draft save and validation, draft Test, Create | **Add Automation → Create Automation**, `/automations/setup`, draft Resume, kebab Edit | automation service; no LLM | 22 |
 | F29 | [ACP agent sessions](F29-acp-sessions.md) | an ACP (Codex) conversation: narration order, tool cards, edits and Changes, follow-up, model switch, Stop, reload and restart, usage | Home composer with an ACP profile active (F13) | approved Codex login (`CODEX_AUTH_JSON`); fixture repo | 12 |
 | F30 | [Experimental features and reactions](F30-experimental-features.md) | Experimental settings page, flag switches, notice; agent and user emoji reactions, picker placement | `/settings/experimental`, settings navigation, command menu; reactions under messages | LLM; local backend (Cloud hides it) | 7 |
 | F31 | [Factories](F31-factories.md) | Factories list and factory pages, create and rename, the dashboard limited to one factory, moving an automation out of a factory, the experimental switch | sidebar **Factories**, `/factories`, `/factories/<id>`, an automation's actions menu | local backend with Agent Server 1.63.1 or newer and an automation service with factories; Cloud and Enterprise flag and member view: blocked | 13 |
 | F32 | [Projects (default view)](F32-projects.md) | flag gate, New project with a server-started coordinator, board grouped by what needs you, Resolve/Reopen, membership, files (preview, download, delete), attach to a message, badge and compact headers | rail Projects and its +, `/projects`, `/projects/<id>`, project badge | `projects` experimental flag; Agent Server with #6602 (73513fdee+); real LLM for coordinator branches | 16 |
 
-32 families, 921 sub-features. `control-openhands map ids` lists every ID with its file.
+32 families, 926 sub-features. `control-openhands map ids` lists every ID with its file.
 
 ### Neighbouring families
 
