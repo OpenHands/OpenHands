@@ -1,0 +1,20 @@
+{
+  "full_run_head": "e0cc9f152be44737ed2aa707536cffa65c8a6652",
+  "full_run": {
+    "passed": 9681,
+    "failed": 58,
+    "pending": 45,
+    "failed_names_matching_initial_main_control": 52
+  },
+  "followup": {
+    "legacy_single_object_normalization": "restored; existing regression now passes",
+    "same_array_reference": "updated stale-data expectation to current changes; passes",
+    "cached_remount_data": "updated empty-list expectation to current cached data while existing refetch runs; passes",
+    "changed_hook_ordering_and_files_tests": { "passed": 24, "failed": 0 },
+    "inline_style_and_raw_color_policy_tests": "pass on focused rerun",
+    "library_i18n_import": "30-second timeout reproduces on unchanged main; unchanged test retained"
+  },
+  "focused_six_file_rerun": { "passed": 37, "failed": 1 },
+  "unchanged_main_timeout_control": { "passed": 13, "failed": 1 },
+  "full_suite_green": false
+}
