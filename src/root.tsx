@@ -13,6 +13,7 @@ import {
 import "./tailwind.css";
 import "./index.css";
 import React from "react";
+import { useTranslation } from "react-i18next";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Toaster } from "react-hot-toast";
 import {
@@ -51,6 +52,7 @@ import { QUERY_KEYS } from "#/hooks/query/query-keys";
 import { AgentServerUIRoot } from "#/components/providers";
 import { TelemetryConsentBanner } from "#/components/features/analytics/telemetry-consent-banner";
 import { buildAgentCanvasPath } from "#/utils/base-path";
+import { I18nKey } from "#/i18n/declaration";
 import { useOnboardingCompletion } from "#/components/features/onboarding/use-onboarding-completion";
 import {
   NavigationProvider,
@@ -99,6 +101,35 @@ const BackendFormModal = React.lazy(() =>
   })),
 );
 
+function SkipToContent() {
+  const { t } = useTranslation("openhands");
+
+  const handleClick = React.useCallback(
+    (e: React.MouseEvent<HTMLAnchorElement>) => {
+      e.preventDefault();
+      const main = document.querySelector("main");
+      if (main) {
+        main.setAttribute("tabindex", "-1");
+        main.focus();
+        main.addEventListener("blur", () => main.removeAttribute("tabindex"), {
+          once: true,
+        });
+      }
+    },
+    [],
+  );
+
+  return (
+    <a
+      href="#main-content"
+      onClick={handleClick}
+      className="sr-only focus:not-sr-only focus:absolute focus:top-1 focus:left-1 focus:z-[9999] focus:rounded focus:bg-canvas-base focus:px-4 focus:py-2 focus:text-contrast focus:outline-2 focus:outline-offset-2 focus:outline-current"
+    >
+      {t(I18nKey.NAV$SKIP_TO_CONTENT)}
+    </a>
+  );
+}
+
 export function Layout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" suppressHydrationWarning>
@@ -115,6 +146,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
         />
       </head>
       <body data-agent-server-ui="" className="m-0">
+        <SkipToContent />
         <AgentServerUIRoot contentClassName="h-dvh min-h-0">
           <ColorThemeApplier />
           {children}

@@ -1124,7 +1124,10 @@ describe("App root viewport sizing", () => {
     const body = Children.toArray(layout.props.children)[1] as ReactElement<{
       children: ReactNode;
     }>;
-    const uiRoot = Children.toArray(body.props.children)[0] as ReactElement<{
+    const bodyChildren = Children.toArray(body.props.children);
+    const uiRoot = bodyChildren.find(
+      (child) => (child as ReactElement).type === AgentServerUIRoot,
+    ) as ReactElement<{
       contentClassName: string;
     }>;
 
