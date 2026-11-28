@@ -1,3 +1,5 @@
+import { useTranslation } from "react-i18next";
+import { I18nKey } from "#/i18n/declaration";
 import { cn } from "#/utils/utils";
 
 interface OnboardingProgressBarProps {
@@ -18,9 +20,12 @@ export function OnboardingProgressBar({
   totalSteps,
   className,
 }: OnboardingProgressBarProps) {
+  const { t } = useTranslation("openhands");
+
   return (
     <div
       role="progressbar"
+      aria-label={t(I18nKey.ONBOARDING$PROGRESS_LABEL)}
       aria-valuemin={1}
       aria-valuemax={totalSteps}
       aria-valuenow={currentStep + 1}
