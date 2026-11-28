@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { HttpError } from "@openhands/typescript-client";
 import {
   setActiveSelection,
   setRegisteredBackends,
@@ -110,9 +111,16 @@ describe("AutomationService.getSdkVersion", () => {
 
     await expect(AutomationService.getSdkVersion()).resolves.toBe("1.36.1");
 
-    expect(localAxios.get).toHaveBeenCalledWith("/api/automation/sdk-version", {
-      timeout: 5000,
-    });
+    expect(localAxios.get).toHaveBeenCalledWith(
+      "/api/automation/sdk-version",
+      expect.objectContaining({
+        baseURL: localBackend.host,
+        headers: expect.objectContaining({
+          "X-Session-API-Key": localBackend.apiKey,
+        }),
+        timeout: 5000,
+      }),
+    );
   });
 
   it("fetches the cloud automation SDK version through the cloud proxy", async () => {
@@ -128,6 +136,7 @@ describe("AutomationService.getSdkVersion", () => {
         method: "GET",
         path: "/api/automation/sdk-version",
         headers: expect.objectContaining({ "X-Org-Id": "org-1" }),
+        orgId: "org-1",
         timeoutSeconds: 5,
       }),
     );
@@ -137,6 +146,172 @@ describe("AutomationService.getSdkVersion", () => {
     localAxios.get.mockRejectedValueOnce(new Error("not running"));
 
     await expect(AutomationService.getSdkVersion()).resolves.toBeNull();
+  });
+});
+
+describe("AutomationService.getVersionInfo", () => {
+  beforeEach(() => {
+    setRegisteredBackends([localBackend]);
+    setActiveSelection({ backendId: localBackend.id });
+  });
+
+  afterEach(() => {
+    setActiveSelection(null);
+    setRegisteredBackends([]);
+    vi.clearAllMocks();
+  });
+
+  it("returns the running automation and SDK package versions locally", async () => {
+    localAxios.get.mockResolvedValueOnce({
+      data: { package_version: "1.32.1", sdk_version: "1.62.0" },
+    });
+
+    await expect(AutomationService.getVersionInfo()).resolves.toEqual({
+      packageVersion: "1.32.1",
+      sdkVersion: "1.62.0",
+    });
+
+    expect(localAxios.get).toHaveBeenCalledWith(
+      "/api/automation/server_info",
+      expect.objectContaining({
+        baseURL: localBackend.host,
+        headers: expect.objectContaining({
+          "X-Session-API-Key": localBackend.apiKey,
+        }),
+        timeout: 5000,
+      }),
+    );
+  });
+
+  it("uses the backend captured by the request when local selection changes", async () => {
+    const capturedBackend = {
+      ...localBackend,
+      id: "local-a",
+      host: "http://local-a",
+      apiKey: "key-a",
+    };
+    const switchedBackend = {
+      ...localBackend,
+      id: "local-b",
+      host: "http://local-b",
+      apiKey: "key-b",
+    };
+    setRegisteredBackends([capturedBackend, switchedBackend]);
+    setActiveSelection({ backendId: capturedBackend.id });
+    localAxios.get.mockResolvedValueOnce({
+      data: { package_version: "1.32.1", sdk_version: "1.62.0" },
+    });
+
+    const request = AutomationService.getVersionInfo({
+      backend: capturedBackend,
+      orgId: null,
+    });
+    setActiveSelection({ backendId: switchedBackend.id });
+    await request;
+
+    expect(localAxios.get).toHaveBeenCalledWith(
+      "/api/automation/server_info",
+      expect.objectContaining({
+        baseURL: capturedBackend.host,
+        headers: expect.objectContaining({
+          "X-Session-API-Key": capturedBackend.apiKey,
+        }),
+      }),
+    );
+  });
+
+  it("fetches Cloud automation versions through the scoped Cloud API", async () => {
+    setRegisteredBackends([cloudBackend]);
+    setActiveSelection({ backendId: cloudBackend.id, orgId: "org-1" });
+    const capturedActive = { backend: cloudBackend, orgId: "org-1" };
+    setActiveSelection({ backendId: cloudBackend.id, orgId: "org-2" });
+    callCloudProxy.mockResolvedValueOnce({
+      package_version: "1.33.0",
+      sdk_version: "1.62.0",
+    });
+
+    await expect(
+      AutomationService.getVersionInfo(capturedActive),
+    ).resolves.toEqual({
+      packageVersion: "1.33.0",
+      sdkVersion: "1.62.0",
+    });
+
+    expect(callCloudProxy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        backend: cloudBackend,
+        method: "GET",
+        path: "/api/automation/server_info",
+        headers: expect.objectContaining({ "X-Org-Id": "org-1" }),
+        orgId: "org-1",
+        timeoutSeconds: 5,
+      }),
+    );
+  });
+
+  it("returns null when the server-info endpoint is unavailable", async () => {
+    localAxios.get.mockRejectedValueOnce(new Error("not running"));
+
+    await expect(AutomationService.getVersionInfo()).resolves.toBeNull();
+  });
+
+  it("reads the SDK version from older automation services without server info", async () => {
+    localAxios.get.mockRejectedValueOnce(
+      Object.assign(new Error("not found"), { response: { status: 404 } }),
+    );
+    localAxios.get.mockResolvedValueOnce({
+      data: { sdk_version: "1.36.1" },
+    });
+
+    await expect(AutomationService.getVersionInfo()).resolves.toEqual({
+      packageVersion: null,
+      sdkVersion: "1.36.1",
+    });
+
+    expect(localAxios.get).toHaveBeenNthCalledWith(
+      2,
+      "/api/automation/sdk-version",
+      expect.objectContaining({ baseURL: localBackend.host }),
+    );
+  });
+
+  it("keeps the legacy Cloud SDK fallback pinned to the captured organization", async () => {
+    setRegisteredBackends([cloudBackend]);
+    setActiveSelection({ backendId: cloudBackend.id, orgId: "org-1" });
+    const capturedActive = { backend: cloudBackend, orgId: "org-1" };
+    setActiveSelection({ backendId: cloudBackend.id, orgId: "org-2" });
+    callCloudProxy
+      .mockRejectedValueOnce(new HttpError(404, "Not Found"))
+      .mockResolvedValueOnce({ sdk_version: "1.36.2" });
+
+    await expect(
+      AutomationService.getVersionInfo(capturedActive),
+    ).resolves.toEqual({ packageVersion: null, sdkVersion: "1.36.2" });
+
+    expect(callCloudProxy).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        path: "/api/automation/server_info",
+        headers: expect.objectContaining({ "X-Org-Id": "org-1" }),
+        orgId: "org-1",
+      }),
+    );
+    expect(callCloudProxy).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        path: "/api/automation/sdk-version",
+        headers: expect.objectContaining({ "X-Org-Id": "org-1" }),
+        orgId: "org-1",
+      }),
+    );
+  });
+
+  it("does not report unknown version sentinels as installed packages", async () => {
+    localAxios.get.mockResolvedValueOnce({
+      data: { package_version: "unknown", sdk_version: "unknown" },
+    });
+
+    await expect(AutomationService.getVersionInfo()).resolves.toBeNull();
   });
 });
 

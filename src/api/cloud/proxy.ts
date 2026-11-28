@@ -29,8 +29,8 @@ export async function callCloudProxy<TResponse = unknown>(
   req: CloudProxyRequest,
 ): Promise<TResponse> {
   const client = req.hostOverride
-    ? createCloudClientForRuntime(req.backend)
-    : createCloudClient(req.backend);
+    ? createCloudClientForRuntime(req.backend, req.orgId)
+    : createCloudClient(req.backend, req.orgId);
   // The org this request is scoped to, read when the client is built so a
   // later org switch can't be blamed for this response.
   const orgId =

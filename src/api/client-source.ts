@@ -2,6 +2,9 @@ import packageJson from "../../package.json";
 
 export const AGENT_CANVAS_CLIENT_SOURCE = "agent_canvas";
 export const AGENT_CANVAS_CLIENT_VERSION = packageJson.version;
+export const OPENHANDS_TYPESCRIPT_CLIENT_VERSION =
+  __OPENHANDS_TYPESCRIPT_CLIENT_VERSION__;
+export const OPENHANDS_EXTENSIONS_VERSION = __OPENHANDS_EXTENSIONS_VERSION__;
 
 /**
  * Coarse, non-user-identifying request metadata for Cloud observability.

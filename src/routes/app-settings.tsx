@@ -14,6 +14,7 @@ import { ThemeInput } from "#/components/features/settings/app-settings/theme-in
 import { GettingStartedChecklistSwitch } from "#/components/features/settings/app-settings/getting-started-checklist-switch";
 import { RecommendedAutomationsSwitch } from "#/components/features/settings/app-settings/recommended-automations-switch";
 import { VoiceInputSettings } from "#/components/features/settings/app-settings/voice-input-settings";
+import { RunningVersionsSection } from "#/components/features/settings/app-settings/running-versions-section";
 import {
   displayErrorToast,
   displaySuccessToast,
@@ -324,6 +325,7 @@ function AppSettingsForm() {
           </div>
         </fieldset>
       )}
+      <RunningVersionsSection />
     </form>
   );
 }
