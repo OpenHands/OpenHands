@@ -18,6 +18,7 @@ import { getLockedCloudHost } from "#/api/agent-server-config";
 import { convertImageToBase64 } from "#/utils/convert-image-to-base-64";
 import { createChatMessage } from "#/services/chat-service";
 import { BtwMessages } from "./btw-messages";
+import { SlashCommandInfoMessages } from "./slash-command-info-messages";
 import { GoalStatusBanner } from "./goal-status-banner";
 import { ModelMessages } from "./model-messages";
 import { useModelStore } from "#/stores/model-store";
@@ -912,6 +913,7 @@ export function ChatInterface({
           <div className={CHAT_COMPOSER_CLASS_NAME}>
             <SkillInstallRestartBanner conversationId={conversationId} />
             <BtwMessages conversationId={conversationId} />
+            <SlashCommandInfoMessages conversationId={conversationId} />
             {recoveryAgentState === AgentState.RUNNING &&
               !errorMessage &&
               !isArchivedConversation &&

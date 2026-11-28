@@ -50,6 +50,18 @@ export const PLAN_COMMAND = "/plan";
 /** The /code slash command — switches the conversation back to Code mode. */
 export const CODE_COMMAND = "/code";
 
+/** The /help slash command — lists all available commands in the chat area. */
+export const HELP_COMMAND = "/help";
+
+/** The /condense slash command — condenses (summarises) the conversation history. */
+export const CONDENSE_COMMAND = "/condense";
+
+/** The /skills slash command — displays loaded skills, hooks, and MCPs in the chat area. */
+export const SKILLS_COMMAND = "/skills";
+
+/** The /feedback slash command — opens the anonymous feedback form. */
+export const FEEDBACK_COMMAND = "/feedback";
+
 /** Built-in slash commands surfaced in the menu for V1 conversations. */
 export const BUILT_IN_COMMANDS: SlashCommandItem[] = [
   {
@@ -115,6 +127,46 @@ export const BUILT_IN_COMMANDS: SlashCommandItem[] = [
       triggers: [CODE_COMMAND],
     },
     command: CODE_COMMAND,
+  },
+  {
+    skill: {
+      name: "help",
+      type: "agentskills",
+      source: null,
+      content: "Display all available commands in the chat area",
+      triggers: [HELP_COMMAND],
+    },
+    command: HELP_COMMAND,
+  },
+  {
+    skill: {
+      name: "condense",
+      type: "agentskills",
+      source: null,
+      content: "Condense (summarise) the conversation history",
+      triggers: [CONDENSE_COMMAND],
+    },
+    command: CONDENSE_COMMAND,
+  },
+  {
+    skill: {
+      name: "skills",
+      type: "agentskills",
+      source: null,
+      content: "Display loaded skills, hooks, and MCPs in the chat area",
+      triggers: [SKILLS_COMMAND],
+    },
+    command: SKILLS_COMMAND,
+  },
+  {
+    skill: {
+      name: "feedback",
+      type: "agentskills",
+      source: null,
+      content: "Open the anonymous feedback form",
+      triggers: [FEEDBACK_COMMAND],
+    },
+    command: FEEDBACK_COMMAND,
   },
 ];
 

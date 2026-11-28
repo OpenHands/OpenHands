@@ -1,9 +1,13 @@
 import { useCallback, useRef } from "react";
 import { CustomChatInput } from "./custom-chat-input";
 import { useBtwInterceptor } from "#/hooks/chat/use-btw-interceptor";
+import { useCondenseInterceptor } from "#/hooks/chat/use-condense-interceptor";
+import { useFeedbackInterceptor } from "#/hooks/chat/use-feedback-interceptor";
 import { useGoalInterceptor } from "#/hooks/chat/use-goal-interceptor";
+import { useHelpInterceptor } from "#/hooks/chat/use-help-interceptor";
 import { useModelInterceptor } from "#/hooks/chat/use-model-interceptor";
 import { usePlanModeInterceptor } from "#/hooks/chat/use-plan-mode-interceptor";
+import { useSkillsInterceptor } from "#/hooks/chat/use-skills-interceptor";
 import { useChatAttachmentUpload } from "#/hooks/chat/use-chat-attachment-upload";
 import { AgentState } from "#/types/agent-state";
 import { useActiveConversation } from "#/hooks/query/use-active-conversation";
@@ -56,15 +60,31 @@ export function InteractiveChatBox({
 
   // Set when a submission reaches the agent rather than a slash-command handler.
   const sentToAgentRef = useRef(false);
-  const handleAfterGoal = useBtwInterceptor(conversationId, (message) => {
-    sentToAgentRef.current = true;
-    const { imagesToEmbed, imagesAsFiles } = partitionImagesForUpload(
-      images,
-      imagesMarkedUploadAsFile,
-    );
-    onSubmit(message, imagesToEmbed, [...files, ...imagesAsFiles]);
-    clearAllFiles();
-  });
+  const handleAfterFeedback = useFeedbackInterceptor(
+    conversationId,
+    (message) => {
+      sentToAgentRef.current = true;
+      const { imagesToEmbed, imagesAsFiles } = partitionImagesForUpload(
+        images,
+        imagesMarkedUploadAsFile,
+      );
+      onSubmit(message, imagesToEmbed, [...files, ...imagesAsFiles]);
+      clearAllFiles();
+    },
+  );
+  const handleAfterSkills = useSkillsInterceptor(
+    conversationId,
+    handleAfterFeedback,
+  );
+  const handleAfterHelp = useHelpInterceptor(conversationId, handleAfterSkills);
+  const handleAfterCondense = useCondenseInterceptor(
+    conversationId,
+    handleAfterHelp,
+  );
+  const handleAfterGoal = useBtwInterceptor(
+    conversationId,
+    handleAfterCondense,
+  );
   const handleAfterPlanMode = usePlanModeInterceptor(
     conversationId,
     curAgentState,

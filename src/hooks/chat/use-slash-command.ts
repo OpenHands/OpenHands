@@ -2,7 +2,6 @@ import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import { useConversationSkills } from "#/hooks/query/use-conversation-skills";
 import { SkillInfo } from "#/types/settings";
 import { BUILT_IN_COMMANDS, MODEL_COMMAND } from "#/utils/constants";
-import { useActiveBackend } from "#/contexts/active-backend-context";
 import { useLlmProfiles } from "#/hooks/query/use-llm-profiles";
 import { useFreeModels } from "#/hooks/query/use-free-models";
 import { formatModelNameForDisplay } from "#/utils/format-model-name";
@@ -39,7 +38,6 @@ export const useSlashCommand = (
   // Scope the skill catalog to this conversation's attached workspace so the
   // slash menu lists the same project skills that were loaded into it.
   const { data: skills, isLoading: isSkillsLoading } = useConversationSkills();
-  const isCloud = useActiveBackend().backend.kind === "cloud";
   const { data: profilesData, isLoading: isProfilesLoading } = useLlmProfiles();
   const freeModels = useFreeModels();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -50,15 +48,15 @@ export const useSlashCommand = (
 
   // Build slash command items from built-in commands + skills:
   // - Built-in commands (like /new) are included for V1 conversations
-  // - /new is cloud-only — local backends don't surface it
+  // - /new is available on every backend. The mutation in
+  //   use-new-conversation-command.ts already handles both paths: cloud
+  //   returns a WORKING task (navigate to /conversations/task-{id} and poll),
+  //   local creates synchronously (app_conversation_id is already set).
   // - /model lists/switches LLM profiles; both local and cloud support them
   // - Skills with explicit "/" triggers use those triggers
   // - AgentSkills without "/" triggers get a derived "/<name>" command
   const slashItems = useMemo(() => {
-    const items: SlashCommandItem[] = BUILT_IN_COMMANDS.filter((cmd) => {
-      if (cmd.command === "/new") return isCloud;
-      return true;
-    });
+    const items: SlashCommandItem[] = [...BUILT_IN_COMMANDS];
 
     // Wait for skills to finish initial load so all commands appear together
     if (isSkillsLoading) return items;
@@ -79,7 +77,7 @@ export const useSlashCommand = (
       }
     });
     return items;
-  }, [skills, isSkillsLoading, isCloud]);
+  }, [skills, isSkillsLoading]);
 
   const modelProfileItems = useMemo<SlashCommandItem[]>(() => {
     return (profilesData?.profiles ?? []).map((profile) => {
