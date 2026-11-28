@@ -72,6 +72,9 @@ describe("toFilesTabPath", () => {
       "src/a.ts",
     );
   });
+  it("strips line and column numbers from file paths", () => {
+    expect(toFilesTabPath("src/app.ts:25:10")).toBe("src/app.ts");
+  });
 });
 
 describe("looksLikeWorkspaceFilePath", () => {
@@ -79,6 +82,7 @@ describe("looksLikeWorkspaceFilePath", () => {
     expect(looksLikeWorkspaceFilePath("test.md")).toBe(true);
     expect(looksLikeWorkspaceFilePath("src/app.ts")).toBe(true);
     expect(looksLikeWorkspaceFilePath("docs/guide.md:12")).toBe(true);
+    expect(looksLikeWorkspaceFilePath("src/app.ts:25:10")).toBe(true);
   });
 
   it("rejects non-path dotted tokens, versions, MIME types, and URLs", () => {

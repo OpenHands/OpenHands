@@ -46,9 +46,10 @@ export const toFilesTabPath = (
   let result = path.trim().replace(/\\/g, "/");
   if (!result) return "";
 
-  // Strip editor `:12` / `:12-40` suffixes. Safe on Windows paths too —
+  // Strip editor line/column suffixes (`:12`, `:12-40`, or `:12:10`).
+  // Safe on Windows paths too —
   // the drive colon is at the start (`C:`), never at the end.
-  result = result.replace(/:(\d+)(-\d+)?$/, "");
+  result = result.replace(/:(\d+)(?::\d+)?(-\d+)?$/, "");
 
   const roots = [workingDir, DEFAULT_WORKING_DIR].filter(
     (value): value is string => Boolean(value?.trim()),
@@ -86,7 +87,7 @@ export const looksLikeWorkspaceFilePath = (text: string): boolean => {
   }
 
   let path = trimmed.replace(/\\/g, "/").replace(/^\.\//, "");
-  path = path.replace(/:(\d+)(-\d+)?$/, "");
+  path = path.replace(/:(\d+)(?::\d+)?(-\d+)?$/, "");
 
   if (
     /^(application|audio|image|text|video|font|multipart|message|model)\/[\w.+-]+$/i.test(
