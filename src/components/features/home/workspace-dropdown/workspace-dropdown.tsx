@@ -205,7 +205,11 @@ export function WorkspaceDropdown({
         actionAndChanges.type === useCombobox.stateChangeTypes.InputBlur &&
         keepOpenForFooterFocusRef.current
       ) {
-        return { ...actionAndChanges.changes, isOpen: true };
+        return {
+          ...actionAndChanges.changes,
+          isOpen: true,
+          selectedItem: state.selectedItem,
+        };
       }
 
       return actionAndChanges.changes;

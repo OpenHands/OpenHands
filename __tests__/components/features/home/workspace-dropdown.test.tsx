@@ -287,3 +287,18 @@ describe("WorkspaceDropdown empty state", () => {
     },
   );
 });
+
+describe("WorkspaceDropdown keyboard Tab from highlighted row (#20029)", () => {
+  it("moves focus to the Add Workspaces button without selecting the row", async () => {
+    const user = userEvent.setup();
+    const { onChange } = renderDropdown();
+    await openMenu(user);
+
+    await user.keyboard("{ArrowDown}");
+    await user.tab();
+
+    const addButton = screen.getByTestId("add-workspaces-button");
+    expect(addButton).toHaveFocus();
+    expect(onChange).not.toHaveBeenCalled();
+  });
+});
