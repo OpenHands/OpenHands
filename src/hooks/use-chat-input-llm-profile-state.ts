@@ -30,6 +30,38 @@ const toHomePickKey = (
   orgId: string | null | undefined,
 ): string => JSON.stringify([backendId, orgId ?? null]);
 
+/**
+ * Whether a profile's saved model id and the conversation's reported running
+ * model (`llm_model`) name the same model.
+ *
+ * A profile stores the model id exactly as configured — the bare id the user
+ * picked (`gpt-6.2-sol`) or a qualified route (`openai/gpt-4o`). The agent
+ * server reports the running model as the LiteLLM-style route it resolved,
+ * which can carry a leading provider segment the profile's saved id lacks:
+ * a profile saved with `gpt-6.2-sol` runs as `openai/gpt-6.2-sol` (#20053).
+ * Comparing by exact string equality then rejects the profile the
+ * conversation is actually running, so the picker falls back to the
+ * "Select a model" placeholder and the repair effect rewrites a valid
+ * `active_profile` stamp.
+ *
+ * The bridge is deliberately one-directional: exactly one leading segment of
+ * the reported route may be dropped, and only when the remaining route equals
+ * the profile's saved id in full. The profile's own id is never stripped, so
+ * ids are only ever equated within the provider the conversation reports, and
+ * profiles from distinct providers that merely share an unqualified model id
+ * are not conflated (`azure/gpt-6.2-sol` never matches `openai/gpt-6.2-sol`).
+ */
+const isSameRunningModel = (
+  profileModel: string | null | undefined,
+  runningModel: string | null | undefined,
+): boolean => {
+  if (!profileModel || !runningModel) return false;
+  if (profileModel === runningModel) return true;
+  const providerSeparatorIndex = runningModel.indexOf("/");
+  if (providerSeparatorIndex <= 0) return false;
+  return runningModel.slice(providerSeparatorIndex + 1) === profileModel;
+};
+
 export function markHomeModelPick(
   backendId: string,
   orgId?: string | null,
@@ -149,7 +181,7 @@ export function useChatInputLlmProfileState(): ChatInputLlmProfileState {
     Boolean(
       conversationModelConfirmed &&
       optimisticProfileObj &&
-      optimisticProfileObj.model !== conversationModel,
+      !isSameRunningModel(optimisticProfileObj.model, conversationModel),
     );
   const optimisticActiveProfile = isOptimisticConflicting
     ? undefined
@@ -173,7 +205,7 @@ export function useChatInputLlmProfileState(): ChatInputLlmProfileState {
   const isStampConflicting = Boolean(
     stampedProfileObj &&
     conversationModelConfirmed &&
-    stampedProfileObj.model !== conversationModel,
+    !isSameRunningModel(stampedProfileObj.model, conversationModel),
   );
   const conversationProfile =
     stampedProfileObj && !isStampConflicting ? stampedProfile : null;
@@ -188,9 +220,10 @@ export function useChatInputLlmProfileState(): ChatInputLlmProfileState {
     if (!conversationId || !conversationModelConfirmed) return;
     if (stampedProfile) {
       const stamped = profiles.find((p) => p.name === stampedProfile);
-      if (stamped && stamped.model !== conversationModel) {
+      if (stamped && !isSameRunningModel(stamped.model, conversationModel)) {
         const repaired =
-          profiles.find((p) => p.model === conversationModel)?.name ?? null;
+          profiles.find((p) => isSameRunningModel(p.model, conversationModel))
+            ?.name ?? null;
         mergeStoredConversationMetadata(conversationId, {
           active_profile: repaired,
           stamped_at: new Date().toISOString(),
@@ -202,7 +235,10 @@ export function useChatInputLlmProfileState(): ChatInputLlmProfileState {
         useModelStore.getState().activeProfileByConversation[conversationId];
       if (opt) {
         const optProfile = profiles.find((p) => p.name === opt);
-        if (optProfile && optProfile.model !== conversationModel) {
+        if (
+          optProfile &&
+          !isSameRunningModel(optProfile.model, conversationModel)
+        ) {
           useModelStore.getState().clearActiveProfile(conversationId);
         }
       }
@@ -243,7 +279,8 @@ export function useChatInputLlmProfileState(): ChatInputLlmProfileState {
     optimisticActiveProfile ??
     conversationProfile ??
     (conversationModel
-      ? (profiles.find((p) => p.model === conversationModel)?.name ?? null)
+      ? (profiles.find((p) => isSameRunningModel(p.model, conversationModel))
+          ?.name ?? null)
       : (homePick ?? agentLlmProfile ?? data?.active_profile ?? null));
   const currentProfileModel =
     profiles.find((p) => p.name === currentProfileName)?.model ??
@@ -261,7 +298,7 @@ export function useChatInputLlmProfileState(): ChatInputLlmProfileState {
       const isAlreadyRunningInConversation =
         conversationId &&
         conversationModel &&
-        selectedProfile?.model === conversationModel &&
+        isSameRunningModel(selectedProfile?.model, conversationModel) &&
         profileName === currentProfileName;
       if (
         profileName === currentProfileName &&
