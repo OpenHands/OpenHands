@@ -6,7 +6,10 @@ import { ApiKeyModalBase } from "#/components/features/settings/api-key-modal-ba
 import { useProviderModels } from "#/hooks/query/use-provider-models";
 import { useSearchProviders } from "#/hooks/query/use-search-providers";
 import { useSaveLlmProfile } from "#/hooks/mutation/use-save-llm-profile";
-import type { SaveProfileRequest } from "#/api/profiles-service/profiles-service.api";
+import type {
+  ProfileInfo,
+  SaveProfileRequest,
+} from "#/api/profiles-service/profiles-service.api";
 import type { ProviderConnection } from "#/api/provider-connections-service/provider-connections-service.api";
 import { mapProvider } from "#/utils/map-provider";
 import { deriveProfileNameFromModel } from "#/utils/derive-profile-name";
@@ -25,7 +28,7 @@ function getServerDetail(error: unknown): string | null {
 
 interface AddModelsModalProps {
   isOpen: boolean;
-  existingNames: string[];
+  existingProfiles: Pick<ProfileInfo, "name" | "model">[];
   /**
    * Provider connections the user can bulk-add from. When the selected
    * provider has a matching connection, the modal binds it (created profiles
@@ -76,7 +79,7 @@ const KEYLESS_CONNECTION_VALUE = "";
  */
 export function AddModelsModal({
   isOpen,
-  existingNames,
+  existingProfiles,
   connections,
   initialConnectionId = null,
   onClose,
@@ -88,6 +91,23 @@ export function AddModelsModal({
   >(null);
   const [rows, setRows] = useState<ModelRow[]>([]);
   const [submitting, setSubmitting] = useState(false);
+
+  const { existingNames, existingModels, profilesWithoutModelNames } =
+    useMemo(() => {
+      const names = new Set<string>();
+      const models = new Set<string>();
+      const namesWithoutModel = new Set<string>();
+      for (const profile of existingProfiles) {
+        names.add(profile.name);
+        if (profile.model) models.add(profile.model);
+        else namesWithoutModel.add(profile.name);
+      }
+      return {
+        existingNames: names,
+        existingModels: models,
+        profilesWithoutModelNames: namesWithoutModel,
+      };
+    }, [existingProfiles]);
 
   const { data: providers } = useSearchProviders();
   const models = useProviderModels(selectedProvider);
@@ -134,7 +154,11 @@ export function AddModelsModal({
       // its own row with the same derived name, and the two flag each other as
       // conflicts — surfacing bogus "Name already exists" on a fresh account.
       const seen = new Set<string>();
-      const built: ModelRow[] = [];
+      const candidates: Array<{
+        model: string;
+        baseName: string;
+        carried?: ModelRow;
+      }> = [];
       for (const m of items) {
         const full =
           m.provider && !m.name.startsWith(`${m.provider}/`)
@@ -143,25 +167,83 @@ export function AddModelsModal({
         if (seen.has(full)) continue;
         seen.add(full);
         const carried = prior.get(full);
-        built.push(
-          carried
-            ? carried
-            : {
-                model: full,
-                name: deriveProfileNameFromModel(full),
-                // Chooser mode leaves rows unselected: the server caps how
-                // many profiles an account may hold, so defaulting to "all"
-                // invites a submission that is mostly refusals. Preselect mode
-                // (autoSelectRef) selects them — see the comment above.
-                selected: selectNew,
-                status: "idle" as RowStatus,
-              },
-        );
+        const keepInFlightRow =
+          carried?.status === "saved" || carried?.status === "saving";
+        const baseName = deriveProfileNameFromModel(full);
+        if (
+          (existingModels.has(full) ||
+            profilesWithoutModelNames.has(baseName)) &&
+          !keepInFlightRow
+        ) {
+          continue;
+        }
+        candidates.push({
+          model: full,
+          baseName,
+          carried,
+        });
+      }
+
+      // Distinct model IDs can share a final name (e.g. azure/eu/gpt-5.1 and
+      // azure/global/gpt-5.1); saves upsert by name, so reserve existing and
+      // natural names before suffixing collisions.
+      const carriedNames = new Set(
+        candidates.flatMap((candidate) =>
+          candidate.carried ? [candidate.carried.name] : [],
+        ),
+      );
+      const reservedNames = new Set([
+        ...existingNames,
+        ...candidates.map((candidate) => candidate.baseName),
+        ...carriedNames,
+      ]);
+      const allocatedNames = new Set([...existingNames, ...carriedNames]);
+      const built: ModelRow[] = [];
+      for (const candidate of candidates) {
+        if (
+          candidate.carried &&
+          (candidate.carried.status === "saved" ||
+            candidate.carried.status === "saving" ||
+            !existingNames.has(candidate.carried.name))
+        ) {
+          built.push(candidate.carried);
+          continue;
+        }
+
+        let name = candidate.baseName;
+        if (allocatedNames.has(name)) {
+          for (let suffix = 2; ; suffix += 1) {
+            const suffixText = `-${suffix}`;
+            const prefix = name
+              .slice(0, 64 - suffixText.length)
+              .replace(/-+$/, "");
+            const candidateName = `${prefix}${suffixText}`;
+            if (
+              !reservedNames.has(candidateName) &&
+              !allocatedNames.has(candidateName)
+            ) {
+              name = candidateName;
+              break;
+            }
+          }
+        }
+        allocatedNames.add(name);
+        built.push({
+          ...candidate.carried,
+          model: candidate.model,
+          name,
+          // Chooser mode leaves rows unselected: the server caps how many
+          // profiles an account may hold, so defaulting to "all" invites a
+          // submission that is mostly refusals. Preselect mode
+          // (autoSelectRef) selects them — see the comment above.
+          selected: candidate.carried?.selected ?? selectNew,
+          status: candidate.carried?.status ?? "idle",
+        });
       }
       return built;
     });
     if (items.length > 0) autoSelectRef.current = false;
-  }, [models.data]);
+  }, [models.data, existingNames, existingModels, profilesWithoutModelNames]);
 
   // The manager keeps this component mounted and drives it with `isOpen`, so
   // without an explicit reset a reopened modal still shows the last session's
@@ -197,16 +279,17 @@ export function AddModelsModal({
     }
   }, [isOpen, initialConnectionId, connections]);
 
-  const existing = useMemo(() => new Set(existingNames), [existingNames]);
-
   if (!isOpen) return null;
 
   // Already-added models are hidden, not disabled: a row whose name matches an
   // existing profile can't be re-created, so showing it (flagged or greyed)
-  // just clutters the list. A saved row is exempt — it was added from this
-  // very session, so it stays visible with its "Saved" mark.
+  // just clutters the list. Saved and in-flight rows are exempt because they
+  // belong to this session and should keep their status visible.
   const visibleRows = rows.filter(
-    (row) => row.status === "saved" || !existing.has(row.name),
+    (row) =>
+      row.status === "saved" ||
+      row.status === "saving" ||
+      !existingNames.has(row.name),
   );
 
   // Saved rows stay visible (so the user sees the "Saved" mark) but are not

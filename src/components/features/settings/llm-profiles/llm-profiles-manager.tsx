@@ -69,6 +69,10 @@ export function LlmProfilesManager({
   const profiles = data?.profiles ?? [];
   const active = data?.active_profile ?? null;
   const connectionList = useMemo(() => connections ?? [], [connections]);
+  const existingProfiles = useMemo(
+    () => (data?.profiles ?? []).map(({ name, model }) => ({ name, model })),
+    [data?.profiles],
+  );
 
   const connectionNamesById = useMemo(
     () => Object.fromEntries(connectionList.map((c) => [c.id, c.display_name])),
@@ -210,7 +214,7 @@ export function LlmProfilesManager({
         isOpen={showAddModels}
         connections={connectionList}
         initialConnectionId={addModelsConnectionId}
-        existingNames={profiles.map((p) => p.name)}
+        existingProfiles={existingProfiles}
         onClose={() => setShowAddModels(false)}
       />
     </>
