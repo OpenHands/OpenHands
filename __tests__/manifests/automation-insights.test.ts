@@ -49,6 +49,7 @@ function settled(summary: Partial<AutomationRunSummary>): RunSummaryState {
     summary: {
       total: 0,
       completedTotal: null,
+      pendingTotal: null,
       latestRun: null,
       recentRuns: [],
       recentSuccessRate: null,
@@ -199,6 +200,7 @@ describe("summarizeAutomationRuns", () => {
     expect(summary).toEqual({
       total: 40,
       completedTotal: null,
+      pendingTotal: null,
       latestRun: runs[0],
       recentRuns: runs,
       recentSuccessRate: 1 / 3,
@@ -250,6 +252,65 @@ describe("summarizeAutomationRuns", () => {
 
     // Assert
     expect(summary.completedTotal).toBe(0);
+  });
+
+  it("takes the lifetime pending count from status_counts", () => {
+    // Arrange — three runs queued behind one running, per the service.
+    const runs = [
+      createRun({ status: AutomationRunStatus.RUNNING, completed_at: null }),
+    ];
+
+    // Act
+    const summary = summarizeAutomationRuns({
+      runs,
+      total: 84,
+      status_counts: { COMPLETED: 70, FAILED: 10, RUNNING: 1, PENDING: 3 },
+    });
+
+    // Assert
+    expect(summary.pendingTotal).toBe(3);
+  });
+
+  it("treats a missing PENDING key as zero when status_counts is present", () => {
+    const runs = [createRun({ status: AutomationRunStatus.FAILED })];
+
+    const summary = summarizeAutomationRuns({
+      runs,
+      total: 1,
+      status_counts: { FAILED: 1 },
+    });
+
+    expect(summary.pendingTotal).toBe(0);
+  });
+
+  it("counts pending runs in the sample when it holds the whole history", () => {
+    // Arrange — no status_counts, and total says these three runs are all
+    // there ever were, so the queued count is known exactly.
+    const runs = [
+      createRun({ status: AutomationRunStatus.PENDING, completed_at: null }),
+      createRun({ status: AutomationRunStatus.PENDING, completed_at: null }),
+      createRun(),
+    ];
+
+    // Act
+    const summary = summarizeAutomationRuns({ runs, total: 3 });
+
+    // Assert
+    expect(summary.pendingTotal).toBe(2);
+  });
+
+  it("leaves the pending count unknown when the sample is partial", () => {
+    // Arrange — a queued run is in the sample, but older history is not, so
+    // the lifetime queued count cannot be derived from the sample.
+    const runs = [
+      createRun({ status: AutomationRunStatus.PENDING, completed_at: null }),
+    ];
+
+    // Act
+    const summary = summarizeAutomationRuns({ runs, total: 40 });
+
+    // Assert
+    expect(summary.pendingTotal).toBeNull();
   });
 
   it("counts the sample exactly when it holds the whole history", () => {
