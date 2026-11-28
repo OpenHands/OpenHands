@@ -65,4 +65,37 @@ describe("redactCustomSecrets", () => {
     expect(twice).toBe(once);
     expect(twice).not.toContain("leaked-value");
   });
+
+  it("leaves the block's own guidance bullets and secret list unchanged", () => {
+    // Shaped like the Agent Server's CustomSecretsSection output.
+    const text = [
+      "<CUSTOM_SECRETS>",
+      "### Credential Access",
+      "* Automatic secret injection: When you reference a registered secret key in your bash command, the secret value will be automatically exported.",
+      '* How to use secrets: Simply reference the secret key (e.g., `curl -H "Authorization: Bearer $API_KEY" https://api.example.com`).',
+      "* Security: Secret values are automatically masked in command output.",
+      "",
+      "You have access to the following environment variables",
+      "",
+      "* **$GITHUB_TOKEN** - GitHub token",
+      "",
+      "</CUSTOM_SECRETS>",
+    ].join("\n");
+    expect(redactCustomSecrets(text)).toBe(text);
+  });
+
+  it("keeps blank lines and the line break before the closing tag", () => {
+    const text = "<CUSTOM_SECRETS>\nA=one\n\nB=two\n</CUSTOM_SECRETS>";
+    expect(redactCustomSecrets(text)).toBe(
+      "<CUSTOM_SECRETS>\nA=<secret-hidden>\n\nB=<secret-hidden>\n</CUSTOM_SECRETS>",
+    );
+  });
+
+  it("handles whitespace-only lines without backtracking blowup", () => {
+    const body = Array.from({ length: 1000 }, () => "    ").join("\n");
+    const text = `<CUSTOM_SECRETS>\n${body}\n</CUSTOM_SECRETS>`;
+    const started = performance.now();
+    expect(redactCustomSecrets(text)).toBe(text);
+    expect(performance.now() - started).toBeLessThan(1000);
+  });
 });
