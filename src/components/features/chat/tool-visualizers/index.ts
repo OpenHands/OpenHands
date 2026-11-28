@@ -1,6 +1,7 @@
 import { RegisteredVisualizer } from "./define";
 import { bashVisualizer } from "./bash/bash";
 import { fileEditorVisualizer } from "./file-editor/file-editor";
+import { mcpVisualizer } from "./mcp/mcp";
 import { searchVisualizer } from "./search/search";
 import { taskVisualizer } from "./task/task";
 
@@ -22,6 +23,7 @@ import { taskVisualizer } from "./task/task";
 const ALL: RegisteredVisualizer[] = [
   bashVisualizer,
   fileEditorVisualizer,
+  mcpVisualizer,
   searchVisualizer,
   taskVisualizer,
 ];

@@ -8,6 +8,9 @@ interface OutputPaneProps {
   /** Process exit code, when known. `0` and `-1` (timeout) are not badged —
    *  the card's success indicator already conveys those. */
   exitCode?: number | null;
+  /** Badge `0` too, for tools where a clean exit is itself the process detail
+   *  the user asked to see. `-1` still means a soft timeout, never a badge. */
+  showSuccessExitCode?: boolean;
   /** Show a hover copy button that yields the full, untruncated output.
    *  Defaults to true; suppressed automatically when there is no output. */
   copy?: boolean;
@@ -26,11 +29,13 @@ interface OutputPaneProps {
 export function OutputPane({
   output,
   exitCode,
+  showSuccessExitCode = false,
   copy = true,
   expansionKey,
 }: OutputPaneProps) {
   const { t } = useTranslation("openhands");
-  const showExitBadge = exitCode != null && exitCode !== 0 && exitCode !== -1;
+  const hasExitCode = exitCode != null && exitCode !== -1;
+  const showExitBadge = hasExitCode && (showSuccessExitCode || exitCode !== 0);
 
   return (
     <div className="flex flex-col gap-1">
