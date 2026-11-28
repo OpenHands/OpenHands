@@ -2,8 +2,7 @@ import React from "react";
 import { Trans, useTranslation } from "react-i18next";
 import { Check, CircleAlert, CircleX, Copy, X } from "lucide-react";
 import { I18nKey } from "#/i18n/declaration";
-import { copyToClipboard } from "#/utils/copy-to-clipboard";
-import { displayErrorToast } from "#/utils/custom-toast-handlers";
+import { useCopyToClipboard } from "#/hooks/use-copy-to-clipboard";
 import { getAcpErrorHeaderKey } from "#/utils/acp-error-codes";
 import { cn } from "#/utils/utils";
 import type { ErrorClassification } from "@openhands/typescript-client";
@@ -33,6 +32,7 @@ export function ErrorMessageBanner({
   classification,
 }: ErrorMessageBannerProps) {
   const { t, i18n } = useTranslation("openhands");
+  const copy = useCopyToClipboard();
   const headerKey = getAcpErrorHeaderKey(code);
   const [isExpanded, setIsExpanded] = React.useState(false);
   const [isMultiLine, setIsMultiLine] = React.useState(false);
@@ -47,11 +47,8 @@ export function ErrorMessageBanner({
   const isCollapsed = shouldShowToggle && !isExpanded;
 
   const handleCopy = async () => {
-    const success = await copyToClipboard(displayTextForLength);
-    if (success) {
+    if (await copy(displayTextForLength)) {
       setIsCopied(true);
-    } else {
-      displayErrorToast(t(I18nKey.CHAT_INTERFACE$CHAT_MESSAGE_COPY_FAILED));
     }
   };
 

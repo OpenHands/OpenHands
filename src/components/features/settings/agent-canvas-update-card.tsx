@@ -32,8 +32,7 @@ import {
   statusToneBadgeClassName,
   statusToneBannerClassName,
 } from "#/utils/status-tone-classes";
-import { copyToClipboard } from "#/utils/copy-to-clipboard";
-import { displayErrorToast } from "#/utils/custom-toast-handlers";
+import { useCopyToClipboard } from "#/hooks/use-copy-to-clipboard";
 
 const COPY_FEEDBACK_MS = 2000;
 
@@ -56,6 +55,7 @@ function UpdateCommandTabIcon({ tab }: { tab: UpdateCommandTab }) {
 
 function UpdateCommandTabs() {
   const { t } = useTranslation("openhands");
+  const copy = useCopyToClipboard();
   const [selectedTab, setSelectedTab] = useState<UpdateCommandTab>("npm");
   const [copied, setCopied] = useState(false);
   const copiedTimeoutRef = useRef<number | null>(null);
@@ -82,10 +82,7 @@ function UpdateCommandTabs() {
   }, [selectedTab]);
 
   const copyCommand = useCallback(async () => {
-    if (!(await copyToClipboard(command))) {
-      displayErrorToast(t(I18nKey.CHAT_INTERFACE$CHAT_MESSAGE_COPY_FAILED));
-      return;
-    }
+    if (!(await copy(command))) return;
     setCopied(true);
     if (copiedTimeoutRef.current !== null) {
       window.clearTimeout(copiedTimeoutRef.current);
@@ -94,7 +91,7 @@ function UpdateCommandTabs() {
       setCopied(false);
       copiedTimeoutRef.current = null;
     }, COPY_FEEDBACK_MS);
-  }, [command, t]);
+  }, [command, copy]);
 
   return (
     <div className="w-full">
