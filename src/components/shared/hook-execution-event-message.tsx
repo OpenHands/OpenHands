@@ -72,7 +72,7 @@ export function HookExecutionEventMessage({
   const details = (
     <div className="flex flex-col gap-2 text-muted">
       <div>
-        <span className="text-text-subtle">{t(I18nKey.HOOK$COMMAND)}:</span>{" "}
+        <span className="text-muted">{t(I18nKey.HOOK$COMMAND)}:</span>{" "}
         <code className="text-xs bg-surface px-1 py-0.5 rounded">
           {formatHookCommand(event.hook_command)}
         </code>
@@ -80,37 +80,35 @@ export function HookExecutionEventMessage({
 
       {event.exit_code !== null && (
         <div>
-          <span className="text-text-subtle">{t(I18nKey.HOOK$EXIT_CODE)}:</span>{" "}
+          <span className="text-muted">{t(I18nKey.HOOK$EXIT_CODE)}:</span>{" "}
           {event.exit_code}
         </div>
       )}
 
       {event.blocked && event.reason && (
         <div className="text-feedback-warning">
-          <span className="text-text-subtle">
-            {t(I18nKey.HOOK$BLOCKED_REASON)}:
-          </span>{" "}
+          <span className="text-muted">{t(I18nKey.HOOK$BLOCKED_REASON)}:</span>{" "}
           {event.reason}
         </div>
       )}
 
       {event.additional_context && (
         <div>
-          <span className="text-text-subtle">{t(I18nKey.HOOK$CONTEXT)}:</span>{" "}
+          <span className="text-muted">{t(I18nKey.HOOK$CONTEXT)}:</span>{" "}
           {event.additional_context}
         </div>
       )}
 
       {event.error && (
         <div className="text-feedback-error">
-          <span className="text-text-subtle">{t(I18nKey.HOOK$ERROR)}:</span>{" "}
+          <span className="text-muted">{t(I18nKey.HOOK$ERROR)}:</span>{" "}
           {event.error}
         </div>
       )}
 
       {event.stdout && (
         <div>
-          <span className="text-text-subtle">{t(I18nKey.HOOK$OUTPUT)}:</span>
+          <span className="text-muted">{t(I18nKey.HOOK$OUTPUT)}:</span>
           <pre className="text-xs bg-surface p-2 rounded mt-1 overflow-x-auto max-h-40 overflow-y-auto">
             {event.stdout}
           </pre>
@@ -119,7 +117,7 @@ export function HookExecutionEventMessage({
 
       {event.stderr && (
         <div>
-          <span className="text-text-subtle">{t(I18nKey.HOOK$STDERR)}:</span>
+          <span className="text-muted">{t(I18nKey.HOOK$STDERR)}:</span>
           <pre className="text-xs bg-surface p-2 rounded mt-1 overflow-x-auto max-h-40 overflow-y-auto text-feedback-warning">
             {event.stderr}
           </pre>

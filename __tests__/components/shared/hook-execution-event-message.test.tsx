@@ -78,6 +78,30 @@ beforeAll(async () => {
   );
 });
 
+// Compile an element's emitted classes through the production stylesheet and
+// read back a declared property. This checks the CSS contract without
+// prescribing a utility class spelling.
+const compiledProperty = (
+  element: Element,
+  name: "color" | "background-color",
+) => {
+  const css = compiler.build([...element.classList]);
+  const declarations = [...css.matchAll(/\.((?:\\.|[\w-])+)\s*\{([^}]+)\}/g)]
+    .filter(([, selector]) =>
+      element.classList.contains(selector.replace(/\\(.)/g, "$1")),
+    )
+    .map(([, , body]) => body)
+    .join("\n");
+
+  return [
+    ...declarations.matchAll(
+      new RegExp(String.raw`(?:^|\n)\s*${name}:\s*([^;]+);`, "g"),
+    ),
+  ]
+    .at(-1)?.[1]
+    .trim();
+};
+
 describe("hook execution event message", () => {
   it.each([
     ["blocked", { blocked: true, success: false }, "--oh-feedback-warning"],
@@ -88,26 +112,8 @@ describe("hook execution event message", () => {
       renderHookEvent(event);
       const badge = screen.getByText(status);
 
-      // Compile the component's emitted classes through the production stylesheet.
-      // This checks the CSS contract without prescribing a utility class spelling.
-      const css = compiler.build([...badge.classList]);
-      const declarations = [
-        ...css.matchAll(/\.((?:\\.|[\w-])+)\s*\{([^}]+)\}/g),
-      ]
-        .filter(([, selector]) =>
-          badge.classList.contains(selector.replace(/\\(.)/g, "$1")),
-        )
-        .map(([, , body]) => body)
-        .join("\n");
-
       const property = (name: "color" | "background-color") =>
-        [
-          ...declarations.matchAll(
-            new RegExp(String.raw`(?:^|\n)\s*${name}:\s*([^;]+);`, "g"),
-          ),
-        ]
-          .at(-1)?.[1]
-          .trim();
+        compiledProperty(badge, name);
 
       expect(property("color")).toBe(`var(${role})`);
       expect(property("background-color")).toBe(
@@ -115,6 +121,34 @@ describe("hook execution event message", () => {
       );
     },
   );
+
+  it("gives every detail label the muted text ink, not the subtle token", () => {
+    renderHookEvent({
+      success: false,
+      blocked: true,
+      exit_code: 2,
+      reason: "denied",
+      stdout: "out",
+      stderr: "err",
+      error: "boom",
+      additional_context: "ctx",
+    });
+
+    const labels = [
+      I18nKey.HOOK$COMMAND,
+      I18nKey.HOOK$EXIT_CODE,
+      I18nKey.HOOK$BLOCKED_REASON,
+      I18nKey.HOOK$CONTEXT,
+      I18nKey.HOOK$ERROR,
+      I18nKey.HOOK$OUTPUT,
+      I18nKey.HOOK$STDERR,
+    ].map((key) => screen.getByText(`${key}:`));
+
+    // --oh-text-subtle is below 4.5:1 on the dark themes; --oh-muted passes on all.
+    for (const label of labels) {
+      expect(compiledProperty(label, "color")).toBe("var(--oh-muted)");
+    }
+  });
 
   it("renders nothing for an event from another event family", () => {
     const event = {
