@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { MessageSquare } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { I18nKey } from "#/i18n/declaration";
 import TerminalIcon from "#/icons/terminal.svg?react";
@@ -149,6 +150,17 @@ export function ActivityLogItem({ run, automation }: ActivityLogItemProps) {
             className="text-xs tabular-nums text-muted"
           >
             {formattedCost}
+          </span>
+        )}
+        {hasConversation && (
+          <span
+            role="img"
+            data-testid="run-conversation-indicator"
+            className="p-1 text-muted"
+            aria-label={t(I18nKey.AUTOMATIONS$DETAIL$CONVERSATION_STARTED)}
+            title={t(I18nKey.AUTOMATIONS$DETAIL$CONVERSATION_STARTED)}
+          >
+            <MessageSquare className="size-4" aria-hidden />
           </span>
         )}
         {logsButton}

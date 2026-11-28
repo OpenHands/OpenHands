@@ -1,3 +1,5 @@
+import { isAskUserAnswerEvent } from "@openhands/typescript-client";
+import { deliveredAnswerIds } from "#/utils/decision-closures";
 import type {
   ActionEvent,
   OpenHandsEvent,
@@ -281,8 +283,14 @@ const buildTranscriptEntries = (
   );
   const entries: TranscriptEntry[] = [];
   const emittedNarrationActionIds = new Set<string>();
+  // Only answers that reached the agent: one lost in a crash and picked again
+  // would otherwise show twice.
+  const deliveredAnswers = deliveredAnswerIds(events);
   const renderableEvents = uiEvents.filter(
     (event) =>
+      ("kind" in event &&
+        isAskUserAnswerEvent(event) &&
+        deliveredAnswers.has(event.id ?? "")) ||
       (isSwitchLLMObservationEvent(event) && !event.observation.is_error) ||
       (isClassifyAndSwitchLLMObservationEvent(event) &&
         !event.observation.is_error) ||
@@ -322,6 +330,17 @@ const buildTranscriptEntries = (
 
     const { event } = item;
     try {
+      if ("kind" in event && isAskUserAnswerEvent(event)) {
+        entries.push({
+          kind: "message",
+          author: "user",
+          content: [event.option_label, event.text]
+            .filter(Boolean)
+            .join("\n\n"),
+          timestamp: event.timestamp ?? "",
+        });
+        continue;
+      }
       const narrationAction = isActionEvent(event)
         ? event
         : isObservationEvent(event) || isUserRejectObservation(event)
@@ -463,6 +482,34 @@ const buildTranscriptEntries = (
 
       if (isObservationEvent(event)) {
         const correspondingAction = actionsById.get(event.action_id);
+        if (
+          event.observation.kind === "AskUserObservation" &&
+          !event.observation.is_error &&
+          correspondingAction?.action.kind === "AskUserAction"
+        ) {
+          const { question, options, recommended } = correspondingAction.action;
+          entries.push({
+            kind: "message",
+            author: "assistant",
+            content: [
+              question,
+              ...options.map((option, index) =>
+                [
+                  `${index + 1}. ${option.label}${
+                    recommended === index
+                      ? ` (${translatePlain(I18nKey.ASK_USER$RECOMMENDED)})`
+                      : ""
+                  }`,
+                  option.consequence,
+                ]
+                  .filter(Boolean)
+                  .join("\n"),
+              ),
+            ].join("\n\n"),
+            timestamp: event.timestamp ?? "",
+          });
+          continue;
+        }
         entries.push({
           kind: "tool",
           summary: getObservationSummary(event, correspondingAction),
