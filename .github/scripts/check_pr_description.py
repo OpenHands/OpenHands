@@ -268,10 +268,11 @@ def extract_pr_type(body: str) -> str | None:
     "Feature" checkbox is checked, or None if neither is checked or the section
     is absent.
     """
-    bug_match = PR_TYPE_BUG_RE.search(body)
+    type_section = extract_sections(body).get("Type", "")
+    bug_match = PR_TYPE_BUG_RE.search(type_section)
     if bug_match and bug_match.group("box").strip().lower() == "x":
         return BUG_LABEL
-    feature_match = PR_TYPE_FEATURE_RE.search(body)
+    feature_match = PR_TYPE_FEATURE_RE.search(type_section)
     if feature_match and feature_match.group("box").strip().lower() == "x":
         return ENHANCEMENT_LABEL
     return None

@@ -299,6 +299,17 @@ def test_functional_launcher_bug_requires_running_canvas_media():
     assert "functional change" in errors[0]
 
 
+def test_quoted_bug_checkbox_does_not_require_canvas_media():
+    body = NONVISUAL_BUG_BODY.replace("[x] Bug fix", "[x] Docs / chore").replace(
+        "Stop the child process before exiting the launcher.",
+        "Stop the child process before exiting the launcher.\n\n"
+        "Example of a filled type checklist:\n\n"
+        "```markdown\n- [x] Bug fix\n```",
+    )
+    assert extract_pr_type(body) is None
+    assert validate_pr_body(body, ["scripts/launcher.cjs"]) == []
+
+
 def test_nonfrontend_feature_requires_running_canvas_media():
     body = NONVISUAL_BUG_BODY.replace("[x] Bug fix", "[x] Feature")
     assert len(validate_pr_body(body, ["scripts/launcher.cjs"])) == 1
