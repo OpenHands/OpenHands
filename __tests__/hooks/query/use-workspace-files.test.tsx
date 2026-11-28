@@ -269,6 +269,26 @@ describe("useWorkspaceFiles — local backend", () => {
     );
     expect(executeCommandSpy).toHaveBeenCalledTimes(1);
   });
+
+  it("reports the failure instead of an empty list when the bash listing errors", async () => {
+    // Regression (Files tab shows "No files in workspace" on a failed listing):
+    // a non-zero exit must surface as an error state, not as `data: []`.
+    executeCommandSpy.mockResolvedValue({
+      exit_code: 1,
+      stdout: "",
+      stderr: "bash: find: permission denied",
+    });
+
+    const { result } = renderHook(() => useWorkspaceFiles(), {
+      wrapper: makeWrapper(),
+    });
+
+    await waitFor(() => expect(result.current.isError).toBe(true));
+    expect(result.current.data).toBeUndefined();
+    expect((result.current.error as Error).message).toBe(
+      "bash: find: permission denied",
+    );
+  });
 });
 
 describe("useWorkspaceFiles — cloud backend", () => {
@@ -369,5 +389,42 @@ describe("useWorkspaceFiles — cloud backend", () => {
       expect(result.current.data).toEqual(["hello.txt", "report.md"]),
     );
     expect(listCloudFilesMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not call a listing that ends exactly on the cap truncated", async () => {
+    const exactly = Array.from({ length: 2000 }, (_, i) => `f${i}.txt`);
+    listCloudFilesMock.mockResolvedValue(exactly);
+
+    const { result } = renderHook(() => useWorkspaceFiles(), {
+      wrapper: makeWrapper(),
+    });
+
+    await waitFor(() => expect(result.current.data).toHaveLength(2000));
+    // Ending on MAX_FILES is a complete tree, not an overflow.
+    expect(result.current.isTruncated).toBe(false);
+  });
+
+  it("marks a cloud listing truncated when it overflows the cap by one", async () => {
+    const over = Array.from({ length: 2001 }, (_, i) => `f${i}.txt`);
+    listCloudFilesMock.mockResolvedValue(over);
+
+    const { result } = renderHook(() => useWorkspaceFiles(), {
+      wrapper: makeWrapper(),
+    });
+
+    await waitFor(() => expect(result.current.isTruncated).toBe(true));
+    expect(result.current.data).toHaveLength(2000);
+  });
+
+  it("surfaces a cloud listing failure instead of an empty tree", async () => {
+    listCloudFilesMock.mockRejectedValue(new Error("403 Forbidden"));
+
+    const { result } = renderHook(() => useWorkspaceFiles(), {
+      wrapper: makeWrapper(),
+    });
+
+    await waitFor(() => expect(result.current.isError).toBe(true));
+    expect(result.current.data).toBeUndefined();
+    expect((result.current.error as Error).message).toBe("403 Forbidden");
   });
 });

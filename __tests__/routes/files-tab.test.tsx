@@ -109,6 +109,7 @@ describe("FilesTab", () => {
     useWorkspaceFilesMock.mockReturnValue({
       data: ["index.html", "src/main.ts", "README.md"],
       isLoading: false,
+      isError: false,
     });
     useWorkspaceFileContentMock.mockReturnValue({
       data: {
@@ -147,6 +148,7 @@ describe("FilesTab", () => {
       data: ["a.txt", "b.txt"],
       isLoading: false,
       isTruncated: true,
+      isError: false,
     });
     renderTab();
     expect(screen.getByRole("status")).toHaveTextContent(
@@ -162,6 +164,42 @@ describe("FilesTab", () => {
     expect(
       screen.getByTestId("file-quick-row-tree-toggle"),
     ).toBeInTheDocument();
+  });
+
+  // Regression: a failed listing used to fall through to the empty tree and
+  // render "No files in workspace", so the user could not tell "this
+  // workspace is empty" from "we could not read it".
+  it("reports a listing failure instead of the empty-workspace message", () => {
+    useWorkspaceFilesMock.mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      isError: true,
+      error: new Error("Failed to list workspace files"),
+    });
+
+    renderTab();
+
+    expect(screen.getByRole("alert")).toHaveTextContent("FILES$LIST_ERROR");
+    expect(screen.queryByText("FILES$NO_FILES")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("files-tab-tree")).not.toBeInTheDocument();
+    // Refresh stays reachable as the retry path.
+    expect(screen.getByTestId("files-tab-refresh")).toBeInTheDocument();
+  });
+
+  it("labels a still-visible list as stale when a refresh fails", () => {
+    useWorkspaceFilesMock.mockReturnValue({
+      data: ["index.html"],
+      isLoading: false,
+      isError: true,
+      error: new Error("Failed to list workspace files"),
+    });
+
+    renderTab();
+
+    expect(screen.getByRole("alert")).toHaveTextContent("FILES$LIST_ERROR");
+    expect(screen.getByRole("alert")).toHaveTextContent("FILES$LIST_STALE");
+    // The previously loaded paths stay usable while the error is shown.
+    expect(screen.getByTestId("files-tab-tree")).toBeInTheDocument();
   });
 
   it("shows the active conversation workspace path", () => {
@@ -338,6 +376,7 @@ describe("FilesTab", () => {
     useWorkspaceFilesMock.mockReturnValue({
       data: ["README.md"],
       isLoading: false,
+      isError: false,
     });
     useWorkspaceFileContentMock.mockReturnValue({
       data: {
@@ -371,6 +410,7 @@ describe("FilesTab", () => {
     useWorkspaceFilesMock.mockReturnValue({
       data: ["README.md"],
       isLoading: false,
+      isError: false,
     });
     useWorkspaceFileContentMock.mockReturnValue({
       data: {
@@ -406,6 +446,7 @@ describe("FilesTab", () => {
     useWorkspaceFilesMock.mockReturnValue({
       data: ["index.html"],
       isLoading: false,
+      isError: false,
     });
     const staticUrl =
       "https://agent.example.com/api/conversations/conv-1/workspace/index.html";
@@ -433,6 +474,7 @@ describe("FilesTab", () => {
     useWorkspaceFilesMock.mockReturnValue({
       data: ["index.html"],
       isLoading: false,
+      isError: false,
     });
     const staticUrl =
       "https://agent.example.com/api/conversations/conv-1/workspace/index.html";
@@ -474,6 +516,7 @@ describe("FilesTab", () => {
     useWorkspaceFilesMock.mockReturnValue({
       data: ["src/main.ts"],
       isLoading: false,
+      isError: false,
     });
     useWorkspaceFileContentMock.mockReturnValue({
       data: {
@@ -710,6 +753,7 @@ describe("FilesTab", () => {
       useWorkspaceFilesMock.mockReturnValue({
         data: ["app.html"],
         isLoading: false,
+        isError: false,
       });
 
       renderTab("conv-b");
@@ -730,6 +774,7 @@ describe("FilesTab", () => {
       useWorkspaceFilesMock.mockReturnValue({
         data: ["report.html", "app.html"],
         isLoading: false,
+        isError: false,
       });
 
       renderTab("conv-b");
@@ -748,6 +793,7 @@ describe("FilesTab", () => {
       useWorkspaceFilesMock.mockReturnValue({
         data: ["demo.html"],
         isLoading: false,
+        isError: false,
       });
 
       const { rerender } = renderTab("conv-a");
@@ -761,6 +807,7 @@ describe("FilesTab", () => {
       useWorkspaceFilesMock.mockReturnValue({
         data: ["app.html"],
         isLoading: false,
+        isError: false,
       });
       const client = new QueryClient({
         defaultOptions: { queries: { retry: false } },
