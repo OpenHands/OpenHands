@@ -83,6 +83,10 @@ jobs:
         if: matrix.full_checks
         run: npm test
 
+      - name: Test Windows workspace discovery
+        if: matrix.name == 'windows'
+        run: npx vitest run __tests__/utils/workspace-file-discovery.test.ts --reporter=verbose
+
       - name: Build app
         run: npm run build
 

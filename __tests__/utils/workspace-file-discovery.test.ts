@@ -17,8 +17,10 @@ import {
   parseWorkspaceFileList,
 } from "#/utils/workspace-file-discovery";
 
+const describePosix = describe.skipIf(process.platform === "win32");
+
 // @spec WFD-001 — Configurable local workspace discovery
-describe("workspace file discovery", () => {
+describePosix("workspace file discovery", () => {
   let workspace: string;
   beforeEach(() => {
     workspace = mkdtempSync(join(tmpdir(), "workspace-discovery-"));
@@ -122,6 +124,33 @@ describe("Windows workspace discovery", () => {
       'dir /b /s /a:-d 2>nul | findstr /v /i /c:"\\ok\\" | sort',
     );
   });
+
+  it.runIf(process.platform === "win32")(
+    "lists workspace files through native cmd.exe without exclusions",
+    () => {
+      const workspace = mkdtempSync(
+        join(tmpdir(), "windows-workspace-discovery-"),
+      );
+      try {
+        mkdirSync(join(workspace, "src"));
+        writeFileSync(join(workspace, "src", "index.ts"), "");
+        writeFileSync(join(workspace, "README.md"), "");
+        const unfiltered = { ...options, excludedPatterns: [] };
+        const stdout = execSync(
+          buildWindowsWorkspaceFileListCommand(unfiltered, workspace),
+          { cwd: workspace, encoding: "utf8", shell: "cmd.exe", timeout: 5000 },
+        );
+        expect(
+          parseWindowsWorkspaceFileList(stdout, workspace, unfiltered),
+        ).toEqual({
+          paths: ["README.md", "src/index.ts"],
+          isTruncated: false,
+        });
+      } finally {
+        rmSync(workspace, { recursive: true, force: true });
+      }
+    },
+  );
 
   it("returns forward-slash paths relative to the working dir", () => {
     const stdout = [
