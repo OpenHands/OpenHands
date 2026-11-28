@@ -15,6 +15,8 @@ export interface AutomationSetupFormValues {
   name: string;
   /** Service account id selected for a new automation; empty means the caller. */
   runAsUserId: string;
+  /** Factory a new automation is created in; empty means none. */
+  factoryId: string;
   /** Who can see the automation; absent means the whole organization. */
   visibility?: AutomationVisibility;
   prompt: string;
