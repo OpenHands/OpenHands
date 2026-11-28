@@ -50,6 +50,16 @@ describe("assistant chat Markdown path linking", () => {
     expect(openWorkspaceFile).toHaveBeenCalledWith("test.md", "conv-1");
   });
 
+  it("links file references with line and column numbers", async () => {
+    const user = userEvent.setup();
+
+    renderAgentMessage("See `src/app.ts:25:10`");
+
+    await user.click(screen.getByTestId("markdown-file-path-link"));
+
+    expect(openWorkspaceFile).toHaveBeenCalledWith("src/app.ts", "conv-1");
+  });
+
   it("opens the Files drawer for bold-emphasized existing paths", async () => {
     const user = userEvent.setup();
 
