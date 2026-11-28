@@ -338,4 +338,37 @@ describe("SettingsDropdownInput", () => {
     expect(group?.className).toContain("border-control");
     expect(group?.className).toContain("focus-within:ring-1");
   });
+
+  it("lays out the chevron trigger in flow after the clear button so it cannot cover it", () => {
+    // Arrange / Act
+    render(
+      <SettingsDropdownInput
+        defaultSelectedKey="english"
+        items={items}
+        label="Language"
+        name="language"
+        testId="language-input"
+      />,
+    );
+
+    // Assert: HeroUI's default `.combo-box__trigger` is `absolute end-0 top-1/2 -translate-y-1/2`,
+    // which floats over a sibling clear button inside the input group. Keeping the trigger
+    // static in flex flow with `pe-0` on the shell places clear and chevron side-by-side.
+    const input = screen.getByLabelText("Language");
+    const group = input.closest('[data-slot="combo-box-input-group"]');
+    const clearButton = screen.getByRole("button", {
+      name: "COMMON$CLEAR_SELECTION",
+    });
+    const triggerButton = screen.getByRole("button", {
+      name: "Show suggestions",
+    });
+
+    expect(group).not.toBeNull();
+    expect(group?.className).toContain("pe-0");
+    expect(input.className).toContain("flex-1");
+    expect(input.className).toContain("pe-3");
+    expect(triggerButton.className).toContain("static");
+    expect(triggerButton.className).toContain("translate-y-0");
+    expect(clearButton.nextElementSibling).toBe(triggerButton);
+  });
 });
