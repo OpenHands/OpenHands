@@ -47518,5 +47518,41 @@
     "uk": "Відкрити {{ref}} на GitHub",
     "ca": "Obre {{ref}} a GitHub",
     "id": "Buka {{ref}} di GitHub"
+  },
+  "AUTOMATIONS$SHOW_FACTORY_AUTOMATIONS": {
+    "en": "Show automations in factories",
+    "zh-CN": "显示工厂中的自动化",
+    "zh-TW": "顯示工廠中的自動化",
+    "de": "Automatisierungen in Fabriken anzeigen",
+    "ko-KR": "팩토리에 있는 자동화 표시",
+    "no": "Vis automatiseringer i fabrikker",
+    "it": "Mostra le automazioni nelle factory",
+    "pt": "Mostrar automações nas fábricas",
+    "es": "Mostrar automatizaciones en fábricas",
+    "ar": "عرض الأتمتة داخل المصانع",
+    "fr": "Afficher les automatisations dans les factories",
+    "tr": "Fabrikalardaki otomasyonları göster",
+    "ja": "ファクトリー内のオートメーションを表示",
+    "uk": "Показувати автоматизації у фабриках",
+    "ca": "Mostra les automatitzacions de les fàbriques",
+    "id": "Tampilkan otomatisasi di dalam pabrik"
+  },
+  "AUTOMATIONS$FACTORY_AUTOMATIONS_HIDDEN": {
+    "en": "All automations are in factories, which this list hides.",
+    "zh-CN": "所有自动化都位于工厂中，此列表已将其隐藏。",
+    "zh-TW": "所有自動化都位於工廠中，此清單已將其隱藏。",
+    "de": "Alle Automatisierungen befinden sich in Fabriken, die diese Liste ausblendet.",
+    "ko-KR": "모든 자동화가 팩토리에 있으며 이 목록에서는 숨겨져 있습니다.",
+    "no": "Alle automatiseringer er i fabrikker, som denne listen skjuler.",
+    "it": "Tutte le automazioni sono nelle factory, che questo elenco nasconde.",
+    "pt": "Todas as automações estão em fábricas, que esta lista oculta.",
+    "es": "Todas las automatizaciones están en fábricas, que esta lista oculta.",
+    "ar": "جميع الأتمتة موجودة داخل المصانع، وهذه القائمة تخفيها.",
+    "fr": "Toutes les automatisations sont dans des factories, que cette liste masque.",
+    "tr": "Tüm otomasyonlar bu listenin gizlediği fabrikalarda yer alıyor.",
+    "ja": "すべてのオートメーションがファクトリー内にあり、この一覧では非表示です。",
+    "uk": "Усі автоматизації — у фабриках, які цей список приховує.",
+    "ca": "Totes les automatitzacions són a fàbriques, que aquesta llista amaga.",
+    "id": "Semua otomatisasi berada di dalam pabrik, yang disembunyikan daftar ini."
   }
 }

@@ -21,6 +21,7 @@ import {
   useImportAutomation,
 } from "#/hooks/query/use-automations";
 import { useAutomationHealth } from "#/hooks/query/use-automation-health";
+import { useFactoriesSupported } from "#/hooks/query/use-factories";
 import {
   PENDING_AUTOMATION_SETUP_ID,
   initializeAutomationFormSession,
@@ -51,6 +52,7 @@ import { EnumFilterDropdown } from "#/components/shared/filters/enum-filter-drop
 import { AutomationCardSkeleton } from "#/components/features/automations/automation-card-skeleton";
 import { EmptyState } from "#/components/features/automations/empty-state";
 import { FactoryAutomationsEmptyState } from "#/components/features/factories/factory-automations-empty-state";
+import { ShowFactoryAutomationsToggle } from "#/components/features/factories/show-factory-automations-toggle";
 import { ErrorState } from "#/components/features/automations/error-state";
 import { BackendNotConfigured } from "#/components/features/automations/backend-not-configured";
 import { DeleteConfirmationModal } from "#/components/features/automations/delete-confirmation-modal";
@@ -345,6 +347,7 @@ export function AutomationsDashboard({
   const [groupBy, setGroupBy] = useState<AutomationGroupBy>(() =>
     readStoredAutomationGroupBy(),
   );
+  const [showFactoryAutomations, setShowFactoryAutomations] = useState(false);
   const [draftLimit, setDraftLimit] = useState(PAGE_SIZE);
   const [deleteTarget, setDeleteTarget] = useState<{
     id: string;
@@ -385,6 +388,16 @@ export function AutomationsDashboard({
 
   const isBackendHealthy = healthData?.status === "ok";
 
+  // Each factory's page lists its own automations, so the org-wide list leaves
+  // them out until asked. Waiting for the factories switch to answer keeps the
+  // first request from listing them, only to hide them a moment later.
+  const { isLoading: isFactoriesLoading, isSupported: isFactoriesSupported } =
+    useFactoriesSupported();
+  const canHideFactoryAutomations =
+    factoryId === undefined && isFactoriesSupported;
+  const hideFactoryAutomations =
+    canHideFactoryAutomations && !showFactoryAutomations;
+
   // Only fetch automations if the backend is healthy
   const {
     data,
@@ -396,7 +409,7 @@ export function AutomationsDashboard({
     isFetching,
     isPlaceholderData,
   } = useAutomations({
-    enabled: isBackendHealthy,
+    enabled: isBackendHealthy && !isFactoriesLoading,
     // The server filters by owner so pages and `total` cover only matches;
     // the client predicate in applyDashboardView stays as the fallback for
     // an automation service that ignores the param.
@@ -404,6 +417,7 @@ export function AutomationsDashboard({
     // Same for the tag: the server filters, the client predicate backs it up.
     tag: tagFilter ?? undefined,
     factoryId,
+    inFactory: hideFactoryAutomations ? false : undefined,
   });
   // The overview tiles summarize the org list above the filters, so they read
   // it unfiltered; with no creator selected this is the same query as above.
@@ -437,9 +451,14 @@ export function AutomationsDashboard({
   // lists saved drafts in their own group and never lists these test
   // artifacts, so the groups, tiles, run summaries, and empty state all
   // leave them out.
+  // A service that predates the in-factory filter lists the factory automations
+  // anyway, so the page drops them as well.
   const listedAutomations = useMemo(
-    () => withoutDraftAutomations(data?.automations),
-    [data?.automations],
+    () =>
+      withoutDraftAutomations(data?.automations).filter(
+        (a) => !hideFactoryAutomations || !a.factory_id,
+      ),
+    [data?.automations, hideFactoryAutomations],
   );
   const orgAutomations = useMemo(
     () => withoutDraftAutomations(orgData?.automations),
@@ -749,6 +768,10 @@ export function AutomationsDashboard({
       </div>
     );
 
+  const isEveryAutomationInAFactory =
+    hideFactoryAutomations &&
+    listedAutomations.length === 0 &&
+    orgAutomations.some((a) => a.factory_id);
   const hasMoreDrafts = draftsData
     ? draftsData.total > draftsData.drafts.length
     : false;
@@ -857,8 +880,8 @@ export function AutomationsDashboard({
       {/* Search */}
       <div
         className={cn(
-          "flex items-stretch gap-2",
-          dashboard ? "flex-wrap" : "mt-6",
+          "flex flex-wrap items-stretch gap-2",
+          !dashboard && "mt-6",
         )}
       >
         <SearchInput
@@ -884,6 +907,14 @@ export function AutomationsDashboard({
             onCreatedByChange={setCreatedByFilter}
             onTagChange={setTagFilter}
             onSortChange={setSortValue}
+            factoryAutomations={
+              canHideFactoryAutomations
+                ? {
+                    checked: showFactoryAutomations,
+                    onChange: setShowFactoryAutomations,
+                  }
+                : undefined
+            }
           />
         )}
         {canGroupByTag && (
@@ -895,6 +926,12 @@ export function AutomationsDashboard({
             labelKeyByValue={GROUP_BY_LABEL_KEYS}
             ariaLabel={t(I18nKey.AUTOMATIONS$GROUP_BY)}
             triggerClassName="h-9 py-0"
+          />
+        )}
+        {canHideFactoryAutomations && !dashboard && (
+          <ShowFactoryAutomationsToggle
+            checked={showFactoryAutomations}
+            onChange={setShowFactoryAutomations}
           />
         )}
         <AutomationViewToggle
@@ -937,10 +974,19 @@ export function AutomationsDashboard({
           !hasNoAutomations &&
           (dashboard &&
           visible.length === 0 &&
-          visibleSavedDrafts.length === 0 ? (
+          visibleSavedDrafts.length === 0 &&
+          !isEveryAutomationInAFactory ? (
             <AutomationsFilteredEmptyState onClear={handleClearFilters} />
           ) : (
             <>
+              {isEveryAutomationInAFactory && (
+                <p
+                  data-testid="automations-all-in-factories"
+                  className="text-sm text-muted"
+                >
+                  {t(I18nKey.AUTOMATIONS$FACTORY_AUTOMATIONS_HIDDEN)}
+                </p>
+              )}
               <SavedDraftsGroup
                 drafts={visibleSavedDrafts}
                 onResume={handleResumeDraft}

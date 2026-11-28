@@ -542,9 +542,14 @@ class AutomationService {
       tag?: string;
       /** Only automations in this factory. */
       factoryId?: string;
+      /**
+       * `false` keeps only automations in no factory and `true` only those in
+       * one. A service that predates the param ignores it.
+       */
+      inFactory?: boolean;
     } = {},
   ): Promise<AutomationsResponse> {
-    const { limit = 50, offset = 0, runAs, tag, factoryId } = params;
+    const { limit = 50, offset = 0, runAs, tag, factoryId, inFactory } = params;
     const active = getActiveBackend().backend;
 
     let response: AutomationsResponse;
@@ -552,14 +557,30 @@ class AutomationService {
       response = await callCloudProxy<AutomationsResponse>({
         backend: active,
         method: "GET",
-        path: `${AUTOMATION_BASE_PATH}${getAutomationEndpoint("list")}?${buildListQuery(limit, offset, { run_as: runAs, tag, factory_id: factoryId })}`,
+        path: `${AUTOMATION_BASE_PATH}${getAutomationEndpoint("list")}?${buildListQuery(
+          limit,
+          offset,
+          {
+            run_as: runAs,
+            tag,
+            factory_id: factoryId,
+            in_factory: inFactory?.toString(),
+          },
+        )}`,
         headers: await buildAutomationRequestHeaders(),
       });
     } else {
       const { data } = await localAutomationAxios.get<AutomationsResponse>(
         `${AUTOMATION_BASE_PATH}${getAutomationEndpoint("list")}`,
         {
-          params: { limit, offset, run_as: runAs, tag, factory_id: factoryId },
+          params: {
+            limit,
+            offset,
+            run_as: runAs,
+            tag,
+            factory_id: factoryId,
+            in_factory: inFactory,
+          },
         },
       );
       response = data;
@@ -581,6 +602,7 @@ class AutomationService {
     runAs?: AutomationRunAsFilter,
     tag?: string,
     factoryId?: string,
+    inFactory?: boolean,
   ): Promise<AutomationsResponse> {
     return AutomationService.listAutomations({
       limit,
@@ -588,6 +610,7 @@ class AutomationService {
       runAs,
       tag,
       factoryId,
+      inFactory,
     });
   }
 

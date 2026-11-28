@@ -74,6 +74,8 @@ interface UseAutomationsOptions {
   tag?: string;
   /** Only the automations in this factory. */
   factoryId?: string;
+  /** `false` keeps only the automations in no factory; omitted keeps both. */
+  inFactory?: boolean;
   enabled?: boolean;
 }
 
@@ -127,13 +129,14 @@ export function useAutomations(options: UseAutomationsOptions = {}) {
     runAs,
     tag,
     factoryId,
+    inFactory,
     enabled = true,
   } = options;
   const active = useActiveBackend();
   return useInfiniteQuery({
     queryKey: [
       ...AUTOMATIONS_QUERY_KEY,
-      { pageSize, runAs, tag, factoryId },
+      { pageSize, runAs, tag, factoryId, inFactory },
       active.backend.id,
       active.orgId,
     ],
@@ -144,6 +147,7 @@ export function useAutomations(options: UseAutomationsOptions = {}) {
         runAs,
         tag,
         factoryId,
+        inFactory,
       ),
     initialPageParam: 0,
     getNextPageParam: (lastPage, _pages, lastOffset) => {

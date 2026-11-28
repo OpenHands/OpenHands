@@ -100,6 +100,11 @@ vi.mock("#/hooks/query/use-cloud-integrations-config", () => ({
   useCloudIntegrationsConfig: () => ({ data: undefined }),
 }));
 
+// Factories are off here, so the list never hides their automations.
+vi.mock("#/hooks/query/use-factories", () => ({
+  useFactoriesSupported: () => ({ isLoading: false, isSupported: false }),
+}));
+
 vi.mock("#/hooks/query/use-automation-health", () => ({
   useAutomationHealth: () => mocks.healthState,
 }));

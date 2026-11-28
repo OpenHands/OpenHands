@@ -40,9 +40,23 @@ vi.mock("#/manifests/manifest-sources", async (importOriginal) => {
     await importOriginal<typeof import("#/manifests/manifest-sources")>();
   const { createInterfaceManifestWithSubPages } =
     await import("../manifests/manifest-test-data");
+  const manifest = createInterfaceManifestWithSubPages();
   return {
     ...actual,
-    AUTOMATION_INTERFACE_CANDIDATE: createInterfaceManifestWithSubPages(),
+    AUTOMATION_INTERFACE_CANDIDATE: {
+      ...manifest,
+      endpoints: { ...manifest.endpoints, tags: "/v1/tags" },
+      pages: {
+        ...manifest.pages,
+        list: {
+          ...manifest.pages.list,
+          filters: [
+            ...manifest.pages.list.filters!,
+            { id: "tag", label: "Filter by tag", allLabel: "Any tag" },
+          ],
+        },
+      },
+    },
   };
 });
 
@@ -230,17 +244,18 @@ beforeEach(() => {
     return found;
   });
   vi.mocked(AutomationService.getAutomations).mockImplementation(
-    async (_limit, _offset, _runAs, _tag, factoryId) => {
+    async (_limit, _offset, _runAs, _tag, factoryId, inFactory) => {
+      const everything = [
+        reviewer,
+        triager,
+        createAutomation({ id: "a-org", name: "Org digest" }),
+      ];
       const automations =
         factoryId === "f-core"
           ? [reviewer, triager]
           : factoryId
             ? []
-            : [
-                reviewer,
-                triager,
-                createAutomation({ id: "a-org", name: "Org digest" }),
-              ];
+            : everything.filter((a) => inFactory !== false || !a.factory_id);
       return { automations, total: automations.length };
     },
   );
@@ -492,8 +507,182 @@ describe("renaming a factory", () => {
     factory.unmount();
 
     renderAt("/automate");
-    await screen.findByTestId("automation-card-a-reviewer");
+    await screen.findByTestId("automation-card-a-org");
     expect(screen.getByTestId("automations-add-automation")).toBeVisible();
+  });
+});
+
+describe("Automate list and automations in factories", () => {
+  const showFactoryAutomations = "automations-show-factory-automations";
+
+  const filtersTrigger = () =>
+    screen.getByRole("button", { name: "AUTOMATIONS$FILTERS" });
+
+  async function openFactoryAutomationsSwitch(
+    user: ReturnType<typeof userEvent.setup>,
+  ) {
+    await user.click(filtersTrigger());
+    return within(screen.getByTestId(showFactoryAutomations)).getByRole(
+      "switch",
+    );
+  }
+
+  it("lists only the automations that are in no factory, and asks the server for them", async () => {
+    // Act
+    renderAt("/automate");
+    await screen.findByTestId("automation-card-a-org");
+
+    // Assert
+    expect(
+      screen.queryByTestId("automation-card-a-reviewer"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("automation-card-a-triager"),
+    ).not.toBeInTheDocument();
+    expect(AutomationService.getAutomations).toHaveBeenCalledWith(
+      50,
+      0,
+      undefined,
+      undefined,
+      undefined,
+      false,
+    );
+  });
+
+  it("lists the automations in factories as well once the toggle is on", async () => {
+    // Arrange
+    const user = userEvent.setup();
+    renderAt("/automate");
+    await screen.findByTestId("automation-card-a-org");
+
+    // Act
+    await user.click(await openFactoryAutomationsSwitch(user));
+
+    // Assert
+    expect(
+      await screen.findByTestId("automation-card-a-reviewer"),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId("automation-card-a-triager")).toBeInTheDocument();
+    expect(screen.getByTestId("automation-card-a-org")).toBeInTheDocument();
+    expect(AutomationService.getAutomations).toHaveBeenLastCalledWith(
+      50,
+      0,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+    );
+  });
+
+  it("keeps the toggle in the Filters panel, counts it, and clears it with Reset all", async () => {
+    // Arrange
+    const user = userEvent.setup();
+    renderAt("/automate");
+    await screen.findByTestId("automation-card-a-org");
+    expect(screen.queryByTestId(showFactoryAutomations)).toBeNull();
+
+    // Act
+    const toggle = await openFactoryAutomationsSwitch(user);
+    await user.click(toggle);
+
+    // Assert
+    expect(toggle).toBeChecked();
+    expect(filtersTrigger()).toHaveTextContent("1");
+    await user.click(screen.getByTestId("automations-filters-reset"));
+    await waitFor(() =>
+      expect(
+        screen.queryByTestId("automation-card-a-reviewer"),
+      ).not.toBeInTheDocument(),
+    );
+    expect(
+      within(screen.getByTestId(showFactoryAutomations)).getByRole("switch"),
+    ).not.toBeChecked();
+  });
+
+  it("still offers Group by beside Filters when the org has tags", async () => {
+    // Arrange
+    vi.mocked(AutomationService.listAutomationTags).mockResolvedValue([
+      { tag: "software-factory", count: 2 },
+    ]);
+
+    // Act
+    renderAt("/automate");
+    await screen.findByTestId("automation-card-a-org");
+
+    // Assert
+    expect(await screen.findByTestId("automations-group-by")).toBeVisible();
+    expect(filtersTrigger()).toBeVisible();
+    expect(screen.queryByTestId(showFactoryAutomations)).toBeNull();
+  });
+
+  it("drops automations in factories that an older service still sends", async () => {
+    // Arrange
+    vi.mocked(AutomationService.getAutomations).mockResolvedValue({
+      automations: [
+        reviewer,
+        createAutomation({ id: "a-org", name: "Org digest" }),
+      ],
+      total: 2,
+    });
+
+    // Act
+    renderAt("/automate");
+    await screen.findByTestId("automation-card-a-org");
+
+    // Assert
+    expect(
+      screen.queryByTestId("automation-card-a-reviewer"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("says why the list is empty when every automation is in a factory", async () => {
+    // Arrange
+    const user = userEvent.setup();
+    vi.mocked(AutomationService.getAutomations).mockImplementation(
+      async (_limit, _offset, _runAs, _tag, _factoryId, inFactory) => {
+        const automations = inFactory === false ? [] : [reviewer, triager];
+        return { automations, total: automations.length };
+      },
+    );
+
+    // Act
+    renderAt("/automate");
+    const notice = await screen.findByTestId("automations-all-in-factories");
+
+    // Assert
+    expect(
+      screen.queryByTestId("automation-card-a-reviewer"),
+    ).not.toBeInTheDocument();
+    expect(notice).toBeVisible();
+    await user.click(await openFactoryAutomationsSwitch(user));
+    expect(
+      await screen.findByTestId("automation-card-a-reviewer"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("automations-all-in-factories"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("lists every automation, with no toggle, when factories are off", async () => {
+    // Arrange
+    vi.mocked(AutomationService.supportsFactories).mockReturnValue(false);
+
+    // Act
+    renderAt("/automate");
+    await screen.findByTestId("automation-card-a-org");
+
+    // Assert
+    expect(screen.getByTestId("automation-card-a-reviewer")).toBeVisible();
+    expect(screen.queryByTestId(showFactoryAutomations)).toBeNull();
+  });
+
+  it("has no toggle inside a factory, which lists its own automations", async () => {
+    // Act
+    renderAt("/factories/f-core");
+    await screen.findByTestId("automation-card-a-reviewer");
+
+    // Assert
+    expect(screen.queryByTestId(showFactoryAutomations)).toBeNull();
   });
 });
 
@@ -510,10 +699,12 @@ describe("FactoryDetail", () => {
       undefined,
       undefined,
       "f-core",
+      undefined,
     );
     expect(AutomationService.getAutomations).not.toHaveBeenCalledWith(
       expect.anything(),
       expect.anything(),
+      undefined,
       undefined,
       undefined,
       undefined,
@@ -578,7 +769,7 @@ describe("FactoryDetail", () => {
     // Arrange
     const user = userEvent.setup();
     renderAt("/automate");
-    await screen.findByTestId("automation-card-a-reviewer");
+    await screen.findByTestId("automation-card-a-org");
 
     // Act
     await user.click(screen.getByTestId("automations-add-automation"));
@@ -610,14 +801,14 @@ describe("FactoryDetail", () => {
     // Arrange
     const user = userEvent.setup();
     renderAt("/automate");
-    const card = await screen.findByTestId("automation-card-a-reviewer");
+    const card = await screen.findByTestId("automation-card-a-org");
 
     // Act
-    await user.click(within(card).getByText("PR reviewer"));
+    await user.click(within(card).getByText("Org digest"));
 
     // Assert
     expect(screen.getByTestId("detail-route")).toHaveTextContent(
-      /^\/automations\/a-reviewer$/,
+      /^\/automations\/a-org$/,
     );
   });
 
