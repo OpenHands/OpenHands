@@ -223,6 +223,32 @@ describe("ExtensionsNavigation", () => {
         within(nav).getByTestId("sidebar-extensions-/mcp"),
       ).toHaveAttribute("target", "_blank");
     });
+
+    it("shows the Apps item on an instance that serves organization-approved Apps", async () => {
+      // Arrange
+      setRegisteredBackends([cloudBackend]);
+      setActiveSelection({ backendId: cloudBackend.id, orgId: "org-1" });
+      server.use(
+        http.get("*/api/v1/web-client/config", () =>
+          HttpResponse.json({
+            providers_configured: [],
+            feature_flags: { enable_canvas_apps: true },
+          }),
+        ),
+      );
+
+      // Act
+      renderExtensionsNavigation(<ExtensionsNavigation />);
+
+      // Assert
+      const nav = screen.getByTestId("extensions-navbar-desktop");
+      expect(
+        await within(nav).findByTestId("sidebar-extensions-/apps"),
+      ).toHaveAttribute("href", "/apps");
+      expect(
+        within(nav).queryByTestId("sidebar-extensions-/plugins"),
+      ).not.toBeInTheDocument();
+    });
   });
 
   describe("tablet section selector", () => {

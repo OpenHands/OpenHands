@@ -5,6 +5,8 @@ import {
 } from "@openhands/typescript-client/clients";
 import { getAgentServerClientOptions } from "#/api/agent-server-client-options";
 import { isSdkHttpStatusError } from "#/api/agent-server-compatibility";
+import { activeOrgForBackend } from "#/api/cloud/client";
+import { callCloudProxy, type CloudProxyRequest } from "#/api/cloud/proxy";
 import type { CanvasExtensionAppViewSession } from "#/extensions/canvas-extension-app-view";
 import {
   getActiveBackend,
@@ -104,6 +106,30 @@ function getClientForBackend(backend: Backend): AgentServerClient {
       timeout: 60000,
     }),
   );
+}
+
+/**
+ * Requests to a cloud backend's Apps API, which serves the Apps approved for
+ * the selected organization. Null when Apps come from an Agent Server instead,
+ * or from nowhere: a cloud backend with no organization selected.
+ */
+function getCloudAppsRequest(backend: Backend) {
+  if (isNoBackend(backend) || backend.kind !== "cloud") return null;
+  const orgId = activeOrgForBackend(backend);
+  if (!orgId) return null;
+  const basePath = `/api/organizations/${encodeURIComponent(orgId)}/canvas-extensions`;
+  return <T>(
+    method: CloudProxyRequest["method"],
+    path: string,
+    options?: Pick<CloudProxyRequest, "body" | "timeoutSeconds">,
+  ) =>
+    callCloudProxy<T>({
+      backend,
+      orgId,
+      method,
+      path: `${basePath}${path}`,
+      ...options,
+    });
 }
 
 async function mapUnsupported<T>(operation: () => Promise<T>): Promise<T> {
@@ -243,6 +269,13 @@ class CanvasExtensionsService {
   }
 
   static async listInstalled(): Promise<InstalledCanvasExtensionInfo[]> {
+    const cloud = getCloudAppsRequest(getActiveBackend().backend);
+    if (cloud) {
+      const response = await cloud<{
+        canvas_extensions: InstalledCanvasExtensionInfo[];
+      }>("GET", "/installed");
+      return response.canvas_extensions ?? [];
+    }
     const client = getClient();
     const response = await mapUnsupported(() =>
       client.get<{ canvas_extensions: InstalledCanvasExtensionInfo[] }>(
@@ -255,6 +288,11 @@ class CanvasExtensionsService {
   static async install(
     request: InstallCanvasExtensionRequest,
   ): Promise<InstalledCanvasExtensionInfo> {
+    const cloud = getCloudAppsRequest(getActiveBackend().backend);
+    if (cloud) {
+      // The backend clones the source before it answers.
+      return cloud("POST", "/install", { body: request, timeoutSeconds: 120 });
+    }
     const client = getClient();
     return mapUnsupported(() =>
       client.post<InstalledCanvasExtensionInfo>(
@@ -270,6 +308,12 @@ class CanvasExtensionsService {
     consent?: { revision: string; secret_refs?: string[] },
     backend?: Backend,
   ): Promise<{ name: string; enabled: boolean }> {
+    const cloud = getCloudAppsRequest(backend ?? getActiveBackend().backend);
+    if (cloud) {
+      return cloud("PATCH", `/installed/${encodeURIComponent(name)}`, {
+        body: { enabled },
+      });
+    }
     const client = backend ? getClientForBackend(backend) : getClient();
     if (enabled && consent) {
       const info = await client.server.getServerInfo();
@@ -285,6 +329,10 @@ class CanvasExtensionsService {
   }
 
   static async uninstall(name: string): Promise<{ message: string }> {
+    const cloud = getCloudAppsRequest(getActiveBackend().backend);
+    if (cloud) {
+      return cloud("DELETE", `/installed/${encodeURIComponent(name)}`);
+    }
     const client = getClient();
     return mapUnsupported(() =>
       client.delete<{ message: string }>(installedExtensionPath(name)),
@@ -292,6 +340,10 @@ class CanvasExtensionsService {
   }
 
   static async fetchBundle(name: string, backend?: Backend): Promise<string> {
+    const cloud = getCloudAppsRequest(backend ?? getActiveBackend().backend);
+    if (cloud) {
+      return cloud("GET", `/installed/${encodeURIComponent(name)}/bundle`);
+    }
     const client = backend ? getClientForBackend(backend) : getClient();
     return mapUnsupported(() =>
       client.get<string>(`${installedExtensionPath(name)}/bundle`, {

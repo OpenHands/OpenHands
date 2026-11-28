@@ -19,8 +19,10 @@ interface CanvasExtensionCardProps {
   extension: InstalledCanvasExtensionInfo;
   isBusy: boolean;
   onToggle: () => void;
-  onRefresh: () => void;
-  onUninstall: () => void;
+  /** Omit to hide Update: the backend does not update an App in place. */
+  onRefresh?: () => void;
+  /** Omit to hide Uninstall: the user may not remove this App. */
+  onUninstall?: () => void;
 }
 
 export function CanvasExtensionCard({
@@ -132,26 +134,32 @@ export function CanvasExtensionCard({
         />
       )}
 
-      <footer className="flex justify-end gap-2 border-t border-border pt-3">
-        <BrandButton
-          type="button"
-          variant="secondary"
-          testId={`canvas-extension-refresh-${extension.name}`}
-          isDisabled={isBusy}
-          onClick={onRefresh}
-        >
-          {t(I18nKey.SETTINGS$PLUGINS_REFRESH)}
-        </BrandButton>
-        <BrandButton
-          type="button"
-          variant="ghost-danger"
-          testId={`canvas-extension-uninstall-${extension.name}`}
-          isDisabled={isBusy}
-          onClick={onUninstall}
-        >
-          {t(I18nKey.SETTINGS$PLUGINS_UNINSTALL)}
-        </BrandButton>
-      </footer>
+      {(onRefresh || onUninstall) && (
+        <footer className="flex justify-end gap-2 border-t border-border pt-3">
+          {onRefresh && (
+            <BrandButton
+              type="button"
+              variant="secondary"
+              testId={`canvas-extension-refresh-${extension.name}`}
+              isDisabled={isBusy}
+              onClick={onRefresh}
+            >
+              {t(I18nKey.SETTINGS$PLUGINS_REFRESH)}
+            </BrandButton>
+          )}
+          {onUninstall && (
+            <BrandButton
+              type="button"
+              variant="ghost-danger"
+              testId={`canvas-extension-uninstall-${extension.name}`}
+              isDisabled={isBusy}
+              onClick={onUninstall}
+            >
+              {t(I18nKey.SETTINGS$PLUGINS_UNINSTALL)}
+            </BrandButton>
+          )}
+        </footer>
+      )}
     </article>
   );
 }

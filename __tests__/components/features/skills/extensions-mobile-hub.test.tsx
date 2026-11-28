@@ -131,5 +131,31 @@ describe("ExtensionsMobileHub", () => {
       expect(mcpItem).toHaveAttribute("target", "_blank");
       expect(mcpItem).toHaveTextContent("MCP Servers");
     });
+
+    it("shows the Apps item on an instance that serves organization-approved Apps", async () => {
+      // Arrange
+      setRegisteredBackends([cloudBackend]);
+      setActiveSelection({ backendId: cloudBackend.id, orgId: "org-1" });
+      server.use(
+        http.get("*/api/v1/web-client/config", () =>
+          HttpResponse.json({
+            providers_configured: [],
+            feature_flags: { enable_canvas_apps: true },
+          }),
+        ),
+      );
+
+      // Act
+      renderMobileHub(<ExtensionsMobileHub />);
+
+      // Assert
+      const hub = screen.getByTestId("extensions-mobile-hub");
+      expect(
+        await within(hub).findByTestId("sidebar-extensions-/apps"),
+      ).toHaveAttribute("href", "/apps");
+      expect(
+        within(hub).queryByTestId("sidebar-extensions-/plugins"),
+      ).not.toBeInTheDocument();
+    });
   });
 });

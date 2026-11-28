@@ -1,8 +1,9 @@
 import i18next from "i18next";
 import translations from "#/i18n/translation.json";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { http, HttpResponse } from "msw";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import CanvasExtensionsScreen from "#/routes/canvas-extensions";
 import CanvasExtensionsService from "#/api/canvas-extensions-service";
@@ -15,6 +16,7 @@ import {
 } from "#/api/backend-registry/active-store";
 import type { Backend } from "#/api/backend-registry/types";
 import { MOCK_DEFAULT_USER_SETTINGS } from "#/mocks/handlers";
+import { server } from "#/mocks/node";
 import { ActiveBackendProvider } from "#/contexts/active-backend-context";
 import type { InstalledCanvasExtensionInfo } from "#/types/canvas-extension";
 
@@ -40,6 +42,45 @@ const localBackend: Backend = {
   apiKey: "",
   kind: "local",
 };
+
+const cloudBackend: Backend = {
+  id: "cloud",
+  name: "Enterprise",
+  host: "https://app.example.test",
+  apiKey: "",
+  kind: "cloud",
+};
+
+/**
+ * Selects an organization on a cloud backend whose instance reports
+ * `appsEnabled` and grants the current user `permissions`.
+ */
+function selectCloudOrganization({
+  appsEnabled,
+  permissions,
+}: {
+  appsEnabled: boolean;
+  permissions: string[];
+}) {
+  setRegisteredBackends([cloudBackend]);
+  setActiveSelection({ backendId: cloudBackend.id, orgId: "org-1" });
+  server.use(
+    http.get("*/api/v1/web-client/config", () =>
+      HttpResponse.json({
+        providers_configured: [],
+        feature_flags: { enable_canvas_apps: appsEnabled },
+      }),
+    ),
+    http.get("*/api/organizations/org-1/me", () =>
+      HttpResponse.json({
+        org_id: "org-1",
+        user_id: "user-1",
+        role: "member",
+        permissions,
+      }),
+    ),
+  );
+}
 
 function buildExtension(
   overrides: Partial<InstalledCanvasExtensionInfo> = {},
@@ -199,5 +240,116 @@ describe("CanvasExtensionsScreen", () => {
     appSwitch.focus();
     await user.keyboard(" ");
     expect(screen.getByTestId("confirmation-modal")).toBeInTheDocument();
+  });
+
+  describe("on a cloud backend", () => {
+    it("lets a member switch approved Apps without the controls that manage them", async () => {
+      // Arrange
+      selectCloudOrganization({
+        appsEnabled: true,
+        permissions: ["view_org_settings"],
+      });
+      vi.spyOn(CanvasExtensionsService, "listInstalled").mockResolvedValue([
+        buildExtension({ enabled: false }),
+      ]);
+
+      // Act
+      renderAppsScreen();
+
+      // Assert
+      expect(await screen.findByRole("switch")).toBeEnabled();
+      expect(
+        screen.queryByTestId("canvas-extensions-add-button"),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByTestId("canvas-extension-refresh-demo-page"),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByTestId("canvas-extension-uninstall-demo-page"),
+      ).not.toBeInTheDocument();
+    });
+
+    it("lets a Super Admin add Apps and remove one for the organization", async () => {
+      // Arrange
+      const user = userEvent.setup();
+      selectCloudOrganization({
+        appsEnabled: true,
+        permissions: ["manage_super_admins"],
+      });
+      vi.spyOn(CanvasExtensionsService, "listInstalled").mockResolvedValue([
+        buildExtension(),
+      ]);
+      const uninstallSpy = vi
+        .spyOn(CanvasExtensionsService, "uninstall")
+        .mockResolvedValue({ message: "uninstalled" });
+      renderAppsScreen();
+
+      // Act
+      await user.click(
+        await screen.findByTestId("canvas-extension-uninstall-demo-page"),
+      );
+      await user.click(screen.getByTestId("confirm-button"));
+
+      // Assert
+      await waitFor(() =>
+        expect(uninstallSpy).toHaveBeenCalledWith("demo-page"),
+      );
+      expect(screen.getByTestId("canvas-extensions-add-button")).toBeEnabled();
+      // An App is replaced by removing it and adding the new revision.
+      expect(
+        screen.queryByTestId("canvas-extension-refresh-demo-page"),
+      ).not.toBeInTheDocument();
+    });
+
+    it("keeps Apps unavailable while the instance has them turned off", async () => {
+      // Arrange
+      selectCloudOrganization({
+        appsEnabled: false,
+        permissions: ["manage_super_admins"],
+      });
+      const listSpy = vi
+        .spyOn(CanvasExtensionsService, "listInstalled")
+        .mockResolvedValue([buildExtension()]);
+
+      // Act
+      renderAppsScreen();
+
+      // Assert
+      expect(
+        await screen.findByText(
+          "Apps are not available on Cloud backends yet.",
+        ),
+      ).toBeInTheDocument();
+      expect(listSpy).not.toHaveBeenCalled();
+    });
+
+    it("drops an App removed for the organization while the page stays open", async () => {
+      // Arrange
+      vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+      try {
+        selectCloudOrganization({ appsEnabled: true, permissions: [] });
+        let approved = [buildExtension()];
+        vi.spyOn(CanvasExtensionsService, "listInstalled").mockImplementation(
+          async () => approved,
+        );
+        renderAppsScreen();
+        await screen.findByTestId("canvas-extension-card-demo-page");
+
+        // Act
+        approved = [];
+        act(() => {
+          vi.advanceTimersByTime(60_000);
+        });
+
+        // Assert
+        await waitFor(() =>
+          expect(
+            screen.queryByTestId("canvas-extension-card-demo-page"),
+          ).not.toBeInTheDocument(),
+        );
+      } finally {
+        vi.useRealTimers();
+      }
+    });
   });
 });

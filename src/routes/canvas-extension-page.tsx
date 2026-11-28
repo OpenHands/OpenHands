@@ -91,7 +91,10 @@ export default function CanvasExtensionPage() {
   }
 
   return (
+    // Keyed so React never reuses the App's container for the notice above:
+    // the App's cleanup empties it after the notice has already rendered.
     <main
+      key="page"
       aria-label={page.contribution.title}
       className="h-full min-h-0 overflow-auto"
     >

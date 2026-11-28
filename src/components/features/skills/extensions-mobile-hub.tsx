@@ -7,6 +7,7 @@ import { BackendSyncedSettingsBadge } from "#/components/features/settings/backe
 import { useActiveBackendContext } from "#/contexts/active-backend-context";
 import { isNoBackend } from "#/api/backend-registry/active-store";
 import { useCloudMcpSettingsUrl } from "#/hooks/use-cloud-mcp-settings-url";
+import { useCanvasExtensionsSupported } from "#/hooks/query/use-canvas-extensions";
 import { cn } from "#/utils/utils";
 import {
   SIDEBAR_ICON_SLOT_CLASS,
@@ -21,7 +22,10 @@ import { EXTENSIONS_NAV_ITEMS } from "./extensions-navigation";
  * on an OpenHands Enterprise instance with organization MCP servers on.
  */
 const CLOUD_LINKED_EXTENSION_PATH = "/skills";
-/** Backend-installed artifacts are not available on Cloud backends yet. */
+/**
+ * Backend-installed artifacts are not available on Cloud backends yet. Apps
+ * are, on an instance that serves organization-approved Apps.
+ */
 const CLOUD_HIDDEN_EXTENSION_PATHS = new Set(["/plugins", "/apps"]);
 
 export function ExtensionsMobileHub() {
@@ -30,6 +34,7 @@ export function ExtensionsMobileHub() {
   const { backend } = active;
   const isCloudBackend = !isNoBackend(backend) && backend.kind === "cloud";
   const { url: cloudMcpSettingsUrl } = useCloudMcpSettingsUrl();
+  const { isSupported: areAppsSupported } = useCanvasExtensionsSupported();
 
   return (
     <div
@@ -40,7 +45,8 @@ export function ExtensionsMobileHub() {
       <nav className="flex flex-col gap-0.5">
         {EXTENSIONS_NAV_ITEMS.filter(
           (item) =>
-            !(CLOUD_HIDDEN_EXTENSION_PATHS.has(item.to) && isCloudBackend),
+            !(CLOUD_HIDDEN_EXTENSION_PATHS.has(item.to) && isCloudBackend) ||
+            (item.to === "/apps" && areAppsSupported),
         ).map((item) => {
           const isCloudSkillsLink =
             item.to === CLOUD_LINKED_EXTENSION_PATH && isCloudBackend;
