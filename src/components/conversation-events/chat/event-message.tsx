@@ -69,6 +69,12 @@ interface EventMessageProps {
    */
   suppressThought?: boolean;
   suppressReasoning?: boolean;
+  /** How long this message's request took to process, in milliseconds. */
+  processingTimeMs?: number;
+  /** Start time for the live elapsed timer on a streaming reply. */
+  liveStartTimestamp?: string;
+  /** Whether to show the timestamp by default (e.g. a time gap or new day). */
+  showTimestamp?: boolean;
 }
 
 interface CommonProps {
@@ -85,6 +91,7 @@ const renderUserMessageWithSkillReady = (
   messageEvent: MessageEvent,
   commonProps: CommonProps,
   isLastMessage: boolean,
+  showTimestamp: boolean,
 ): React.ReactElement => {
   try {
     const skillReadyEvent = createSkillReadyEvent(messageEvent);
@@ -94,6 +101,7 @@ const renderUserMessageWithSkillReady = (
           event={messageEvent}
           isLastMessage={false}
           isFromPlanningAgent={commonProps.isFromPlanningAgent}
+          showTimestamp={showTimestamp}
         />
         <GenericEventMessageWrapper
           event={skillReadyEvent}
@@ -108,6 +116,7 @@ const renderUserMessageWithSkillReady = (
         event={messageEvent}
         isLastMessage={isLastMessage}
         isFromPlanningAgent={commonProps.isFromPlanningAgent}
+        showTimestamp={showTimestamp}
       />
     );
   }
@@ -157,6 +166,9 @@ function EventMessageComponent({
   showPlanPreview,
   suppressThought = false,
   suppressReasoning = false,
+  processingTimeMs,
+  liveStartTimestamp,
+  showTimestamp,
 }: EventMessageProps) {
   const { data: config } = useConfig();
   const planContent = useConversationStore((state) => state.planContent);
@@ -240,8 +252,8 @@ function EventMessageComponent({
             type="agent"
             message={message}
             isFromPlanningAgent={isFromPlanningAgent}
-            timestamp={event.timestamp}
             isStreaming
+            liveStartTimestamp={liveStartTimestamp}
           />
         )}
       </>
@@ -396,6 +408,7 @@ function EventMessageComponent({
         messageEvent,
         commonProps,
         isLastMessage,
+        showTimestamp ?? false,
       );
     }
 
@@ -406,6 +419,8 @@ function EventMessageComponent({
         suppressReasoning={suppressReasoning}
         {...commonProps}
         isLastMessage={isLastMessage}
+        processingTimeMs={processingTimeMs}
+        showTimestamp={showTimestamp}
       />
     );
   }

@@ -215,6 +215,24 @@
     "ca": "Ara mateix",
     "id": "Baru saja"
   },
+  "CHAT_INTERFACE$TOOK": {
+    "en": "took {{time}}",
+    "ja": "{{time}} かかりました",
+    "zh-CN": "用时 {{time}}",
+    "zh-TW": "耗時 {{time}}",
+    "ko-KR": "{{time}} 소요",
+    "no": "tok {{time}}",
+    "it": "impiegato {{time}}",
+    "pt": "levou {{time}}",
+    "es": "tardó {{time}}",
+    "ar": "استغرق {{time}}",
+    "fr": "a pris {{time}}",
+    "tr": "{{time}} sürdü",
+    "de": "dauerte {{time}}",
+    "uk": "зайняло {{time}}",
+    "ca": "va trigar {{time}}",
+    "id": "memakan waktu {{time}}"
+  },
   "FILES$DISCOVERY_SETTINGS": {
     "en": "File discovery",
     "ja": "ファイル探索",

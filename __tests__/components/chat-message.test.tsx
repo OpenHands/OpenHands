@@ -80,6 +80,29 @@ describe("ChatMessage", () => {
     expect(await screen.findByRole("tooltip")).toHaveTextContent(expected);
   });
 
+  it("shows the timestamp by default when showTimestamp is set", () => {
+    render(
+      <ChatMessage
+        type="agent"
+        message="Hello"
+        timestamp="2026-11-02T11:30:00Z"
+        showTimestamp
+      />,
+    );
+    expect(screen.getByTestId("message-timestamp")).toHaveClass("opacity-100");
+  });
+
+  it("keeps the timestamp hover-only when showTimestamp is not set", () => {
+    render(
+      <ChatMessage
+        type="agent"
+        message="Hello"
+        timestamp="2026-11-02T11:30:00Z"
+      />,
+    );
+    expect(screen.getByTestId("message-timestamp")).toHaveClass("opacity-0");
+  });
+
   it.each([undefined, "not-a-date"])(
     "does not fabricate a timestamp for %s",
     (timestamp) => {

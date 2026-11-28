@@ -13,17 +13,21 @@ const TIMESTAMP_REFRESH_INTERVAL_MS = 1_000;
 export function MessageTimestamp({
   timestamp,
   active,
+  showAlways = false,
   align,
+  suffix,
 }: {
   timestamp: string;
   active: boolean;
+  showAlways?: boolean;
   align: "left" | "right";
+  suffix?: string;
 }) {
   const { t, i18n } = useTranslation("openhands");
   const [focused, setFocused] = React.useState(false);
   const [, refresh] = React.useReducer((value: number) => value + 1, 0);
   const exact = formatEventTimestamp(timestamp, i18n?.language);
-  const visible = active || focused;
+  const visible = active || focused || showAlways;
 
   React.useEffect(() => {
     if (!visible || !exact) return undefined;
@@ -52,7 +56,7 @@ export function MessageTimestamp({
       }}
       className={cn(
         // Padding bridges the pointer path from the bubble to its timestamp.
-        "absolute top-full z-10 w-max pt-0.5 text-xs leading-4 text-muted",
+        "absolute top-full z-10 flex w-max items-center gap-1.5 pt-0.5 text-xs leading-4 text-muted",
         align === "right" ? "right-0 text-right" : "left-0 text-left",
         visible ? "opacity-100" : "pointer-events-none opacity-0",
       )}
@@ -69,6 +73,7 @@ export function MessageTimestamp({
           <time dateTime={timestamp}>{relative}</time>
         </button>
       </StyledTooltip>
+      {suffix && <span className="whitespace-nowrap">· {suffix}</span>}
     </div>
   );
 }
