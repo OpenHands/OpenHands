@@ -5,6 +5,8 @@ import ArrowUp from "#/icons/angle-up-solid.svg?react";
 import i18n from "#/i18n";
 import { I18nKey } from "#/i18n/declaration";
 import { MarkdownRenderer } from "../markdown/markdown-renderer";
+import { useEventExpansionKey } from "./row-expansion-context";
+import { usePersistentExpansion } from "#/stores/message-expansion-store";
 
 interface ErrorMessageProps {
   errorId?: string;
@@ -20,7 +22,11 @@ export function ErrorMessage({
   isRetrying = false,
 }: ErrorMessageProps) {
   const { t } = useTranslation("openhands");
-  const [showDetails, setShowDetails] = React.useState(false);
+  const expansionKey = useEventExpansionKey("error-details");
+  const [showDetails, toggleDetails] = usePersistentExpansion(
+    expansionKey,
+    false,
+  );
 
   const hasValidTranslationId = !!errorId && i18n.exists(errorId);
   const errorKey = hasValidTranslationId
@@ -37,7 +43,7 @@ export function ErrorMessage({
           {t(errorKey)}
           <button
             type="button"
-            onClick={() => setShowDetails((prev) => !prev)}
+            onClick={() => toggleDetails()}
             className="cursor-pointer text-left"
             data-testid="error-message-toggle"
             aria-label={

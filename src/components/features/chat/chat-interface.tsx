@@ -276,8 +276,14 @@ export function ChatInterface({
 
   const handleRetryTurn = React.useCallback(() => {
     if (!conversationId) return;
-    removeErrorMessage();
-    resumeConversationMutation.mutate({ conversationId });
+    resumeConversationMutation.mutate(
+      { conversationId },
+      {
+        onSuccess: () => {
+          removeErrorMessage();
+        },
+      },
+    );
   }, [conversationId, removeErrorMessage, resumeConversationMutation]);
 
   // Lazy "scroll up to load older events" backfill. Initial REST fetch only
@@ -937,7 +943,12 @@ export function ChatInterface({
                 onRetry={
                   errorMessage === SERVER_CONNECTION_ERROR_MESSAGE
                     ? () => conversationWebSocket?.reconnect()
-                    : (curAgentState === AgentState.ERROR ||
+                    : !isArchivedConversation &&
+                        (errorClassification
+                          ? errorClassification.retryable === true ||
+                            errorClassification.user_action === "retry"
+                          : !isAcpAuthErrorCode(errorCode)) &&
+                        (curAgentState === AgentState.ERROR ||
                           curAgentState === AgentState.RATE_LIMITED ||
                           errorType === "conversation") &&
                         conversationId

@@ -3,6 +3,7 @@ import { AgentErrorEvent } from "#/types/agent-server/core";
 import { isAgentErrorEvent } from "#/types/agent-server/type-guards";
 import { useOptionalConversationId } from "#/hooks/use-conversation-id";
 import { useAgentState } from "#/hooks/use-agent-state";
+import { useIsArchivedConversation } from "#/hooks/use-is-archived-conversation";
 import { useResumeConversation } from "#/hooks/mutation/use-resume-conversation";
 import { useErrorMessageStore } from "#/stores/error-message-store";
 import { useEventStore } from "#/stores/use-event-store";
@@ -16,6 +17,7 @@ interface ErrorEventMessageProps {
 export function ErrorEventMessage({ event }: ErrorEventMessageProps) {
   const { conversationId } = useOptionalConversationId();
   const { curAgentState } = useAgentState();
+  const isArchivedConversation = useIsArchivedConversation();
   const resumeConversationMutation = useResumeConversation();
   const { removeErrorMessage } = useErrorMessageStore();
 
@@ -27,17 +29,30 @@ export function ErrorEventMessage({ event }: ErrorEventMessageProps) {
 
   const handleRetry = React.useCallback(() => {
     if (!conversationId) return;
-    removeErrorMessage();
-    resumeConversationMutation.mutate({ conversationId });
+    resumeConversationMutation.mutate(
+      { conversationId },
+      {
+        onSuccess: () => {
+          removeErrorMessage();
+        },
+      },
+    );
   }, [conversationId, removeErrorMessage, resumeConversationMutation]);
 
   if (!isAgentErrorEvent(event)) {
     return null;
   }
 
+  const isRetryable = event.classification
+    ? event.classification.retryable === true ||
+      event.classification.user_action === "retry"
+    : true;
+
   const canRetry =
     Boolean(conversationId) &&
+    !isArchivedConversation &&
     isLatestError &&
+    isRetryable &&
     (curAgentState === AgentState.ERROR ||
       curAgentState === AgentState.RATE_LIMITED ||
       curAgentState === AgentState.STOPPED ||
