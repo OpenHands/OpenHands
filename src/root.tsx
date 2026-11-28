@@ -52,6 +52,7 @@ import { AgentServerUIRoot } from "#/components/providers";
 import { TelemetryConsentBanner } from "#/components/features/analytics/telemetry-consent-banner";
 import { buildAgentCanvasPath } from "#/utils/base-path";
 import { useOnboardingCompletion } from "#/components/features/onboarding/use-onboarding-completion";
+import { useSyncDocumentLanguage } from "#/hooks/use-sync-document-language";
 import {
   NavigationProvider,
   useCurrentPathGetter,
@@ -312,6 +313,10 @@ export const meta: MetaFunction = () => [
 ];
 
 export default function App() {
+  // Mirror the UI language onto <html lang/dir> here rather than in MainApp so
+  // it also applies to screens rendered before the main layout, such as
+  // first-run onboarding and the auth gate.
+  useSyncDocumentLanguage();
   // Flag-based gate: in public mode (VITE_AUTH_REQUIRED=true) with no
   // session key yet, show the auth screen immediately — no network
   // round-trip needed.

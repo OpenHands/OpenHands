@@ -28,7 +28,6 @@ import {
 } from "#/hooks/use-breakpoint";
 
 import { useTelemetryIdentity } from "#/hooks/use-telemetry-identity";
-import { useSyncDocumentLanguage } from "#/hooks/use-sync-document-language";
 import { LoadingSpinner } from "#/components/shared/loading-spinner";
 import { CloudOrganizationBoundary } from "#/components/features/backends/cloud-organization-boundary";
 import { useAppTitle } from "#/hooks/use-app-title";
@@ -180,7 +179,6 @@ function MainAppContent() {
       i18n.changeLanguage(settings.language);
     }
   }, [settings?.language]);
-  useSyncDocumentLanguage();
 
   if (config.isLoading) {
     return (
