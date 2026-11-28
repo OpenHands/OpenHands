@@ -7271,6 +7271,24 @@
     "ca": "Actualitza les credencials",
     "id": "Perbarui kredensial"
   },
+  "ERROR$ACP_UPDATE_CREDENTIALS_CLOUD_HINT": {
+    "en": "Update the agent credentials on the Agent settings page of {{host}}.",
+    "ja": "{{host}} のエージェント設定ページでエージェントの認証情報を更新してください。",
+    "zh-CN": "请在 {{host}} 的代理设置页面更新代理凭据。",
+    "zh-TW": "請在 {{host}} 的代理設定頁面更新代理憑證。",
+    "ko-KR": "{{host}}의 에이전트 설정 페이지에서 에이전트 자격 증명을 업데이트하세요.",
+    "de": "Aktualisiere die Agent-Anmeldedaten auf der Agent-Einstellungsseite von {{host}}.",
+    "no": "Oppdater agentens legitimasjon på siden for agentinnstillinger på {{host}}.",
+    "it": "Aggiorna le credenziali dell'agente nella pagina delle impostazioni dell'agente di {{host}}.",
+    "pt": "Atualize as credenciais do agente na página de configurações do agente em {{host}}.",
+    "es": "Actualiza las credenciales del agente en la página de configuración del agente de {{host}}.",
+    "ar": "حدّث بيانات اعتماد الوكيل في صفحة إعدادات الوكيل على {{host}}.",
+    "fr": "Mettez à jour les identifiants de l'agent sur la page des paramètres de l'agent de {{host}}.",
+    "tr": "Ajan kimlik bilgilerini {{host}} üzerindeki Ajan ayarları sayfasında güncelleyin.",
+    "uk": "Оновіть облікові дані агента на сторінці налаштувань агента на {{host}}.",
+    "ca": "Actualitza les credencials de l'agent a la pàgina de configuració de l'agent de {{host}}.",
+    "id": "Perbarui kredensial agen di halaman pengaturan Agen pada {{host}}."
+  },
   "ERROR$BUDGET_USER_LIMIT_REACHED": {
     "en": "You've reached your monthly user budget of {{limit}}.",
     "ja": "月間ユーザー予算 {{limit}} に達しました。",
