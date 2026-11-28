@@ -123,6 +123,7 @@ export function AddModelsModal({
   // and is cleared, so a later connection change in the combobox does not
   // re-select rows the user has already curated.
   const autoSelectRef = useRef(false);
+  const openSessionRef = useRef<{ connectionId: string | null } | null>(null);
   useEffect(() => {
     const items = models.data ?? [];
     const selectNew = autoSelectRef.current;
@@ -170,6 +171,10 @@ export function AddModelsModal({
   // leave both unset (chooser mode). On close, clear everything.
   useEffect(() => {
     if (isOpen) {
+      // A refreshed connection list updates the options, not the user's draft.
+      // Seed only when opening the modal or launching it for another connection.
+      if (openSessionRef.current?.connectionId === initialConnectionId) return;
+      openSessionRef.current = { connectionId: initialConnectionId };
       const initial =
         initialConnectionId &&
         connections.find((c) => c.id === initialConnectionId);
@@ -182,6 +187,7 @@ export function AddModelsModal({
         setSelectedConnectionId(null);
       }
     } else {
+      openSessionRef.current = null;
       // Clear the provider/connection too, not just the rows. The modal stays
       // mounted between openings, and `useProviderModels` serves a cached
       // `models.data` for the same provider — so if `selectedProvider` is left
