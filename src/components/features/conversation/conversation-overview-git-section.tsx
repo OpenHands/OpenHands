@@ -82,15 +82,17 @@ export function ConversationOverviewGitSection() {
     ? constructBranchUrl(provider, repository, branch, providerHost)
     : null;
   const pullRequestsCount = pullRequestsQuery.data?.length ?? null;
-  const commitsCount = commitsQuery.isUnsupported
-    ? null
-    : commitsQuery.commits.length;
-  const commitsCountLabel =
-    commitsCount !== null && commitsCount > 0
-      ? commitsQuery.hasMore
-        ? `${commitsCount}+`
-        : String(commitsCount)
-      : ZERO_COUNT_LABEL;
+  const commitsCount = commitsQuery.commits.length;
+  let commitsCountLabel = ZERO_COUNT_LABEL;
+  if (commitsQuery.isWaitingForResume) {
+    commitsCountLabel = t(I18nKey.COMMON$PAUSED);
+  } else if (commitsQuery.isUnavailable) {
+    commitsCountLabel = t(I18nKey.COMMON$FAILED_TO_LOAD);
+  } else if (commitsCount > 0) {
+    commitsCountLabel = commitsQuery.hasMore
+      ? `${commitsCount}+`
+      : String(commitsCount);
+  }
 
   const openPullRequests = () => {
     overviewDrawer?.openSection(

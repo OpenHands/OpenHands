@@ -4,7 +4,9 @@ import AgentServerGitService from "#/api/git-service/agent-server-git-service.ap
 import { useConversationId } from "#/hooks/use-conversation-id";
 import { useActiveConversation } from "#/hooks/query/use-active-conversation";
 import { useRuntimeIsReady } from "#/hooks/use-runtime-is-ready";
+import { useAgentState } from "#/hooks/use-agent-state";
 import { getGitPath } from "#/utils/get-git-path";
+import { ExecutionStatus } from "#/types/agent-server/core/base/common";
 
 export const COMMITS_PAGE_LIMIT = 50;
 
@@ -12,6 +14,11 @@ export const useUnifiedGitCommits = () => {
   const { conversationId } = useConversationId();
   const { data: conversation } = useActiveConversation();
   const runtimeIsReady = useRuntimeIsReady();
+  const { executionStatus } = useAgentState();
+  // A pause event can arrive before the next conversation metadata poll.
+  const isPaused =
+    executionStatus === ExecutionStatus.PAUSED ||
+    conversation?.execution_status === ExecutionStatus.PAUSED;
 
   const conversationUrl = conversation?.conversation_url;
   const sessionApiKey = conversation?.session_api_key;
@@ -45,7 +52,7 @@ export const useUnifiedGitCommits = () => {
     staleTime: 1000 * 60 * 5, // 5 minutes
     gcTime: 1000 * 60 * 15, // 15 minutes
     refetchOnMount: "always",
-    enabled: runtimeIsReady && !!conversationId,
+    enabled: runtimeIsReady && !isPaused && !!conversationId,
     meta: {
       disableToast: true,
     },
@@ -55,11 +62,15 @@ export const useUnifiedGitCommits = () => {
     commits: result.data?.commits ?? [],
     hasMore: result.data?.hasMore ?? false,
     // `null` data = the endpoint 404'd: the agent server predates the
-    // commits API. Hide the section rather than rendering an empty state.
+    // commits API.
     isUnsupported: result.data === null,
+    isUnavailable: result.isEnabled && result.isLoadingError,
+    isWaitingForResume: isPaused && result.data === undefined,
+    isWaitingForRuntime: !runtimeIsReady && !isPaused,
     isLoading: result.isLoading,
     isFetching: result.isFetching,
     isSuccess: result.isSuccess,
     isError: result.isError,
+    refetch: result.refetch,
   };
 };

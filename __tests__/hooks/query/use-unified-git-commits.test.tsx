@@ -14,6 +14,7 @@ const conversation = {
 
 vi.mock("#/hooks/use-conversation-id", () => ({
   useConversationId: () => ({ conversationId: "c1" }),
+  useOptionalConversationId: () => ({ conversationId: "c1" }),
 }));
 vi.mock("#/hooks/query/use-active-conversation", () => ({
   useActiveConversation: () => ({ data: conversation }),
@@ -79,5 +80,17 @@ describe("useUnifiedGitCommits", () => {
     // Assert
     await waitFor(() => expect(result.current.isUnsupported).toBe(true));
     expect(result.current.commits).toEqual([]);
+    expect(result.current.isUnavailable).toBe(false);
+  });
+
+  it("marks a failed first read unavailable while keeping the endpoint supported", async () => {
+    getGitCommitsSpy.mockRejectedValue(new Error("commit history read failed"));
+
+    const { result } = renderHook(() => useUnifiedGitCommits(), {
+      wrapper: makeWrapper(),
+    });
+
+    await waitFor(() => expect(result.current.isUnavailable).toBe(true));
+    expect(result.current.isUnsupported).toBe(false);
   });
 });
