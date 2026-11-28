@@ -1,0 +1,239 @@
+/* Extract from src/tailwind.css (lines 60-215): type scale and color token aliases */
+  --spacing-code-inline-x: 0.4em;
+  --spacing-code-inline-y: 0.2em;
+  --spacing-code-block: 1em;
+
+  /* Compact metadata retains its original pixel sizes and inherited leading. */
+  --text-2xs: 11px;
+  --text-3xs: 10px;
+  --text-4xs: 9px;
+  --text-xs-plus: 13px;
+  --text-sm-plus: 15px;
+  --text-title: 32px;
+
+  /* Keep signed letter spacing and its original px/em units. */
+  --tracking-metadata: 0.11px;
+  --tracking-label: 0.01em;
+  --tracking-title: -0.01em;
+  --tracking-heading: -0.02em;
+  --tracking-auth-code: 0.08em;
+  --tracking-device-code: 0.3em;
+
+  --color-primary: var(--oh-color-primary);
+  --color-logo: var(--oh-color-logo);
+  --color-canvas-base: var(--oh-color-base);
+  --color-canvas-background: var(--oh-background);
+  /* Keep color names distinct from font sizes such as text-base. */
+  --color-on-primary: var(--oh-color-base);
+  --color-base-secondary: var(--oh-color-base-secondary);
+  --color-danger: var(--oh-color-danger);
+  --color-danger-foreground: var(--oh-danger-foreground);
+  --color-success: var(--oh-color-success);
+  /* @spec MCP-004 — Form feedback follows readable theme text roles */
+  --color-feedback-error: var(--oh-feedback-error);
+  --color-feedback-success: var(--oh-feedback-success);
+  /* @spec WN-001 — Warning text has a separate readable theme role */
+  --color-feedback-warning: var(--oh-feedback-warning);
+  /* GitHub Markdown alert ink also owns its border and translucent fill. */
+  --color-markdown-alert-note: var(--oh-markdown-alert-note);
+  --color-markdown-alert-tip: var(--oh-markdown-alert-tip);
+  --color-markdown-alert-important: var(--oh-markdown-alert-important);
+  --color-markdown-alert-warning: var(--oh-markdown-alert-warning);
+  --color-markdown-alert-caution: var(--oh-markdown-alert-caution);
+  --color-basic: var(--oh-color-basic);
+  --color-tertiary: var(--oh-color-tertiary);
+  --color-tertiary-light: var(--oh-color-tertiary-light);
+  --color-tertiary-alt: var(--oh-text-dim);
+  --color-content: var(--oh-color-content);
+  --color-content-2: var(--oh-color-content-2);
+
+  /* Semantic surface aliases */
+  --color-surface: var(--oh-surface);
+  --color-surface-raised: var(--oh-surface-raised);
+  --color-surface-deep: var(--oh-surface-deep);
+
+  /* Semantic text aliases */
+  --color-foreground: var(--oh-foreground);
+  --color-contrast: var(--oh-contrast);
+  --color-contrast-foreground: var(--oh-contrast-foreground);
+  --color-text-secondary: var(--oh-text-secondary);
+  --color-text-tertiary: var(--oh-text-tertiary);
+  --color-muted: var(--oh-muted);
+  --color-link: var(--oh-link);
+  --color-text-dim: var(--oh-text-dim);
+  --color-text-subtle: var(--oh-text-subtle);
+  --color-modal-title: var(--oh-modal-title-foreground);
+  --color-modal-description: var(--oh-modal-description-foreground);
+
+  /* Semantic border aliases */
+  --color-border: var(--oh-border);
+  --color-scroll-fade: var(--oh-scroll-fade-from, var(--oh-color-base));
+  --color-border-input: var(--oh-border-input);
+  /* Existing dark border for informational Git chips and Workspace mode. */
+  --color-git-control: rgba(71, 74, 84, 0.5);
+  --color-border-subtle: var(--oh-border-subtle);
+  --color-divider: var(--oh-divider);
+  /* The ring and popover bar share a readable track across palettes. */
+  --color-context-window-track: color-mix(
+    in srgb,
+    var(--oh-context-window-foreground) var(--oh-context-window-track-weight),
+    transparent
+  );
+
+  /* Existing inset highlights keep their pixel geometry and public colors. */
+  --shadow-badge-inset: inset 0 1px 0 color-mix(in srgb, var(--oh-contrast) 18%, transparent);
+  --shadow-reorder-before: inset 0 2px 0 0 var(--oh-focus);
+  --shadow-reorder-after: inset 0 -2px 0 0 var(--oh-focus);
+
+  /* Focus / interactive state aliases */
+  --color-focus: var(--oh-focus);
+  --color-interactive-hover: var(--oh-interactive-hover);
+  --color-interactive-hover-low: var(--oh-interactive-hover-low);
+  --color-interactive-active: var(--oh-interactive-active);
+  --color-interactive-selected: var(--oh-interactive-selected);
+
+  /* Status / accent / warning (danger & success already aliased above) */
+  --color-semantic-success: var(--oh-success);
+  --color-semantic-danger: var(--oh-danger);
+  --color-status-success: var(--oh-status-success);
+  --color-status-error: var(--oh-status-error);
+  --color-accent: var(--oh-accent);
+  --color-on-accent: var(--oh-accent-foreground);
+  --color-info: var(--oh-info);
+  --color-warning: var(--oh-warning);
+
+  /* Status badge / banner pairs (see status-tone-classes.ts) */
+  --color-success-soft: var(--oh-success-soft);
+  --color-success-soft-foreground: var(--oh-success-soft-foreground);
+  --color-warning-soft: var(--oh-warning-soft);
+  --color-warning-soft-foreground: var(--oh-warning-soft-foreground);
+  --color-danger-soft: var(--oh-danger-soft);
+  --color-danger-soft-foreground: var(--oh-danger-soft-foreground);
+  --color-info-soft: var(--oh-info-soft);
+  --color-info-soft-foreground: var(--oh-info-soft-foreground);
+
+  /* Cool Grey scale */
+  --color-cool-grey-50: var(--cool-grey-50);
+  --color-cool-grey-100: var(--cool-grey-100);
+  --color-cool-grey-200: var(--cool-grey-200);
+  --color-cool-grey-300: var(--cool-grey-300);
+  --color-cool-grey-400: var(--cool-grey-400);
+  --color-cool-grey-500: var(--cool-grey-500);
+  --color-cool-grey-600: var(--cool-grey-600);
+  --color-cool-grey-700: var(--cool-grey-700);
+  --color-cool-grey-800: var(--cool-grey-800);
+  --color-cool-grey-900: var(--cool-grey-900);
+  --color-cool-grey-925: var(--cool-grey-925);
+  --color-cool-grey-950: var(--cool-grey-950);
+  --color-cool-grey-975: var(--cool-grey-975);
+  --animate-chat-status-pulse: pulse 1.2s ease-in-out infinite;
+}
+
+:root {
+  color-scheme: dark;
+  --oh-color-primary: #ffffff;
+  --oh-color-logo: #cfb755;
+  --oh-color-base: var(--cool-grey-950);
+  --oh-color-base-secondary: var(--cool-grey-925);
+  --oh-color-danger: #e76a5e;
+  --oh-color-success: #a5e75e;
+  /* Small feedback text has its own contrast contract, separate from controls. */
+  --oh-feedback-error: var(--oh-color-danger);
+  --oh-feedback-success: var(--oh-color-success);
+  --oh-markdown-alert-note: #8ec5ff;
+  --oh-markdown-alert-tip: #5ee9b5;
+  --oh-markdown-alert-important: #d8b4fe;
+  --oh-markdown-alert-warning: #ffe02a;
+  --oh-markdown-alert-caution: #ffb3bf;
+  --oh-color-basic: var(--cool-grey-400);
+  --oh-color-tertiary: var(--cool-grey-800);
+  --oh-color-tertiary-light: var(--cool-grey-300);
+  --oh-color-content: var(--cool-grey-100);
+  --oh-color-content-2: var(--cool-grey-50);
+  --oh-background: var(--cool-grey-950);
+  --oh-foreground: var(--cool-grey-100);
+  --oh-contrast: #ffffff;
+  --oh-contrast-foreground: #000000;
+  --oh-surface: var(--cool-grey-925);
+
+/* Extract from src/index.css (lines 1-80): cool-grey scale and app shell */
+@import url("https://fonts.googleapis.com/css2?family=Outfit:wght@100..900&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;1,100;1,200;1,300;1,400;1,500;1,600;1,700&family=Outfit:wght@100..900&display=swap");
+
+@import "./themes/color-theme/definitions/paper/newsreader.css";
+
+:root {
+  --oh-bg-dark: var(--cool-grey-950);
+  --oh-bg-light: var(--cool-grey-900);
+  --oh-bg-input: var(--cool-grey-800);
+  --oh-bg-workspace: var(--cool-grey-925);
+  --oh-text-editor-base: var(--cool-grey-400);
+  --oh-text-editor-active: var(--cool-grey-300);
+  --oh-bg-editor-sidebar: var(--cool-grey-925);
+  --oh-bg-editor-active: var(--cool-grey-900);
+  --oh-border-editor-sidebar: var(--cool-grey-800);
+  --oh-bg-neutral-muted: color-mix(
+    in srgb,
+    var(--cool-grey-300) 20%,
+    transparent
+  );
+  --bg-dark: var(--oh-bg-dark);
+  --bg-light: var(--oh-bg-light);
+  --bg-input: var(--oh-bg-input);
+  --bg-workspace: var(--oh-bg-workspace);
+  --text-editor-base: var(--oh-text-editor-base);
+  --text-editor-active: var(--oh-text-editor-active);
+  --bg-editor-sidebar: var(--oh-bg-editor-sidebar);
+  --bg-editor-active: var(--oh-bg-editor-active);
+  --border-editor-sidebar: var(--oh-border-editor-sidebar);
+  --bg-neutral-muted: var(--oh-bg-neutral-muted);
+  background-color: var(--oh-color-base) !important;
+
+  /* ── Cool Grey Scale (13 shades + 2 pure anchors: white / black) ──────── */
+  --cool-grey-50: #f7f9fc;
+  --cool-grey-100: #eef2f7;
+  --cool-grey-200: #dce3ee;
+  --cool-grey-300: #c3cddc;
+  --cool-grey-400: #a3b0c4;
+  --cool-grey-500: #7e8a9e;
+  --cool-grey-600: #626d82;
+  --cool-grey-700: #4b5468;
+  --cool-grey-800: #383f50;
+  --cool-grey-900: #2c313f;
+  --cool-grey-925: #21252f;
+  --cool-grey-950: #0b0e14; /* intentional override: preserves original app-shell depth */
+  --cool-grey-975: #05070a;
+  /* ─────────────────────────────────────────────────────────────────────── */
+}
+
+.app-shell-safe-area {
+  padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px)
+    env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px);
+}
+
+.mobile-sidebar-drawer-safe-area {
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-right: env(safe-area-inset-right, 0px);
+  padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 0.5rem);
+  padding-left: calc(env(safe-area-inset-left, 0px) + 0.625rem);
+}
+
+.app-shell-titlebar-inset {
+  padding-top: calc(env(safe-area-inset-top, 0px) + 1.75rem);
+}
+
+body {
+  margin: 0;
+  background-color: var(--oh-color-base);
+  font-family:
+    -apple-system, "SF Pro", BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen",
+    "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue",
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+code {
+  font-family:
+    source-code-pro, Menlo, Monaco, Consolas, "Courier New", monospace;
+}

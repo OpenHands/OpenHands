@@ -1,0 +1,95 @@
+<section class="cover">
+  <div>
+    <h1>Factory metric cards: plugin declarations</h1>
+    <p>One file for each card type. Each file shows cards on the left, the plugin manifest that sets them up on the right, and what the plugin sends at run time.</p>
+    <p>Companion to the card design sheet (<code>index.html</code> in the parent folder). That sheet says what a card looks like. These pages say how a plugin declares it.</p>
+  </div>
+  <div class="tb"><dl>
+    <dt>Pages</dt><dd>Overview, metrics (how a key counts) and Count. The other card types follow, one file each.</dd>
+    <dt>Manifest</dt><dd><code>.plugin/plugin.json</code>, key <code>automation.outcomes</code></dd>
+    <dt>Status</dt><dd>As of 2026-11-25. The manifest fields are proposed. The service work is in <code>main</code> and in open PRs #817 and #818.</dd>
+  </dl></div>
+</section>
+
+<section class="sheet" id="s01">
+  <header><span class="no">01</span><h2>How a number gets on a card</h2><span class="sub">Four steps. Each page works on one of them.</span></header>
+  <div class="body">
+    <table class="t">
+      <tr><th style="width:36px">Step</th><th style="width:240px">What happens</th><th>Where it is declared</th><th style="width:190px">Service today</th></tr>
+      <tr><td class="n">1</td><td>The plugin declares its <b>metrics</b>: the keys it reports, what each key counts, and how.</td><td><code>automation.outcomes.keys</code></td><td><span class="chip open">open PR</span> <code>type</code>, <code>semantics</code>, <code>grain</code> are in #818. The other fields are <span class="chip ext">new: manifest</span></td></tr>
+      <tr><td class="n">2</td><td>The plugin declares <b>suggested cards</b>: how to show a metric.</td><td><code>automation.outcomes.suggested_cards</code></td><td><span class="chip gap">gap</span> There is no card resource yet.</td></tr>
+      <tr><td class="n">3</td><td>At run time the plugin <b>sends facts</b> to the service.</td><td>Plugin code. The run has <code>$AUTOMATION_OUTCOME_URL</code> and <code>$AUTOMATION_OUTCOME_TOKEN</code>.</td><td><span class="chip merged">merged</span> <code>POST /v1/outcomes</code> · <span class="chip open">open PR</span> <code>period</code>, <code>occurred_at</code>, <code>dedupe_key</code>, <code>dimensions</code></td></tr>
+      <tr><td class="n">4</td><td>The factory page <b>reads</b> the facts and draws the card.</td><td>The card, plus the key's default <code>aggregation</code></td><td><span class="chip merged">merged</span> <code>GET …/outcomes/aggregate</code></td></tr>
+    </table>
+    <div class="note">Step 3 is plugin code, not manifest. But the key from step 1 decides which fields step 3 must send. A total needs a <code>period</code>. An increment refuses one. So each example on these pages shows the manifest and the POST side by side.</div>
+  </div>
+</section>
+
+<section class="sheet" id="s02">
+  <header><span class="no">02</span><h2>Reading guide</h2><span class="sub">How to read the pins and the labels on every page.</span></header>
+  <div class="body">
+    <h3>Panes</h3>
+    <p>Each example has the same parts, left to right and top to bottom.</p>
+    <table class="t">
+      <tr><td style="width:190px"><b>Card</b> (dark, left)</td><td>The card as the factory page shows it, drawn 1:1. Under it, the facts the card reads, when they help.</td></tr>
+      <tr><td><b>Manifest</b></td><td>The part of <code>.plugin/plugin.json</code> that sets the card up. Highlighted lines are the ones the example is about.</td></tr>
+      <tr><td><b>The plugin sends</b></td><td>The request the plugin makes at run time. Present when the key's rules decide what the request holds.</td></tr>
+      <tr><td><b>The card reads</b></td><td>The request the card makes and the answer. Every answer marked <span class="chip ok">checked</span> came from running the request against the service code in PR #818.</td></tr>
+    </table>
+    <h3>Pins</h3>
+    <p>A pin joins a line of the manifest to the part of the card it controls. The numbers mean the same on every page.</p>
+    <table class="t">
+      <tr><td style="width:190px"><span class="pinref">1</span></td><td>The card title. It comes from the card, not from the metric.</td></tr>
+      <tr><td><span class="pinref">2</span></td><td>The value. The <code>aggregation</code> and the <code>window</code> decide it together.</td></tr>
+      <tr><td><span class="pinref">3</span></td><td>The hint line. It comes from the metric <code>description</code>.</td></tr>
+      <tr><td><span class="pinref">4</span></td><td>The link. The whole card becomes a link, and a chevron shows.</td></tr>
+      <tr><td><span class="pinref">5</span></td><td>No place on the card. It says where the number comes from.</td></tr>
+      <tr><td><span class="pinref">a</span> <span class="pinref">b</span></td><td>Letters mark separate cards when one example has more than one card.</td></tr>
+    </table>
+    <h3>Labels</h3>
+    <p>Two kinds of label sit at the top right of each example. One says if the manifest field is proposed. The other says if the service can do the work today.</p>
+    <table class="t">
+      <tr><td style="width:190px"><span class="chip ext">new: manifest</span></td><td>A manifest field proposed by these pages. The manifest schema does not have it today. It rejects fields it does not know.</td></tr>
+      <tr><td><span class="chip merged">merged</span></td><td>The service does this work in <code>OpenHands/automation</code> <code>main</code> today.</td></tr>
+      <tr><td><span class="chip open">open PR</span></td><td>The work is in an open pull request and not on <code>main</code>. The text after the label names the PR.</td></tr>
+      <tr><td><span class="chip gap">gap</span></td><td>The example needs it and no pull request provides it yet. The text after the colon says what is missing.</td></tr>
+      <tr><td><span class="chip ok">checked</span></td><td>The answer shown was produced by running the request against the service code. Not a guess.</td></tr>
+    </table>
+  </div>
+</section>
+
+<section class="sheet" id="s03">
+  <header><span class="no">03</span><h2>The manifest fields</h2><span class="sub">Every field these pages use, and where it stands.</span></header>
+  <div class="body">
+    <p>The registry in the service holds <code>type</code>, <code>semantics</code> and <code>grain</code> for each key and rejects any other field. Everything else is a proposal for the manifest, and it would reach the service only when the registry grows to hold it.</p>
+    <div class="tw"><table class="t dense">
+      <tr><th>Field</th><th>On</th><th>Says</th><th>Status</th></tr>
+      <tr><td class="n"><code>type</code></td><td>key</td><td>number, string, boolean, datetime or json</td><td><span class="chip merged">merged</span> <span class="chip ext">new: manifest</span></td></tr>
+      <tr><td class="n"><code>semantics</code></td><td>key</td><td><code>increment</code> (every fact counts, the default) or <code>total</code> (one number per period, the latest report wins)</td><td><span class="chip open">open PR #818</span> <span class="chip ext">new: manifest</span></td></tr>
+      <tr><td class="n"><code>grain</code></td><td>key</td><td>The period of a total: hour, day, week or month. A total needs one. An increment refuses one.</td><td><span class="chip open">open PR #818</span> <span class="chip ext">new: manifest</span></td></tr>
+      <tr><td class="n"><code>label</code> <code>description</code></td><td>key</td><td>The name in lists, and the hint line on a card</td><td><span class="chip gap">gap: registry</span> <span class="chip ext">new: manifest</span></td></tr>
+      <tr><td class="n"><code>unit</code> <code>direction</code></td><td>key</td><td>How to format the value, and whether up is good, down is good, or neither</td><td><span class="chip gap">gap: registry</span> <span class="chip ext">new: manifest</span></td></tr>
+      <tr><td class="n"><code>aggregation</code></td><td>key, card</td><td>How the facts in the window become one number. The key names a default. A card can set its own.</td><td><span class="chip merged">merged</span> <code>sum count avg min max count_true count_false</code> · <span class="chip gap">gap</span> <code>last</code> <code>rate</code></td></tr>
+      <tr><td class="n"><code>window</code></td><td>card</td><td>The span the card reads: <code>all</code>, <code>7d</code>, <code>30d</code>. It sets <code>since</code> and <code>until</code>.</td><td><span class="chip merged">merged</span> <span class="chip ext">new: manifest</span></td></tr>
+      <tr><td class="n"><code>per</code></td><td>card</td><td>The unit of a rate: hour, day, week or month</td><td><span class="chip gap">gap: rate</span> <span class="chip ext">new: manifest</span></td></tr>
+      <tr><td class="n"><code>link</code></td><td>card</td><td>Makes the whole card a link</td><td><span class="chip ext">new: manifest</span></td></tr>
+    </table></div>
+    <p>Reported by the plugin, not declared in the manifest: <code>period</code>, <code>occurred_at</code>, <code>dedupe_key</code> and <code>dimensions</code>. They are fields of <code>POST /v1/outcomes</code>.</p>
+  </div>
+</section>
+
+<section class="sheet" id="s04">
+  <header><span class="no">04</span><h2>Pages</h2><span class="sub">One file for each card type.</span></header>
+  <div class="body">
+    <table class="filelist">
+      <tr><th style="width:230px">Page</th><th>What it holds</th><th style="width:150px">Examples</th></tr>
+      <tr><td><a href="{{to:declarations/metrics.html}}">Metrics: how a key counts</a></td><td>Increments, totals, periods, duplicates, dimensions, and the requests the service refuses. Every card type depends on this page.</td><td>14, and 8 refused requests</td></tr>
+      <tr><td><a href="{{to:declarations/count.html}}">Count (MC-01)</a></td><td>A single number. All the aggregations, the window, and rates, which are a Count card with <code>per</code>.</td><td>27</td></tr>
+      <tr><td>Number with trend (MC-02)</td><td>A Count card with a change against the previous window. Not written yet.</td><td>—</td></tr>
+      <tr><td>Sparkline (MC-03)</td><td>Not written yet.</td><td>—</td></tr>
+      <tr><td>Percent (MC-04)</td><td>Not written yet.</td><td>—</td></tr>
+      <tr><td>Progress (MC-05)</td><td>Not written yet.</td><td>—</td></tr>
+      <tr><td>Breakdown (MC-06)</td><td>Not written yet.</td><td>—</td></tr>
+    </table>
+  </div>
+</section>

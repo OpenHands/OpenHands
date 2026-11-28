@@ -1,0 +1,1078 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Factory metric cards: design hand-off</title>
+<style>
+/* Metric card spec sheet. Doc chrome is light; artboards use the real Agent Canvas dark tokens. */
+:root{
+  --doc:#e8eaf0; --paper:#fff; --ink:#12151c; --ink2:#4a5263; --ink3:#7a8294; --rule:#c9ced9; --rule2:#e3e6ed;
+  --rl:#e0245e; --rl-soft:rgba(224,36,94,.17); --ann:#2563eb; --ann-soft:rgba(37,99,235,.1);
+  --ok:#157f3b; --warnc:#a15c00; --badc:#b42318;
+
+  --base:#0b0e14; --base2:#21252f; --raised:#2c313f; --border:#4b5468; --border-subtle:#383f50;
+  --content:#eef2f7; --muted:#a3b0c4; --dim:#7e8a9e; --primary:#fff;
+  --success:#a5e75e; --warning:#c9b974; --danger:#e76a5e; --info:oklch(62.3% .214 259.815);
+  --success-soft:color-mix(in srgb,var(--success) 10%,transparent); --success-fg:color-mix(in srgb,var(--success) 55%,#fff);
+  --warning-soft:color-mix(in srgb,var(--warning) 10%,transparent); --warning-fg:color-mix(in srgb,var(--warning) 55%,#fff);
+  --danger-soft:color-mix(in srgb,var(--danger) 10%,transparent);  --danger-fg:color-mix(in srgb,var(--danger) 55%,#fff);
+  --info-soft:color-mix(in srgb,var(--info) 10%,transparent);      --info-fg:color-mix(in srgb,var(--info) 55%,#fff);
+  --sans:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+  --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;scroll-padding-top:16px}
+body{margin:0;background:var(--doc);color:var(--ink);font:14px/1.5 var(--sans)}
+code,.mono{font-family:var(--mono);font-size:.88em}
+code{background:#eef0f5;border:1px solid var(--rule2);border-radius:4px;padding:0 4px;color:#27304a;white-space:nowrap}
+a{color:var(--ann)}
+.shell{display:grid;grid-template-columns:210px minmax(0,1fr);gap:28px;max-width:1520px;margin:0 auto;padding:24px}
+nav.toc{position:sticky;top:16px;align-self:start;max-height:calc(100vh - 32px);overflow:auto;font-size:12.5px;padding-right:4px}
+nav.toc h2{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink3);margin:0 0 8px}
+nav.toc a{display:flex;gap:8px;padding:4px 8px;border-radius:6px;color:var(--ink2);text-decoration:none}
+nav.toc a:hover{background:#dde0e8;color:var(--ink)}
+nav.toc a b{font-family:var(--mono);font-weight:500;color:var(--ink3);min-width:26px}
+main{min-width:0}
+
+/* title block */
+.cover{background:var(--paper);border:1px solid var(--rule);border-radius:10px;padding:28px 32px;display:grid;grid-template-columns:1fr auto;gap:24px}
+.cover h1{margin:0 0 6px;font-size:30px;letter-spacing:-.02em;line-height:1.15}
+.cover p{margin:6px 0;color:var(--ink2);max-width:76ch}
+.tb{border-left:1px solid var(--rule);padding-left:24px;font-size:12px;color:var(--ink2);min-width:300px}
+.tb dl{margin:0;display:grid;grid-template-columns:auto 1fr;gap:4px 14px}
+.tb dt{color:var(--ink3);text-transform:uppercase;letter-spacing:.06em;font-size:10.5px;padding-top:2px}
+.tb dd{margin:0}
+.chip{display:inline-block;font-size:11px;font-weight:600;border-radius:999px;padding:1px 9px;border:1px solid var(--rule);background:#f4f5f8;color:var(--ink2);white-space:nowrap}
+.chip.merged{background:#e6f5ec;border-color:#b4dcc3;color:#0f6b31}
+.chip.open{background:#fff4de;border-color:#efd199;color:#8a5200}
+.chip.gap{background:#fde8e6;border-color:#f3b8b1;color:#a02318}
+.chip.ext{background:#eaeefe;border-color:#c3cdf6;color:#2c3f9c}
+.chip.ok{background:#e6f5ec;border-color:#b4dcc3;color:#0f6b31}
+
+/* sheets */
+.sheet{background:var(--paper);border:1px solid var(--rule);border-radius:10px;margin-top:24px;overflow:hidden}
+.sheet>header{display:flex;align-items:baseline;gap:14px;padding:14px 24px;border-bottom:1px solid var(--rule);background:#f7f8fb}
+.sheet>header .no{font-family:var(--mono);font-size:12px;color:var(--ink3);border:1px solid var(--rule);border-radius:4px;padding:1px 7px;background:#fff}
+.sheet>header h2{margin:0;font-size:18px;letter-spacing:-.01em}
+.sheet>header .sub{margin-left:auto;font-size:12px;color:var(--ink3);text-align:right;max-width:54ch}
+.body{padding:22px 24px 26px}
+.body h3{font-size:14px;margin:26px 0 8px;letter-spacing:-.005em}
+.body h3:first-child{margin-top:0}
+.body p{margin:8px 0;color:var(--ink2);max-width:92ch}
+.cols{display:grid;gap:24px}
+.cols.c2{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
+.cols.sidebyside{grid-template-columns:auto minmax(0,1fr);align-items:start}
+.note{border-left:3px solid var(--ann);background:var(--ann-soft);padding:8px 12px;border-radius:0 6px 6px 0;font-size:13px;color:#233156;margin:12px 0}
+.note.warn{border-color:#d97706;background:#fff6e6;color:#6b3f00}
+.note.rl{border-color:var(--rl);background:#fdebf1;color:#7a1537}
+
+/* tables */
+table.t{width:100%;border-collapse:collapse;font-size:12.5px;margin:6px 0}
+table.t th{background:#f2f4f8;text-align:left;font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink3);padding:7px 10px;border-bottom:1px solid var(--rule);white-space:nowrap}
+table.t td{padding:7px 10px;border-bottom:1px solid var(--rule2);vertical-align:top}
+table.t tr:last-child td{border-bottom:0}
+table.t tr.hl,table.t tr:hover{background:#f6f8ff}
+table.t tr.hl td:first-child{box-shadow:inset 3px 0 0 var(--rl)}
+table.t td.n{white-space:nowrap}
+.tw{border:1px solid var(--rule);border-radius:8px;overflow:auto}
+.tw table.t{margin:0}
+.pinref{display:inline-grid;place-items:center;width:18px;height:18px;border-radius:50%;background:var(--rl);color:#fff;font:600 10.5px/1 var(--sans)}
+
+/* artboard */
+.ab{position:relative;background:#14181f;border-radius:10px;padding:28px;background-image:radial-gradient(#242a36 1px,transparent 1px);background-size:16px 16px;color:var(--content)}
+.ab.flat{background-image:none;background:var(--base)}
+.ab .cap{position:absolute;left:12px;top:8px;font:10.5px var(--mono);color:#6d788d;letter-spacing:.04em}
+.ab.pad-lg{padding:44px 56px}
+.abgrid{display:grid;gap:16px}
+
+/* ---- metric card component (what is being specified) ---- */
+.mc{position:relative;background:var(--base);border:1px solid var(--border);border-radius:12px;padding:16px;color:var(--content);font:400 13px/16px var(--sans);min-width:0;text-align:left}
+.mc.link{cursor:pointer}
+.mc.link:hover,.mc.hover{border-color:color-mix(in srgb,var(--primary) 30%,transparent);background:color-mix(in srgb,var(--raised) 40%,transparent)}
+.mc .t{font-size:13px;line-height:16px;font-weight:500;color:var(--muted);display:flex;align-items:center;gap:6px;min-width:0}
+.mc .t span.tx{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0}
+.mc .t .ico{flex:none;width:14px;height:14px;color:var(--dim);display:inline-grid;place-items:center}
+.mc .v{margin-top:4px;font-size:30px;line-height:36px;font-weight:600;letter-spacing:-.025em;font-variant-numeric:tabular-nums;color:var(--content);display:flex;align-items:baseline;gap:8px}
+.mc .v small{font-size:13px;line-height:16px;font-weight:500;letter-spacing:0;color:var(--muted)}
+.mc .v .chev{margin-left:auto;color:var(--dim);font-size:18px;font-weight:400}
+.mc .dl{margin-top:4px;display:flex;align-items:center;gap:8px;min-height:20px}
+.mc .m{font-size:11px;line-height:14px;color:var(--muted)}
+.mc .viz{margin-top:12px}
+.mc .foot{margin-top:12px;display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:18px}
+.mc .foot .m{white-space:nowrap}
+.mc.s{border-radius:8px;padding:8px 12px}
+.mc.s .t{font-size:11px}
+.mc.s .v{font-size:20px;line-height:28px;margin-top:0;justify-content:space-between}
+.mc.s .foot{margin-top:4px;min-height:0}
+.b{display:inline-flex;align-items:center;gap:4px;padding:2px 6px;border-radius:4px;font-size:11px;line-height:16px;font-weight:500;white-space:nowrap;background:var(--raised);color:var(--muted)}
+.b.good{background:var(--success-soft);color:var(--success-fg)}
+.b.warn{background:var(--warning-soft);color:var(--warning-fg)}
+.b.bad{background:var(--danger-soft);color:var(--danger-fg)}
+.b.info{background:var(--info-soft);color:var(--info-fg)}
+.b.n{background:transparent;border:1px dashed var(--border);color:var(--muted)}
+.dot{display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--muted)}
+.dot.good{background:var(--success)}.dot.warn{background:var(--warning)}.dot.bad{background:var(--danger)}
+svg.spark{display:block;width:100%;height:32px;color:var(--primary);overflow:visible}
+.track{height:6px;border-radius:3px;background:var(--raised);position:relative}
+.track>i{position:absolute;left:0;top:0;bottom:0;border-radius:3px;background:color-mix(in srgb,var(--primary) 75%,transparent)}
+.track>i.good{background:var(--success)}.track>i.warn{background:var(--warning)}.track>i.bad{background:var(--danger)}
+.track>u{position:absolute;top:-3px;bottom:-3px;width:1px;background:var(--dim);text-decoration:none}
+.track.lg{height:8px;border-radius:4px}
+.brow{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(0,1.2fr) auto;gap:10px;align-items:center;min-height:22px}
+.brow .l{font-size:12px;color:var(--content);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.brow .l.dim{color:var(--dim);font-style:italic}
+.brow .r{font-size:12px;font-variant-numeric:tabular-nums;color:var(--content);text-align:right;min-width:64px}
+.brow .r em{font-style:normal;color:var(--muted);margin-left:6px;font-size:11px}
+.skel{background:linear-gradient(90deg,var(--raised),#353b4b,var(--raised));background-size:200% 100%;border-radius:4px;animation:sk 1.4s linear infinite}
+@keyframes sk{to{background-position:-200% 0}}
+.hatch{background-image:repeating-linear-gradient(135deg,rgba(255,255,255,.1) 0 3px,transparent 3px 6px)!important}
+
+/* redline overlays */
+.rl-box{position:absolute;outline:1px dashed var(--rl);outline-offset:0;pointer-events:none}
+.rl-sp{position:absolute;background:var(--rl-soft);pointer-events:none;display:grid;place-items:center;font:600 9.5px/1 var(--mono);color:#ff7aa3}
+.rl-line{position:absolute;background:var(--rl);pointer-events:none}
+.pin{position:absolute;width:18px;height:18px;margin:-9px 0 0 -9px;border-radius:50%;background:var(--rl);color:#fff;font:600 10.5px/18px var(--sans);text-align:center;z-index:3;cursor:default;transition:transform .12s}
+.pin:hover,.pin.on{transform:scale(1.3);box-shadow:0 0 0 3px rgba(224,36,94,.35)}
+.dim-l{position:absolute;color:#ff7aa3;font:10px/1 var(--mono);white-space:nowrap;text-align:center}
+.tick-h{position:absolute;height:1px;background:var(--rl)}
+.tick-v{position:absolute;width:1px;background:var(--rl)}
+.tick-h::before,.tick-h::after{content:"";position:absolute;top:-3px;width:1px;height:7px;background:var(--rl)}
+.tick-h::before{left:0}.tick-h::after{right:0}
+.tick-v::before,.tick-v::after{content:"";position:absolute;left:-3px;height:1px;width:7px;background:var(--rl)}
+.tick-v::before{top:0}.tick-v::after{bottom:0}
+
+/* spec blocks */
+.spec{display:grid;grid-template-columns:minmax(330px,420px) minmax(0,1fr);gap:24px;padding:20px 0;border-top:1px solid var(--rule2)}
+.spec:first-of-type{border-top:0;padding-top:0}
+.spec>.ab{align-self:start}
+.spec.wide{grid-template-columns:minmax(520px,600px) minmax(0,1fr)}
+.spec h3{margin:0 0 2px;font-size:16px}
+.spec .id{font-family:var(--mono);font-size:11.5px;color:var(--ink3)}
+.spec .lead{margin:4px 0 10px;color:var(--ink2);font-size:13px}
+.kv{display:grid;grid-template-columns:132px 1fr;gap:0;font-size:12.5px;border:1px solid var(--rule);border-radius:8px;overflow:hidden}
+.kv>div{padding:6px 10px;border-bottom:1px solid var(--rule2)}
+.kv>div:nth-last-child(-n+2){border-bottom:0}
+.kv>div:nth-child(odd){background:#f4f6fa;color:var(--ink3);font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;padding-top:8px}
+pre.json{margin:10px 0 0;background:#10141c;color:#d5dcea;border-radius:8px;padding:12px 14px;font:11.5px/1.55 var(--mono);overflow:auto;white-space:pre-wrap;word-break:break-word}
+.swatches{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
+.sw{border:1px solid var(--rule);border-radius:8px;overflow:hidden;font-size:11.5px}
+.sw i{display:block;height:34px;border-bottom:1px solid var(--rule)}
+.sw div{padding:6px 8px}.sw b{display:block;font-size:12px}.sw span{color:var(--ink3);font-family:var(--mono);font-size:10.5px}
+.type-row{display:grid;grid-template-columns:150px 1fr 220px;gap:12px;align-items:center;padding:8px 0;border-bottom:1px solid var(--rule2);font-size:12px}
+.type-row .sample{background:var(--base);color:var(--content);border-radius:6px;padding:8px 12px;overflow:hidden;white-space:nowrap}
+.states{display:grid;grid-template-columns:repeat(auto-fill,minmax(310px,1fr));gap:16px}
+.state h4{margin:0 0 6px;font-size:12px;display:flex;gap:8px;align-items:center}
+.state p{margin:6px 0 0;font-size:12px;color:var(--ink2)}
+.state .ab{padding:14px}
+.glyph{display:inline-block;vertical-align:middle;width:44px;height:30px;background:var(--base);border-radius:5px;padding:4px}
+.mini{display:grid;gap:8px;grid-template-columns:repeat(4,1fr)}
+.mini div{background:var(--base);border:1px solid var(--border);border-radius:8px;padding:8px 10px;min-height:60px;color:var(--content);font-size:11px;line-height:14px}
+.mini div b{display:block;color:var(--muted);font-weight:500;font-size:10.5px;margin-bottom:3px}
+.mini div span{font-size:10px;color:var(--dim);font-family:var(--mono)}
+.mini .w2{grid-column:span 2}
+footer.doc{margin:28px 0 8px;font-size:12px;color:var(--ink3);text-align:center}
+@media (max-width:1100px){.shell{grid-template-columns:1fr}nav.toc{display:none}.spec{grid-template-columns:1fr}.cover{grid-template-columns:1fr}.tb{border-left:0;padding-left:0}.cols.c2{grid-template-columns:1fr}}
+@media print{nav.toc{display:none}.shell{display:block}.sheet{break-inside:avoid}}
+
+table.t.dense{font-size:12px}table.t.dense td,table.t.dense th{padding:6px 7px}table.t.dense th{white-space:normal}table.t.dense td.n{white-space:normal}table.t.dense .chip{white-space:normal;margin:1px 0}
+
+/* pin <-> row highlight without script */
+#s03:has(.pin[data-pin="1"]:hover) #anat-t tr[data-pin="1"]{background:#f6f8ff}
+#s03:has(.pin[data-pin="1"]:hover) #anat-t tr[data-pin="1"] td:first-child{box-shadow:inset 3px 0 0 var(--rl)}
+#s03:has(#anat-t tr[data-pin="1"]:hover) .pin[data-pin="1"]{transform:scale(1.3);box-shadow:0 0 0 3px rgba(224,36,94,.35)}
+#s03:has(.pin[data-pin="2"]:hover) #anat-t tr[data-pin="2"]{background:#f6f8ff}
+#s03:has(.pin[data-pin="2"]:hover) #anat-t tr[data-pin="2"] td:first-child{box-shadow:inset 3px 0 0 var(--rl)}
+#s03:has(#anat-t tr[data-pin="2"]:hover) .pin[data-pin="2"]{transform:scale(1.3);box-shadow:0 0 0 3px rgba(224,36,94,.35)}
+#s03:has(.pin[data-pin="3"]:hover) #anat-t tr[data-pin="3"]{background:#f6f8ff}
+#s03:has(.pin[data-pin="3"]:hover) #anat-t tr[data-pin="3"] td:first-child{box-shadow:inset 3px 0 0 var(--rl)}
+#s03:has(#anat-t tr[data-pin="3"]:hover) .pin[data-pin="3"]{transform:scale(1.3);box-shadow:0 0 0 3px rgba(224,36,94,.35)}
+#s03:has(.pin[data-pin="4"]:hover) #anat-t tr[data-pin="4"]{background:#f6f8ff}
+#s03:has(.pin[data-pin="4"]:hover) #anat-t tr[data-pin="4"] td:first-child{box-shadow:inset 3px 0 0 var(--rl)}
+#s03:has(#anat-t tr[data-pin="4"]:hover) .pin[data-pin="4"]{transform:scale(1.3);box-shadow:0 0 0 3px rgba(224,36,94,.35)}
+#s03:has(.pin[data-pin="5"]:hover) #anat-t tr[data-pin="5"]{background:#f6f8ff}
+#s03:has(.pin[data-pin="5"]:hover) #anat-t tr[data-pin="5"] td:first-child{box-shadow:inset 3px 0 0 var(--rl)}
+#s03:has(#anat-t tr[data-pin="5"]:hover) .pin[data-pin="5"]{transform:scale(1.3);box-shadow:0 0 0 3px rgba(224,36,94,.35)}
+#s03:has(.pin[data-pin="6"]:hover) #anat-t tr[data-pin="6"]{background:#f6f8ff}
+#s03:has(.pin[data-pin="6"]:hover) #anat-t tr[data-pin="6"] td:first-child{box-shadow:inset 3px 0 0 var(--rl)}
+#s03:has(#anat-t tr[data-pin="6"]:hover) .pin[data-pin="6"]{transform:scale(1.3);box-shadow:0 0 0 3px rgba(224,36,94,.35)}
+#s03:has(.pin[data-pin="7"]:hover) #anat-t tr[data-pin="7"]{background:#f6f8ff}
+#s03:has(.pin[data-pin="7"]:hover) #anat-t tr[data-pin="7"] td:first-child{box-shadow:inset 3px 0 0 var(--rl)}
+#s03:has(#anat-t tr[data-pin="7"]:hover) .pin[data-pin="7"]{transform:scale(1.3);box-shadow:0 0 0 3px rgba(224,36,94,.35)}
+#s03:has(.pin[data-pin="8"]:hover) #anat-t tr[data-pin="8"]{background:#f6f8ff}
+#s03:has(.pin[data-pin="8"]:hover) #anat-t tr[data-pin="8"] td:first-child{box-shadow:inset 3px 0 0 var(--rl)}
+#s03:has(#anat-t tr[data-pin="8"]:hover) .pin[data-pin="8"]{transform:scale(1.3);box-shadow:0 0 0 3px rgba(224,36,94,.35)}
+#s03:has(.pin[data-pin="9"]:hover) #anat-t tr[data-pin="9"]{background:#f6f8ff}
+#s03:has(.pin[data-pin="9"]:hover) #anat-t tr[data-pin="9"] td:first-child{box-shadow:inset 3px 0 0 var(--rl)}
+#s03:has(#anat-t tr[data-pin="9"]:hover) .pin[data-pin="9"]{transform:scale(1.3);box-shadow:0 0 0 3px rgba(224,36,94,.35)}
+#s03:has(.pin[data-pin="10"]:hover) #anat-t tr[data-pin="10"]{background:#f6f8ff}
+#s03:has(.pin[data-pin="10"]:hover) #anat-t tr[data-pin="10"] td:first-child{box-shadow:inset 3px 0 0 var(--rl)}
+#s03:has(#anat-t tr[data-pin="10"]:hover) .pin[data-pin="10"]{transform:scale(1.3);box-shadow:0 0 0 3px rgba(224,36,94,.35)}
+</style>
+</head>
+<body>
+<div class="shell">
+<nav class="toc" aria-label="Sheets">
+  <h2>Sheets</h2>
+  <a href="#s01"><b>01</b>Reading guide</a>
+  <a href="#s02"><b>02</b>Foundations</a>
+  <a href="#s03"><b>03</b>Card anatomy</a>
+  <a href="#s04"><b>04</b>Size and grid</a>
+  <a href="#s05"><b>05</b>Card types</a>
+  <a href="#s06"><b>06</b>States</a>
+  <a href="#s07"><b>07</b>Delta and status color</a>
+  <a href="#s08"><b>08</b>Value formatting</a>
+  <a href="#s09"><b>09</b>Field to element map</a>
+  <a href="#s10"><b>10</b>Metric to card map</a>
+  <a href="#s11"><b>11</b>Default sets and placement</a>
+  <a href="#s12"><b>12</b>Data contract and gaps</a>
+  <a href="#s13"><b>13</b>Interaction and a11y</a>
+  <a href="#s14"><b>14</b>Open questions</a>
+</nav>
+
+<main>
+<section class="cover">
+  <div>
+    <span class="chip ext">Prototype hand-off</span> <span class="chip">Draft for discussion</span>
+    <h1>Factory metric cards</h1>
+    <p>Component design for the metric cards on a Factory's pages. Each sheet gives an artboard, the dimensions, the tokens, and the mapping from a card definition field to a pixel on the screen. A developer should be able to build any card on these sheets without asking the designer a question.</p>
+    <p>Written for the Factories prototype (<code>dv/openhands-factories-prototype-a9220b</code>). The Notion pages and the merged backend are inspiration, not a formal spec. Where they disagree, the sheet says so.</p>
+  </div>
+  <div class="tb">
+    <dl>
+      <dt>Sheets</dt><dd>14</dd>
+      <dt>Card types</dt><dd>9 (MC-01 to MC-09)</dd>
+      <dt>Size</dt><dd>One standard card (M). The grid decides the rest.</dd>
+      <dt>Theme</dt><dd>Agent Canvas dark tokens</dd>
+      <dt>Sources</dt><dd>
+        Notion: Software Factory Metrics, Examples, Metrics API proposal, Learnings<br>
+        <code>OpenHands/automation</code> #770 #793 #794 #807 #810 (merged), #809 #811 #812 (open)<br>
+        Mock: <code>src/components/features/factories/</code></dd>
+      <dt>Status</dt><dd>As of 2026-11-25. Nothing here is built.</dd>
+    </dl>
+  </div>
+</section>
+
+<!-- ============ 01 ============ -->
+<section class="sheet" id="s01">
+  <header><span class="no">01</span><h2>Reading guide</h2><span class="sub">How to read the drawings and the chips.</span></header>
+  <div class="body">
+    <div class="cols c2">
+      <div>
+        <h3>Drawing marks</h3>
+        <div class="ab flat" style="padding:22px 22px 22px 60px;min-height:150px">
+          <div style="position:relative;width:200px;height:96px;border:1px solid var(--border);border-radius:8px;background:var(--base)">
+            <div class="rl-sp" style="left:0;top:0;width:200px;height:12px">12</div>
+            <div class="rl-box" style="left:12px;top:12px;width:120px;height:20px"></div>
+            <span class="pin" style="left:-28px;top:22px">1</span>
+            <div class="rl-line" style="left:-28px;top:22px;width:40px;height:1px"></div>
+            <span style="position:absolute;left:12px;top:48px;font-size:11px;color:var(--muted)">Element text</span>
+          </div>
+        </div>
+        <table class="t" style="margin-top:12px">
+          <tr><td style="width:150px"><span style="display:inline-block;width:34px;height:12px;background:var(--rl-soft);border:1px solid var(--rl)"></span></td><td>Pink fill is spacing. The number is pixels.</td></tr>
+          <tr><td><span style="display:inline-block;width:34px;height:12px;border:1px dashed var(--rl)"></span></td><td>Dashed box is the bounds of one element.</td></tr>
+          <tr><td><span class="pinref">1</span></td><td>Numbered pin links an element to a row in the table beside it. Hover a pin to highlight its row.</td></tr>
+          <tr><td><code>card.value</code></td><td>Monospace is an API field or a token name.</td></tr>
+        </table>
+      </div>
+      <div>
+        <h3>Chips</h3>
+        <table class="t">
+          <tr><td style="width:150px"><span class="chip">existing</span></td><td>Value taken from a component already in the prototype (<code>Card</code>, <code>Stat</code>, <code>Badge</code>, the Overview KPI tile).</td></tr>
+          <tr><td><span class="chip ext">new</span></td><td>Value proposed by this sheet. The designer picked it. Change it with the tokens still intact.</td></tr>
+          <tr><td><span class="chip merged">merged</span></td><td>Exists in <code>OpenHands/automation</code> <code>main</code> today.</td></tr>
+          <tr><td><span class="chip open">open PR</span></td><td>In an open pull request. Not on <code>main</code>.</td></tr>
+          <tr><td><span class="chip gap">gap</span></td><td>The card needs it. No backend work provides it yet.</td></tr>
+        </table>
+        <h3>Three kinds of field names</h3>
+        <p><b>Card fields</b> (<code>title</code>, <code>metric</code>, <code>window</code>, <code>compare</code>, <code>display</code>, <code>group_by</code>, <code>link</code>) and <b>card-read fields</b> (<code>value</code>, <code>previous</code>, <code>delta</code>, <code>delta_pct</code>, <code>status</code>, <code>n</code>, <code>as_of</code>, <code>series</code>) come from the Notion "Metrics API" proposal. <b>Metric fields</b> (<code>label</code>, <code>unit</code>, <code>direction</code>, <code>target</code>, <code>kind</code>) come from the same page. The merged backend stores only a <code>type</code> per key today. Sheet 12 lists the difference.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 02 ============ -->
+<section class="sheet" id="s02">
+  <header><span class="no">02</span><h2>Foundations</h2><span class="sub">Tokens read from <code>src/tailwind.css</code>. Use the token, not the hex.</span></header>
+  <div class="body">
+    <h3>Color (dark theme)</h3>
+    <div class="swatches">
+      <div class="sw"><i style="background:#0b0e14"></i><div><b>canvas-base</b><span>#0B0E14 · cool-grey-950</span><br>Card fill</div></div>
+      <div class="sw"><i style="background:#2c313f"></i><div><b>surface-raised</b><span>#2C313F · cool-grey-900</span><br>Bar track, neutral badge</div></div>
+      <div class="sw"><i style="background:#4b5468"></i><div><b>border</b><span>#4B5468 · cool-grey-700</span><br>Card border, 1 px</div></div>
+      <div class="sw"><i style="background:#eef2f7"></i><div><b>content</b><span>#EEF2F7 · cool-grey-100</span><br>Value text</div></div>
+      <div class="sw"><i style="background:#a3b0c4"></i><div><b>muted</b><span>#A3B0C4 · cool-grey-400</span><br>Title, meta text</div></div>
+      <div class="sw"><i style="background:#7e8a9e"></i><div><b>text-dim</b><span>#7E8A9E · cool-grey-500</span><br>Icons, chevron</div></div>
+      <div class="sw"><i style="background:#ffffff"></i><div><b>primary</b><span>#FFFFFF</span><br>Sparkline, bar fill</div></div>
+      <div class="sw"><i style="background:#a5e75e"></i><div><b>success</b><span>#A5E75E</span><br>Good delta, ok status</div></div>
+      <div class="sw"><i style="background:#c9b974"></i><div><b>warning</b><span>#C9B974</span><br>Warn status, low n</div></div>
+      <div class="sw"><i style="background:#e76a5e"></i><div><b>danger</b><span>#E76A5E</span><br>Bad delta, critical</div></div>
+      <div class="sw"><i style="background:oklch(62.3% .214 259.815)"></i><div><b>info</b><span>oklch(62.3% .214 259.8)</span><br>Source badge, links</div></div>
+    </div>
+    <p>Soft tone fill is the tone color at <b>10%</b> over transparent. Soft tone text is the tone color mixed <b>55%</b> with white. These are the existing <code>*-soft</code> and <code>*-soft-foreground</code> tokens used by <code>Badge</code>.</p>
+
+    <h3>Type</h3>
+    <div class="tw"><table class="t">
+      <tr><th>Role</th><th>Size / line</th><th>Weight</th><th>Token</th><th>Used for</th><th>Origin</th></tr>
+      <tr><td>Value</td><td class="n mono">30 / 36</td><td>600, tracking −0.025em, tabular</td><td><code>text-3xl</code></td><td>Headline number</td><td><span class="chip">existing</span> <code>Stat</code></td></tr>
+      <tr><td>Title</td><td class="n mono">13 / 16</td><td>500</td><td><code>text-xs</code> (13 px in this app)</td><td>Card title</td><td><span class="chip">existing</span> <code>Stat</code> label</td></tr>
+      <tr><td>Row label</td><td class="n mono">12 / 16</td><td>400</td><td>—</td><td>Breakdown row labels and values</td><td><span class="chip ext">new</span></td></tr>
+      <tr><td>Meta, badge</td><td class="n mono">11 / 14 · 11 / 16</td><td>400 · 500</td><td><code>text-2xs</code></td><td>Compare label, <code>n</code>, <code>as_of</code>, badges</td><td><span class="chip">existing</span> <code>Badge</code>, <code>Muted</code></td></tr>
+    </table></div>
+    <p>The app sets <code>--text-xs</code> to 13 px and <code>--text-2xs</code> to 11 px. Do not substitute the browser defaults of 12 px and 10 px.</p>
+
+    <h3>Space, shape and motion</h3>
+    <div class="tw"><table class="t">
+      <tr><th>Property</th><th>Value</th><th>Token</th><th>Origin</th></tr>
+      <tr><td>Card padding</td><td class="mono">16</td><td><code>p-4</code></td><td><span class="chip">existing</span></td></tr>
+      <tr><td>Card padding, S</td><td class="mono">12 × 8 (x × y)</td><td><code>px-3 py-2</code></td><td><span class="chip">existing</span> Overview KPI tile</td></tr>
+      <tr><td>Card radius</td><td class="mono">12</td><td><code>rounded-xl</code></td><td><span class="chip">existing</span></td></tr>
+      <tr><td>Card border</td><td class="mono">1 px <code>border</code></td><td><code>border-border</code></td><td><span class="chip">existing</span></td></tr>
+      <tr><td>Gap between cards</td><td class="mono">16</td><td><code>gap-4</code></td><td><span class="chip">existing</span> <code>FlowStats</code></td></tr>
+      <tr><td>Vertical rhythm inside a card</td><td class="mono">4 · 4 · 12 · 12</td><td>title→value, value→delta, delta→viz, viz→footer</td><td><span class="chip ext">new</span> (4 is the <code>my-1</code> in <code>Stat</code>)</td></tr>
+      <tr><td>Badge</td><td class="mono">px 6, py 2, radius 4</td><td><code>px-1.5 py-0.5 rounded</code></td><td><span class="chip">existing</span></td></tr>
+      <tr><td>Hover</td><td>border <code>primary</code> at 30%, fill <code>surface-raised</code> at 40%. 150 ms color transition.</td><td><code>hover:border-contrast/30 hover:bg-surface-raised/40</code></td><td><span class="chip">existing</span></td></tr>
+      <tr><td>Skeleton shimmer</td><td>1.4 s linear, <code>surface-raised</code> to a slightly lighter step</td><td>—</td><td><span class="chip ext">new</span></td></tr>
+    </table></div>
+  </div>
+</section>
+
+<!-- ============ 03 ============ -->
+<section class="sheet" id="s03">
+  <header><span class="no">03</span><h2>Card anatomy</h2><span class="sub">Redline of the standard (M) card with every optional part switched on. Shown 1:1.</span></header>
+  <div class="body">
+    <div class="cols" style="grid-template-columns:minmax(0,560px) minmax(0,1fr)">
+      <div class="ab flat" style="padding:0;height:300px;overflow:visible;position:sticky;top:16px;align-self:start">
+        <span class="cap">M · 340 × 186</span>
+        <div id="anat" style="position:absolute;left:64px;top:46px;width:340px;height:186px">
+          <div class="mc link hover" style="position:absolute;inset:0;padding:0">
+            <div class="rl-sp" style="left:0;top:0;width:338px;height:16px">16</div>
+            <div class="rl-sp" style="left:0;top:0;width:16px;height:184px;align-items:start;padding-top:101px">16</div>
+            <div class="rl-sp" style="left:322px;top:0;width:16px;height:184px;align-items:start;padding-top:101px">16</div>
+            <div class="rl-sp" style="left:16px;top:168px;width:306px;height:16px">16</div>
+            <div class="rl-sp" style="left:16px;top:32px;width:60px;height:4px"></div>
+            <div class="rl-sp" style="left:16px;top:72px;width:60px;height:4px"></div>
+            <div class="rl-sp" style="left:16px;top:96px;width:60px;height:12px">12</div>
+            <div class="rl-sp" style="left:16px;top:140px;width:60px;height:12px">12</div>
+            <div style="position:absolute;left:16px;top:16px;width:190px;height:16px" class="t"><span class="tx">Cost per merged PR</span></div>
+            <div style="position:absolute;left:280px;top:16px;width:16px;height:16px;color:var(--dim)"><svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.3"><circle cx="8" cy="8" r="6.2"/><path d="M8 7.2v4M8 4.9v.1" stroke-linecap="round"/></svg></div>
+            <div style="position:absolute;left:302px;top:14px;width:20px;height:20px;color:var(--dim);display:grid;place-items:center;font-size:14px;line-height:1">⋯</div>
+            <div style="position:absolute;left:16px;top:36px;width:120px;height:36px;font-size:30px;line-height:36px;font-weight:600;letter-spacing:-.025em;font-variant-numeric:tabular-nums">$18.42</div>
+            <div style="position:absolute;left:300px;top:46px;width:16px;height:16px;color:var(--dim);font-size:18px;line-height:16px;text-align:center">›</div>
+            <div style="position:absolute;left:16px;top:76px;width:124px;height:20px"><span class="b good" style="height:20px">▼ $2.10 · −10.2%</span></div>
+            <div style="position:absolute;left:148px;top:80px;width:124px;height:14px" class="m">vs prev 30d · $20.52</div>
+            <div style="position:absolute;left:16px;top:108px;width:306px;height:32px"><svg class="spark" data-v="22,21,23,20,22,21,19,20,18,19,20,18,17,19,18,17,18,16,17,18,19,17,18,17,18"></svg></div>
+            <div style="position:absolute;left:16px;top:152px;width:96px;height:18px"><span class="b good">target &lt; $25</span></div>
+            <div style="position:absolute;left:130px;top:154px;width:192px;height:14px;text-align:right" class="m">n = 214 · as of 09:05 UTC</div>
+            <div class="rl-box" style="left:16px;top:16px;width:190px;height:16px"></div>
+            <div class="rl-box" style="left:280px;top:16px;width:16px;height:16px"></div>
+            <div class="rl-box" style="left:302px;top:14px;width:20px;height:20px"></div>
+            <div class="rl-box" style="left:16px;top:36px;width:120px;height:36px"></div>
+            <div class="rl-box" style="left:300px;top:46px;width:16px;height:16px"></div>
+            <div class="rl-box" style="left:16px;top:76px;width:124px;height:20px"></div>
+            <div class="rl-box" style="left:148px;top:80px;width:124px;height:14px"></div>
+            <div class="rl-box" style="left:16px;top:108px;width:306px;height:32px"></div>
+            <div class="rl-box" style="left:16px;top:152px;width:96px;height:18px"></div>
+            <div class="rl-box" style="left:130px;top:154px;width:192px;height:14px"></div>
+          </div>
+          <i class="rl-line" style="left:111px;top:-24px;width:1px;height:40px"></i><span class="pin" data-pin="1" style="left:111px;top:-24px">1</span>
+          <i class="rl-line" style="left:288px;top:-24px;width:1px;height:40px"></i><span class="pin" data-pin="2" style="left:288px;top:-24px">2</span>
+          <i class="rl-line" style="left:312px;top:-24px;width:1px;height:38px"></i><span class="pin" data-pin="3" style="left:312px;top:-24px">3</span>
+          <i class="rl-line" style="left:-32px;top:54px;width:48px;height:1px"></i><span class="pin" data-pin="4" style="left:-32px;top:54px">4</span>
+          <i class="rl-line" style="left:-32px;top:86px;width:48px;height:1px"></i><span class="pin" data-pin="5" style="left:-32px;top:86px">5</span>
+          <i class="rl-line" style="left:-32px;top:124px;width:48px;height:1px"></i><span class="pin" data-pin="6" style="left:-32px;top:124px">6</span>
+          <i class="rl-line" style="left:-32px;top:161px;width:48px;height:1px"></i><span class="pin" data-pin="7" style="left:-32px;top:161px">7</span>
+          <i class="rl-line" style="left:316px;top:54px;width:56px;height:1px"></i><span class="pin" data-pin="8" style="left:372px;top:54px">8</span>
+          <i class="rl-line" style="left:272px;top:87px;width:100px;height:1px"></i><span class="pin" data-pin="9" style="left:372px;top:87px">9</span>
+          <i class="rl-line" style="left:322px;top:161px;width:50px;height:1px"></i><span class="pin" data-pin="10" style="left:372px;top:161px">10</span>
+          <i class="tick-h" style="left:0;top:206px;width:340px"></i><span class="dim-l" style="left:0;top:214px;width:340px">340 · min 220 · max fluid</span>
+          <i class="tick-v" style="left:400px;top:0;height:186px"></i><span class="dim-l" style="left:408px;top:86px">186</span>
+        </div>
+      </div>
+      <div>
+        <div class="tw"><table class="t" id="anat-t">
+          <tr><th></th><th>Element</th><th>Reads from</th><th>Spec</th></tr>
+          <tr data-pin="1"><td><span class="pinref">1</span></td><td>Title</td><td><code>card.title</code>, else <code>metric.label</code></td><td>13/16 · 500 · <code>muted</code>. One line, ellipsis. Full text in the native tooltip. Aim for 48 characters or fewer. <span class="chip">existing</span></td></tr>
+          <tr data-pin="2"><td><span class="pinref">2</span></td><td>Info</td><td><code>metric.description</code>, <code>metric.source</code>, formula</td><td>16 × 16 icon, <code>text-dim</code>. Opens a popover on hover, focus or click: definition, numerator ÷ denominator for ratios, source badge (Derived, Pushed, Pulled), window, <code>as_of</code>. Not drawn when there is no description. <span class="chip ext">new</span></td></tr>
+          <tr data-pin="3"><td><span class="pinref">3</span></td><td>Overflow menu</td><td>UI only</td><td>20 × 20 hit area. Drawn on card hover and on keyboard focus only. Menu: Edit card · View metric · Copy API request. "Edit card" is disabled with a reason when the definition is repo-managed. <span class="chip ext">new</span></td></tr>
+          <tr data-pin="4"><td><span class="pinref">4</span></td><td>Headline value</td><td><code>card.value</code> formatted by <code>metric.unit</code></td><td>30/36 · 600 · −0.025em · tabular · <code>content</code>. Shows <code>—</code> when <code>status</code> is <code>no_data</code>. It is the aggregate of the whole window, never the last bucket. <span class="chip">existing</span></td></tr>
+          <tr data-pin="5"><td><span class="pinref">5</span></td><td>Delta chip</td><td><code>card.delta</code>, <code>delta_pct</code>, <code>metric.direction</code></td><td>Badge: 11/16, 2 × 6 padding, radius 4. Arrow ▲ or ▼, absolute change, percent after a dot. Tone from direction and sign (sheet 07). Not drawn when <code>previous</code> is null. <span class="chip">existing</span> badge · <span class="chip ext">new</span> content</td></tr>
+          <tr data-pin="6"><td><span class="pinref">6</span></td><td>Viz slot</td><td><code>card.series</code>, <code>card.display</code></td><td>Full content width, 32 high for a sparkline. Other types fill this slot (sheet 05). Always 12 above and 12 below. <span class="chip ext">new</span></td></tr>
+          <tr data-pin="7"><td><span class="pinref">7</span></td><td>Status badge</td><td><code>card.status</code>, <code>metric.target</code></td><td>Badge tone: <code>ok</code> good · <code>warn</code> warn · <code>critical</code> bad · <code>no_data</code> dashed neutral. Text is <code>target {op} {value}</code>. Not drawn when the metric has no target. <span class="chip">existing</span> (Overview KPI tile)</td></tr>
+          <tr data-pin="8"><td><span class="pinref">8</span></td><td>Link chevron</td><td><code>card.link.url</code></td><td>16 × 16, 18 px glyph, <code>text-dim</code>. The whole card is the click target. Hover style applies only when there is a link. <span class="chip">existing</span> (list card chevron)</td></tr>
+          <tr data-pin="9"><td><span class="pinref">9</span></td><td>Compare label</td><td><code>card.compare</code>, <code>window</code>, <code>previous</code></td><td>11/14 · <code>muted</code>. Format: <code>vs prev {window} · {previous}</code>. For <code>average</code>: <code>vs {window} avg</code>. <span class="chip ext">new</span></td></tr>
+          <tr data-pin="10"><td><span class="pinref">10</span></td><td>Meta</td><td><code>card.n</code>, <code>as_of</code></td><td>11/14 · <code>muted</code> · right aligned. <code>n</code> turns <code>warning</code> when below the minimum sample (30 in the mock; the real value is an open question). Native tooltip shows the full ISO time. <span class="chip ext">new</span></td></tr>
+        </table></div>
+        <div class="note">Every part except 1, 4 and 6 is optional. A card with only a title and a value is valid (that is the first increment: a count with an optional link-out). Optional parts collapse. They never leave a blank row.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 04 ============ -->
+<section class="sheet" id="s04">
+  <header><span class="no">04</span><h2>Size and grid</h2><span class="sub">One size. A card has no size or position field. The grid decides the rest.</span></header>
+  <div class="body">
+    <div class="ab flat" style="padding:72px 56px 28px;min-height:0">
+      <span class="cap">M — 1:1</span>
+      <div style="display:flex;gap:64px;align-items:flex-start;flex-wrap:wrap">
+        <div style="position:relative;width:260px">
+          <div class="mc" style="width:260px;height:128px">
+            <div class="t"><span class="tx">Blocked right now</span></div>
+            <div class="v">5</div>
+            <div class="m" style="margin-top:4px">Across 4 causes</div>
+          </div>
+          <div class="rl-box" style="left:0;top:0;width:260px;height:128px"></div>
+          <i class="tick-h" style="left:0;top:-18px;width:260px"></i><span class="dim-l" style="left:0;top:-34px;width:260px">fluid, min 220</span>
+          <i class="tick-v" style="left:-18px;top:0;height:128px"></i><span class="dim-l" style="left:-54px;top:58px">min 104</span>
+          <div style="position:absolute;top:148px;left:0;width:300px;font-size:11.5px;color:#aab3c5;line-height:1.5"><b style="color:#fff">M · standard, the only size</b><br>One grid cell. Padding 16, radius 12, value 30/36. Height is set by content. All cards in one grid row stretch to the tallest. A card with a viz row is about 186 high.</div>
+        </div>
+      </div>
+    </div>
+
+    <h3>Grid</h3>
+    <div class="tw"><table class="t">
+      <tr><th>Container width</th><th>Columns</th><th>Gap</th><th>Rule</th><th>Origin</th></tr>
+      <tr><td class="n">&lt; 640 px</td><td>1</td><td class="mono">16</td><td>Cards stack.</td><td><span class="chip ext">new</span></td></tr>
+      <tr><td class="n">640 – 1279 px</td><td>2</td><td class="mono">16</td><td><code>grid-cols-2</code></td><td><span class="chip">existing</span> <code>FlowStats</code></td></tr>
+      <tr><td class="n">≥ 1280 px (<code>xl</code>)</td><td>4</td><td class="mono">16</td><td><code>xl:grid-cols-4</code></td><td><span class="chip">existing</span> <code>FlowStats</code></td></tr>
+    </table></div>
+    <div class="note">Page layout (which cards, their order, sections, the Goal card strip) is a separate dashboard ticket. This sheet defines the card only.</div>
+    <div class="note warn">Cap a Factory overview at <b>8 cards</b> (the Notion page takes this from Velocity's metric bar). Operator cards live in their own section and are not counted in the 8.</div>
+  </div>
+</section>
+
+<!-- ============ 05 ============ -->
+<section class="sheet" id="s05">
+  <header><span class="no">05</span><h2>Card types</h2><span class="sub">Nine types. Each is one value of <code>card.display</code> (plus <code>group_by</code>), drawn in the viz slot of the anatomy.</span></header>
+  <div class="body">
+    <h3>Index</h3>
+    <div class="tw"><table class="t">
+      <tr><th>ID</th><th>Type</th><th><code>display</code> / <code>group_by</code></th><th>Size</th><th>Answers</th><th>Backend today</th></tr>
+      <tr><td class="mono">MC-01</td><td>Count</td><td><code>number</code></td><td>M</td><td>How many right now, or in total?</td><td><span class="chip merged">merged</span> <span class="chip gap">gap: <code>last</code></span></td></tr>
+      <tr><td class="mono">MC-02</td><td>Number with trend</td><td><code>number_trend</code></td><td>M</td><td>Is it getting better or worse?</td><td><span class="chip merged">merged</span> two calls · <span class="chip open">open PR #811</span></td></tr>
+      <tr><td class="mono">MC-03</td><td>Sparkline</td><td><code>sparkline</code></td><td>M</td><td>What is the shape over the window?</td><td><span class="chip merged">merged</span> day · week · month</td></tr>
+      <tr><td class="mono">MC-04</td><td>Percent</td><td><code>percent</code></td><td>M</td><td>What share succeeded?</td><td><span class="chip merged">merged</span> boolean key</td></tr>
+      <tr><td class="mono">MC-05</td><td>Progress to target</td><td><code>progress</code></td><td>M</td><td>How close to the limit or goal?</td><td><span class="chip gap">gap: <code>target</code></span></td></tr>
+      <tr><td class="mono">MC-06</td><td>Breakdown</td><td><code>group_by</code> any dimension</td><td>M</td><td>Where does it come from?</td><td><span class="chip gap">gap: dimensions</span></td></tr>
+      <tr><td class="mono">MC-07</td><td>Variant comparison</td><td><code>group_by: variant</code></td><td>later</td><td>Which version is better, and is it safe to say?</td><td><span class="chip gap">gap: dimensions</span></td></tr>
+      <tr><td class="mono">MC-08</td><td>Duration split</td><td><code>group_by: stage</code>, p50 and p90</td><td>M</td><td>Where does the time go?</td><td><span class="chip gap">gap: percentiles, dimensions</span></td></tr>
+      <tr><td class="mono">MC-09</td><td>Series chart</td><td><code>series</code> extension</td><td>later</td><td>How did each period compare?</td><td><span class="chip merged">merged</span> <span class="chip ext">not in Notion enum</span></td></tr>
+    </table></div>
+
+    <article class="spec" id="mc-01" style="margin-top:20px">
+      <div class="ab flat" style="padding:36px 28px 28px">
+        <span class="cap">MC-01 · M · 1:1</span>
+        <div class="abgrid">
+          <div class="mc link" style="height:128px"><div class="t"><span class="tx">Blocked right now</span></div><div class="v">5<span class="chev">›</span></div><div class="m" style="margin-top:4px">Across 4 causes · Open attention list</div></div>
+          <div class="mc" style="height:104px"><div class="t"><span class="tx">Escalated to people</span></div><div class="v">3</div><div class="m" style="margin-top:4px">Each is a candidate for a rule</div></div>
+        </div>
+      </div>
+      <div>
+        <span class="id">MC-01 · <code>display: "number"</code></span><h3>Count</h3>
+        <p class="lead">A single number. This is the first increment in the Notion plan: a count with an optional link out to a chart.</p>
+        <div class="kv">
+          <div>Required</div><div><code>title</code> <code>metric</code></div>
+          <div>Optional</div><div><code>link</code> <code>window</code> hint line (from <code>metric.description</code>)</div>
+          <div>Layout</div><div>Title 16 · 4 · value 36 · optional hint 14 with 4 above. No viz, no footer. Minimum height 104 (M).</div>
+          <div>Hint line</div><div>11/14 <code>muted</code>. One line, ellipsis. Replaces delta and compare label when there is no comparison.</div>
+          <div>Link</div><div>Chevron at the right of the value row. Whole card clickable. No link: no chevron, no hover style.</div>
+          <div>No data</div><div>Value <code>—</code>, hint "No data yet". Never <code>0</code> for a gauge.</div>
+          <div>Backend</div><div><span class="chip merged">merged</span> <code>GET /factories/{id}/outcomes/aggregate?key=K&amp;operation=count|sum|max</code>. <span class="chip gap">gap</span> A gauge needs <code>last</code> (latest value). The aggregate ops are <code>sum count avg min max count_true count_false</code>.</div>
+        </div>
+<pre class="json">PUT /factories/acme-sw/cards/blocked-now
+{ "title": "Blocked right now", "metric": "blocked_work_items",
+  "window": "all", "aggregation": "last", "display": "number",
+  "link": { "url": "/factories/acme-sw/stream?filter=blocked" } }</pre>
+      </div>
+    </article>
+
+    <article class="spec" id="mc-02">
+      <div class="ab flat" style="padding:36px 28px 28px">
+        <span class="cap">MC-02 · M · 1:1</span>
+        <div class="abgrid">
+          <div class="mc link" style="height:140px"><div class="t"><span class="tx">Cost per merged PR</span></div><div class="v">$18.42<span class="chev">›</span></div><div class="dl"><span class="b good">▼ $2.10 · −10.2%</span><span class="m">vs prev 30d · $20.52</span></div><div class="foot" style="margin-top:12px"><span class="b good">target &lt; $25</span><span class="m">n = 214 · as of 09:05 UTC</span></div></div>
+          <div class="mc" style="height:140px"><div class="t"><span class="tx">Median time to PR</span></div><div class="v">6.4h</div><div class="dl"><span class="b bad">▲ 1.1h · +20.8%</span><span class="m">vs prev 30d · 5.3h</span></div><div class="foot" style="margin-top:12px"><span class="b warn">target &lt; 8h</span><span class="m">n = 187 · as of 09:05 UTC</span></div></div>
+        </div>
+      </div>
+      <div>
+        <span class="id">MC-02 · <code>display: "number_trend"</code></span><h3>Number with trend</h3>
+        <p class="lead">The headline value with a change against the previous window. The default for cost, time and rate metrics.</p>
+        <div class="kv">
+          <div>Required</div><div><code>title</code> <code>metric</code> <code>window</code> <code>compare</code></div>
+          <div>Optional</div><div><code>link</code> <code>filter</code> <code>group_by</code> (adds MC-06 rows below)</div>
+          <div>Layout</div><div>Title 16 · 4 · value 36 · 4 · delta row 20 · 12 · footer 18. No viz row. Height about 140.</div>
+          <div>Delta chip</div><div>▲ or ▼ + <code>|delta|</code> in the metric unit + <code>delta_pct</code>. Percent metrics show percentage points, not percent (sheet 08).</div>
+          <div>Compare label</div><div><code>previous_window</code> → "vs prev 30d · {previous}". <code>average</code> → "vs 30d avg · {previous}". <code>none</code> → no chip, no label.</div>
+          <div>Previous empty</div><div><code>previous</code> is null: hide the chip. Show "No prior data" in the compare label slot, <code>dim</code>.</div>
+          <div>Backend</div><div><span class="chip merged">merged</span> Two aggregate calls: <code>[now−w, now)</code> and <code>[now−2w, now−w)</code>. The client computes <code>delta</code> until a card endpoint exists. <span class="chip open">open PR #811</span> makes <code>until</code> exclusive. Without it a row on the boundary counts in both windows.</div>
+        </div>
+<pre class="json">PUT /factories/acme-sw/cards/cost-per-merged-pr
+{ "title": "Cost per merged PR", "metric": "platform.cost_per_merged_pr",
+  "window": "30d", "compare": "previous_window", "display": "number_trend" }</pre>
+      </div>
+    </article>
+
+    <article class="spec" id="mc-03">
+      <div class="ab flat" style="padding:36px 28px 28px">
+        <span class="cap">MC-03 · M · 1:1</span>
+        <div class="abgrid">
+          <div class="mc link" style="height:186px"><div class="t"><span class="tx">Issues → merged PR</span></div><div class="v">27<span class="chev">›</span></div><div class="dl"><span class="b good">▲ 4 · +17.4%</span><span class="m">vs prev 30d · 23</span></div><div class="viz"><svg class="spark" data-v="1,0,2,1,1,0,0,2,1,1,3,1,0,1,2,2,1,1,0,2,1,3,2,1,1,2,1,2,0,1" data-dash="1,1,0,1,1,1,0,0,1,1,2,1,1,0,1,1,1,0,1,1,2,1,1,1,0,1,1,1,1,0"></svg></div><div class="foot"><span class="b warn">target 30 / month</span><span class="m">n = 27 · as of 09:05 UTC</span></div></div>
+        </div>
+      </div>
+      <div>
+        <span class="id">MC-03 · <code>display: "sparkline"</code></span><h3>Sparkline</h3>
+        <p class="lead">MC-02 plus a 32 px line of the series. Shows shape, not values. The S size is the existing Overview KPI tile.</p>
+        <div class="kv">
+          <div>Required</div><div>Everything in MC-02, plus <code>sparkline.bucket</code> (default from window)</div>
+          <div>Line</div><div>1.5 px <code>primary</code>, no fill, no axis, no labels. Last point has a 3 px dot. <span class="chip">existing</span> (80 × 26 in S)</div>
+          <div>Scale</div><div>Y from the series min to max with 3 px inset. A flat series draws a mid-height line, never a spike.</div>
+          <div>Previous</div><div>Optional dashed 1 px <code>text-dim</code> line of the previous window, same scale. Only with <code>compare: previous_window</code>.</div>
+          <div>Gaps</div><div><code>null</code> in <code>series.values</code> breaks the line. Counts are zero-filled, so they never break. Gauges and ratios use <code>null</code>.</div>
+          <div>Bucket by window</div><div><code>24h</code> hour · <code>7d</code> day · <code>30d</code> day · <code>90d</code> week · <code>6m</code> week · <code>1y</code> month · <code>all</code> month. Cap 365 buckets.</div>
+          <div>Hover</div><div>Vertical hairline and a tooltip: bucket start date and value. Keyboard: arrow keys step through buckets.</div>
+          <div>Backend</div><div><span class="chip merged">merged</span> <code>…/aggregate?group_by=day|week|month</code> returns <code>buckets[{bucket,value,count}]</code> for buckets that have rows. The client fills the empty ones. <span class="chip gap">gap</span> No <code>hour</code> bucket.</div>
+        </div>
+<pre class="json">{ "title": "Issues → merged PR", "metric": "platform.throughput",
+  "window": "30d", "compare": "previous_window", "display": "sparkline",
+  "sparkline": { "bucket": "day" } }</pre>
+      </div>
+    </article>
+
+    <article class="spec" id="mc-04">
+      <div class="ab flat" style="padding:36px 28px 28px">
+        <span class="cap">MC-04 · M · 1:1</span>
+        <div class="abgrid">
+          <div class="mc link" style="height:158px"><div class="t"><span class="tx">Autonomy rate</span></div><div class="v">62%<span class="chev">›</span></div><div class="dl"><span class="b good">▲ 4 pp</span><span class="m">38 of 61 merged PRs</span></div><div class="viz" style="margin-top:12px"><div class="track"><i style="width:62%"></i></div></div><div class="foot"><span class="b good">target &gt; 60%</span><span class="m">n = 61 · as of 09:05 UTC</span></div></div>
+          <div class="mc" style="height:158px"><div class="t"><span class="tx">Run success rate</span></div><div class="v">91.2%</div><div class="dl"><span class="b bad">▼ 1.4 pp</span><span class="m">380 of 417 runs</span></div><div class="viz" style="margin-top:12px"><div class="track"><i style="width:91.2%"></i></div></div><div class="foot"><span class="b warn">target &gt; 95%</span><span class="m">n = 417 · as of 09:05 UTC</span></div></div>
+        </div>
+      </div>
+      <div>
+        <span class="id">MC-04 · <code>display: "percent"</code></span><h3>Percent</h3>
+        <p class="lead">A share of something. The bar is always 0 to 100%, so two percent cards read the same way side by side.</p>
+        <div class="kv">
+          <div>Required</div><div>Everything in MC-02. Unit is <code>percent</code> or <code>ratio</code>.</div>
+          <div>Support line</div><div>"{numerator} of {denominator} {noun}" in the compare slot, 11/14 <code>muted</code>. Needs <code>numerator</code> and <code>denominator</code> on the card-read. <span class="chip ext">new fields</span> The Notion rule: define every ratio's numerator and denominator.</div>
+          <div>Bar</div><div>6 px high, radius 3, track <code>surface-raised</code>, fill <code>primary</code> at 75%. Fill width is the value. No tone color: the status badge carries the tone.</div>
+          <div>Delta</div><div>In percentage points: "▲ 4 pp". Never "+6.9%" for a ratio.</div>
+          <div>Small sample</div><div><code>n</code> under the minimum: the value stays, the <code>n</code> text turns <code>warning</code>, and the delta chip is dropped.</div>
+          <div>Backend</div><div><span class="chip merged">merged</span> A <code>boolean</code> outcome key: numerator is <code>operation=count_true</code>, denominator is <code>operation=count</code>. Two calls, same filters.</div>
+        </div>
+<pre class="json">{ "title": "Autonomy rate", "metric": "platform.autonomy_rate",
+  "window": "30d", "compare": "previous_window", "display": "percent" }</pre>
+      </div>
+    </article>
+
+    <article class="spec" id="mc-05">
+      <div class="ab flat" style="padding:36px 28px 28px">
+        <span class="cap">MC-05 · M · 1:1</span>
+        <div class="abgrid">
+          <div class="mc link" style="height:140px"><div class="t"><span class="tx">Budget burn · November</span></div><div class="v">$2,150<small>of $2,500</small><span class="chev">›</span></div><div class="viz" style="margin-top:12px"><div class="track lg"><i class="warn" style="width:86%"></i><u style="left:80%"></u><u style="left:100%;background:var(--danger)"></u></div></div><div class="foot"><span class="b warn">86% · warn at 80%</span><span class="m">as of 09:05 UTC</span></div></div>
+          <div class="mc" style="height:140px"><div class="t"><span class="tx">Open vulnerabilities, high</span></div><div class="v">14<small>of 25 allowed</small></div><div class="viz" style="margin-top:12px"><div class="track lg"><i style="width:56%"></i><u style="left:40%"></u><u style="left:100%;background:var(--danger)"></u></div></div><div class="foot"><span class="b good">56% · ok</span><span class="m">n = 31 · as of 09:05 UTC</span></div></div>
+        </div>
+      </div>
+      <div>
+        <span class="id">MC-05 · <code>display: "progress"</code></span><h3>Progress to target</h3>
+        <p class="lead">A value against a limit or goal. Thresholds come from the metric's <code>target</code>. This is the only card where the bar changes color.</p>
+        <div class="kv">
+          <div>Required</div><div>Everything in MC-01, plus <code>metric.target</code> (<code>warn</code>, <code>critical</code>)</div>
+          <div>Value row</div><div>Value, then "of {critical}" as 13/16 <code>muted</code> small text on the same baseline.</div>
+          <div>Bar</div><div>8 px high, radius 4. Fill = value ÷ critical, capped at 100%. A value over critical fills the bar and the badge says "over".</div>
+          <div>Ticks</div><div>1 px, 14 px tall (3 over and under the bar). <code>warn</code> tick <code>text-dim</code>. <code>critical</code> tick <code>danger</code>.</div>
+          <div>Fill tone</div><div><code>ok</code> primary 75% · <code>warn</code> <code>warning</code> · <code>critical</code> <code>danger</code>. Never rely on color alone: the badge text repeats the status.</div>
+          <div>Direction</div><div><code>down_is_good</code> (CVEs, spend): thresholds rise with the value, as drawn. <code>up_is_good</code> (coverage): thresholds are floors. Flip the tick order and the fill tone logic.</div>
+          <div>Backend</div><div><span class="chip gap">gap</span> The merged key registry stores <code>{"type": …}</code> only. #807 made it an object so <code>target</code>, <code>unit</code>, <code>direction</code>, <code>label</code> can be added later without breaking clients.</div>
+        </div>
+<pre class="json">PUT /factories/acme-sw/metrics/budget_burn
+{ "label": "Budget burn", "unit": "usd", "kind": "gauge",
+  "aggregation": "last", "direction": "neutral",
+  "target": { "warn": 2000, "critical": 2500 } }</pre>
+      </div>
+    </article>
+
+    <article class="spec" id="mc-06">
+      <div class="ab flat" style="padding:36px 28px 28px">
+        <span class="cap">MC-06 · M · 1:1</span>
+        <div class="mc link" style="height:268px"><div class="t"><span class="tx">Run failures by cause · 7d</span></div><div class="v">41<span class="chev">›</span></div><div class="dl"><span class="b bad">▲ 9 · +28%</span><span class="m">vs prev 7d · 32</span></div>
+          <div class="viz" style="margin-top:12px;display:grid;gap:0">
+            <div class="brow"><span class="l">Environment setup</span><div class="track"><i style="width:34%"></i></div><span class="r">14<em>34%</em></span></div>
+            <div class="brow"><span class="l">Timeout</span><div class="track"><i style="width:27%"></i></div><span class="r">11<em>27%</em></span></div>
+            <div class="brow"><span class="l">Agent process</span><div class="track"><i style="width:20%"></i></div><span class="r">8<em>20%</em></span></div>
+            <div class="brow"><span class="l">Budget</span><div class="track"><i style="width:12%"></i></div><span class="r">5<em>12%</em></span></div>
+            <div class="brow"><span class="l">Other (2)</span><div class="track"><i style="width:5%"></i></div><span class="r">2<em>5%</em></span></div>
+            <div class="brow"><span class="l dim">Unknown</span><div class="track"><i style="width:2%;background:var(--dim)"></i></div><span class="r">1<em>2%</em></span></div>
+          </div></div>
+      </div>
+      <div>
+        <span class="id">MC-06 · <code>group_by: "&lt;dimension&gt;"</code></span><h3>Breakdown</h3>
+        <p class="lead">MC-02 with the total on top and one row per dimension value. Used for cost by model, failures by cause, tokens by model.</p>
+        <div class="kv">
+          <div>Required</div><div>Everything in MC-02, plus <code>group_by</code></div>
+          <div>Row</div><div>Grid <code>1.35fr · 1.2fr · auto</code>, gap 10, height 22. Label 12/16 <code>content</code> (ellipsis) · bar 6 px · value 12/16 tabular, right aligned, min 64, then share in 11 px <code>muted</code>.</div>
+          <div>Bar length</div><div>Share of the total, so the bars sum to 100%. Not scaled to the largest row.</div>
+          <div>Order</div><div>By total, largest first. <code>UNKNOWN</code> is always last, in <code>dim</code> italic. (Warp convention, taken by the Notion page.)</div>
+          <div>Row limit</div><div>5 rows, then "Other (n)" summing the rest. The full list opens from the card link or from "View metric".</div>
+          <div>Ratio metrics</div><div>For a ratio grouped by a dimension (tool error rate by tool), the value column shows each group's own ratio and the bar is scaled 0–100%. The headline is the whole-window ratio.</div>
+          <div>Backend</div><div><span class="chip gap">gap</span> The stored outcome row has <code>key</code>, typed value, <code>source</code>, <code>automation_id</code>, <code>run_id</code>. It has no dimension columns. The aggregate <code>group_by</code> takes <code>none day week month</code> only.</div>
+        </div>
+<pre class="json">{ "title": "Run failures by cause", "metric": "platform.run_failures",
+  "window": "7d", "compare": "previous_window", "display": "number_trend",
+  "group_by": "error_category" }</pre>
+      </div>
+    </article>
+
+    <article class="spec wide" id="mc-07">
+      <div class="ab flat" style="padding:36px 28px 28px">
+        <span class="cap">MC-07 · later · 1:1</span>
+        <div class="mc" style="width:100%;height:226px"><div class="t"><span class="tx">Run success rate by variant · 7d</span></div>
+          <div class="viz" style="margin-top:10px">
+            <div class="brow" style="grid-template-columns:minmax(0,1fr) 40px 56px 84px 68px;min-height:20px;border-bottom:1px solid var(--border-subtle)"><span class="m">Variant</span><span class="m" style="text-align:right">n</span><span class="m" style="text-align:right">Value</span><span class="m">vs control</span><span class="m">Guardrails</span></div>
+            <div class="brow" style="grid-template-columns:minmax(0,1fr) 40px 56px 84px 68px;min-height:34px;border-bottom:1px solid var(--border-subtle)"><span class="l">agent-v12 <span class="b" style="margin-left:4px">control</span></span><span class="r" style="min-width:0">412</span><span class="r" style="min-width:0">91.2%</span><span class="m">—</span><span class="m">—</span></div>
+            <div class="brow" style="grid-template-columns:minmax(0,1fr) 40px 56px 84px 68px;min-height:34px;border-bottom:1px solid var(--border-subtle)"><span class="l">agent-v13 <span class="b info" style="margin-left:4px">candidate</span></span><span class="r" style="min-width:0">388</span><span class="r" style="min-width:0">93.1%</span><span><span class="b good">▲ 1.9 pp</span></span><span class="m" style="letter-spacing:2px"><span style="color:var(--success)">✓</span> <span style="color:var(--success)">✓</span> <span style="color:var(--danger)">✕</span></span></div>
+            <div class="brow hatch" style="grid-template-columns:minmax(0,1fr) 40px 56px 84px 68px;min-height:34px;background-color:transparent"><span class="l">agent-v13-skills <span class="b info" style="margin-left:4px">candidate</span></span><span class="r" style="min-width:0;color:var(--warning-fg)">12</span><span class="r" style="min-width:0;color:var(--dim)">—</span><span><span class="b n">too few runs</span></span><span class="m">—</span></div>
+          </div>
+          <div class="foot" style="margin-top:10px"><span class="m">Guardrails: cost · failures · duration</span><span class="m">min n = 30</span></div>
+        </div>
+      </div>
+      <div>
+        <div class="note warn">Later. This card needs more than one grid cell, and wide layouts belong to the dashboard ticket. Kept here as a reference only.</div>
+        <span class="id">MC-07 · <code>group_by: "variant"</code></span><h3>Variant comparison</h3>
+        <p class="lead">For A/B tests of agent definitions, models, skills, plugins, MCP sets and prompts. It shows the sample size on every row and never declares a winner.</p>
+        <div class="kv">
+          <div>Required</div><div>Everything in MC-02, <code>group_by: "variant"</code>, a <code>control</code> variant id</div>
+          <div>Columns</div><div>Variant · <code>n</code> · value · delta vs control · guardrails. Row height 34. Header 20, 11/14 <code>muted</code>, 1 px <code>border-subtle</code> under it.</div>
+          <div>Role badge</div><div><code>control</code> neutral · <code>candidate</code> info. These are the only words used. No "winner", no "best".</div>
+          <div>Guardrails</div><div>Three marks: cost, failure rate, duration. ✓ <code>success</code> when the candidate does not regress. ✕ <code>danger</code> when it does. Tooltip names the metric and the change. The drawing shows a candidate that regresses on duration.</div>
+          <div>Thin data</div><div>Row with <code>n</code> below the minimum: hatched, value <code>—</code>, delta replaced by a dashed "too few runs" badge, <code>n</code> in <code>warning</code>.</div>
+          <div>Offline check</div><div>Optional last row "Benchmark" with the fixed-task-set result. Italic label, <code>info</code> badge "offline".</div>
+          <div>Backend</div><div><span class="chip gap">gap</span> Needs a <code>variant</code> dimension, and a decision on who assigns variants (Notion open question 2). Needs a rate per group (two aggregates per variant).</div>
+        </div>
+<pre class="json">{ "title": "Run success rate by variant", "metric": "platform.run_success_rate",
+  "window": "7d", "display": "percent", "group_by": "variant",
+  "control": "agent-v12" }</pre>
+      </div>
+    </article>
+
+    <article class="spec" id="mc-08">
+      <div class="ab flat" style="padding:36px 28px 28px">
+        <span class="cap">MC-08 · M · 1:1</span>
+        <div class="mc link" style="height:292px"><div class="t"><span class="tx">Time in stage · 30d</span></div><div class="v">6.4h<small>median, issue to PR</small><span class="chev">›</span></div>
+          <div class="viz" style="margin-top:12px;display:grid">
+            <div class="brow" style="grid-template-columns:minmax(0,1.25fr) minmax(0,1.2fr) 76px;min-height:20px"><span class="m">Stage</span><span class="m" style="display:flex;gap:10px"><span><span style="display:inline-block;width:10px;height:6px;background:color-mix(in srgb,var(--primary) 75%,transparent);border-radius:2px;margin-right:4px"></span>p50</span><span><span style="display:inline-block;width:10px;height:6px;background:color-mix(in srgb,var(--primary) 25%,transparent);border-radius:2px;margin-right:4px"></span>p90</span></span><span class="m" style="text-align:right">p50 / p90</span></div>
+            <div class="brow" style="grid-template-columns:minmax(0,1.25fr) minmax(0,1.2fr) 76px"><span class="l">Intake → triage</span><div class="track"><i style="width:9%;z-index:2"></i><i style="width:26%;background:color-mix(in srgb,var(--primary) 25%,transparent)"></i></div><span class="r" style="min-width:0">8m / 31m</span></div>
+            <div class="brow" style="grid-template-columns:minmax(0,1.25fr) minmax(0,1.2fr) 76px"><span class="l">Triage → spec</span><div class="track"><i style="width:18%;z-index:2"></i><i style="width:46%;background:color-mix(in srgb,var(--primary) 25%,transparent)"></i></div><span class="r" style="min-width:0">1.2h / 3.8h</span></div>
+            <div class="brow" style="grid-template-columns:minmax(0,1.25fr) minmax(0,1.2fr) 76px"><span class="l">Spec → PR</span><div class="track"><i style="width:30%;z-index:2"></i><i style="width:62%;background:color-mix(in srgb,var(--primary) 25%,transparent)"></i></div><span class="r" style="min-width:0">2.1h / 5.2h</span></div>
+            <div class="brow" style="grid-template-columns:minmax(0,1.25fr) minmax(0,1.2fr) 76px"><span class="l">PR → review</span><div class="track"><i style="width:48%;z-index:2"></i><i style="width:100%;background:color-mix(in srgb,var(--primary) 25%,transparent)"></i></div><span class="r" style="min-width:0">3.4h / 9.4h</span></div>
+            <div class="brow" style="grid-template-columns:minmax(0,1.25fr) minmax(0,1.2fr) 76px"><span class="l">Review → merge</span><div class="track"><i style="width:22%;z-index:2"></i><i style="width:52%;background:color-mix(in srgb,var(--primary) 25%,transparent)"></i></div><span class="r" style="min-width:0">1.6h / 4.9h</span></div>
+          </div></div>
+      </div>
+      <div>
+        <span class="id">MC-08 · <code>group_by: "stage"</code> with <code>aggregation: p50</code> and <code>p90</code></span><h3>Duration split</h3>
+        <p class="lead">Time by stage as range bars. Medians hide the tail, so every row shows p50 and p90 together. This is the Notion rule "report durations as median and p90, not mean".</p>
+        <div class="kv">
+          <div>Required</div><div>Everything in MC-06, <code>unit: seconds</code>, both <code>p50</code> and <code>p90</code> in the card-read per group</div>
+          <div>Row</div><div>Grid <code>1.25fr · 1.2fr · 76px</code>. Two bars share one track: p90 at 25% <code>primary</code> behind, p50 at 75% <code>primary</code> in front.</div>
+          <div>Scale</div><div>Track = the largest p90 in the card. All rows use the same scale so stages compare by eye.</div>
+          <div>Order</div><div>Process order, not size. The stage order comes from the metric definition.</div>
+          <div>Value text</div><div><code>{p50} / {p90}</code> in duration format (sheet 08). Headline is the end-to-end p50.</div>
+          <div>Backend</div><div><span class="chip gap">gap</span> The aggregate ops stop at <code>avg min max</code>. No <code>p50</code>, <code>p90</code>. No dimension for <code>stage</code>. A percentile needs raw points, not a pre-aggregated mean.</div>
+        </div>
+<pre class="json">{ "title": "Time in stage", "metric": "platform.stage_duration",
+  "window": "30d", "aggregation": "p50", "display": "number",
+  "group_by": "stage", "secondary_aggregation": "p90" }</pre>
+      </div>
+    </article>
+
+    <article class="spec wide" id="mc-09">
+      <div class="ab flat" style="padding:36px 28px 28px">
+        <span class="cap">MC-09 · later · 1:1</span>
+        <div class="mc" style="width:100%;height:262px"><div class="t"><span class="tx">Throughput · merged PRs per week</span></div><div class="v">27<small>last week · 12 weeks shown</small></div>
+          <div class="viz" style="margin-top:8px"><svg class="bars" data-v="14,18,16,21,19,24,22,26,23,27,29,17" data-partial="1" data-prev="21" data-labels="Sep 1,Nov 17" style="display:block;width:100%;height:128px"></svg></div>
+          <div class="foot" style="margin-top:8px"><span class="m"><span style="display:inline-block;width:14px;border-top:1px dashed var(--dim);vertical-align:middle;margin-right:4px"></span>previous 12-week average</span><span class="m">n = 267 · as of 09:05 UTC</span></div>
+        </div>
+      </div>
+      <div>
+        <div class="note warn">Later. This card needs more than one grid cell, and wide layouts belong to the dashboard ticket. Kept here as a reference only.</div>
+        <span class="id">MC-09 · <code>series</code> (extension) <span class="chip ext">not in the Notion enum</span></span><h3>Series chart</h3>
+        <p class="lead">Bars per bucket. The Notion <code>display</code> list has no full chart, but the merged aggregate already returns buckets by day, week and month, and Warp and Laminar both show bucketed charts. Proposed as an addition.</p>
+        <div class="kv">
+          <div>Required</div><div>Everything in MC-02, <code>display: "series"</code>, <code>bucket</code></div>
+          <div>Plot</div><div>Bars with 2 px radius, 4 px gap, <code>primary</code> at 70%. Plot height 128 (min 96). Three horizontal grid lines at 0, mid, max in <code>border-subtle</code>.</div>
+          <div>Axis</div><div>Y labels 11/14 <code>text-dim</code> at the left of the grid lines. X labels: first and last bucket only.</div>
+          <div>Current bucket</div><div>The bucket still in progress is hatched and labelled "in progress" in the tooltip. It is never used for the headline.</div>
+          <div>Compare</div><div>Dashed 1 px line at the previous window's average. Not a second series, to keep the chart readable.</div>
+          <div>Gaps</div><div>Count and sum buckets with no rows draw as zero-height bars. Ratio buckets with no data draw nothing and the tooltip says "no data".</div>
+          <div>Backend</div><div><span class="chip merged">merged</span> <code>…/aggregate?group_by=week</code>. The client fills the missing buckets.</div>
+        </div>
+<pre class="json">{ "title": "Throughput", "metric": "platform.throughput",
+  "window": "90d", "compare": "average", "display": "series",
+  "bucket": "week" }</pre>
+      </div>
+    </article>
+  </div>
+</section>
+
+<!-- ============ 06 ============ -->
+<section class="sheet" id="s06">
+  <header><span class="no">06</span><h2>States</h2><span class="sub">Every type has the same nine states. Drawn on MC-02.</span></header>
+  <div class="body">
+    <div class="states">
+      <div class="state"><h4>Default</h4><div class="ab flat"><div class="mc" style="height:140px"><div class="t"><span class="tx">Cost per merged PR</span></div><div class="v">$18.42</div><div class="dl"><span class="b good">▼ $2.10 · −10.2%</span><span class="m">vs prev 30d · $20.52</span></div><div class="foot" style="margin-top:12px"><span class="b good">target &lt; $25</span><span class="m">n = 214 · as of 09:05 UTC</span></div></div></div><p>All parts present.</p></div>
+      <div class="state"><h4>Hover <span class="chip">link only</span></h4><div class="ab flat"><div class="mc link hover" style="height:140px"><div class="t"><span class="tx">Cost per merged PR</span></div><div class="v">$18.42<span class="chev">›</span></div><div class="dl"><span class="b good">▼ $2.10 · −10.2%</span><span class="m">vs prev 30d · $20.52</span></div><div class="foot" style="margin-top:12px"><span class="b good">target &lt; $25</span><span class="m">n = 214 · as of 09:05 UTC</span></div></div></div><p>Border to <code>primary</code> 30%, fill to <code>surface-raised</code> 40%. The ⋯ menu appears. A card without a link has no hover style.</p></div>
+      <div class="state"><h4>Keyboard focus <span class="chip">link only</span></h4><div class="ab flat"><div class="mc link" style="height:140px;outline:2px solid var(--info);outline-offset:2px"><div class="t"><span class="tx">Cost per merged PR</span></div><div class="v">$18.42<span class="chev">›</span></div><div class="dl"><span class="b good">▼ $2.10 · −10.2%</span><span class="m">vs prev 30d · $20.52</span></div><div class="foot" style="margin-top:12px"><span class="b good">target &lt; $25</span><span class="m">n = 214 · as of 09:05 UTC</span></div></div></div><p>2 px <code>info</code> outline, 2 px offset, following the 12 px radius. Never remove it.</p></div>
+      <div class="state"><h4>Loading</h4><div class="ab flat"><div class="mc" style="height:140px"><div class="t"><span class="tx">Cost per merged PR</span></div><div class="v" style="height:36px;align-items:center"><span class="skel" style="display:block;width:96px;height:28px"></span></div><div class="dl"><span class="skel" style="display:block;width:112px;height:20px"></span><span class="skel" style="display:block;width:88px;height:12px"></span></div><div class="foot" style="margin-top:12px"><span class="skel" style="display:block;width:92px;height:18px"></span><span class="skel" style="display:block;width:120px;height:12px"></span></div></div></div><p>The title is known from the definition, so it stays. Everything else shimmers at its final size. No spinner. Layout does not move when data arrives.</p></div>
+      <div class="state"><h4>No data</h4><div class="ab flat"><div class="mc" style="height:140px"><div class="t"><span class="tx">Cost per merged PR</span></div><div class="v" style="color:var(--dim)">—</div><div class="dl"><span class="m">No points in the last 30d</span></div><div class="foot" style="margin-top:12px"><span class="b n">no data</span><span class="m">as of 09:05 UTC</span></div></div></div><p><code>status: no_data</code>. Dash, never zero. Delta chip dropped. Badge is dashed neutral.</p></div>
+      <div class="state"><h4>Small sample</h4><div class="ab flat"><div class="mc" style="height:140px"><div class="t"><span class="tx">Cost per merged PR</span></div><div class="v">$21.30</div><div class="dl"><span class="b warn">Low n · 6 of 30</span></div><div class="foot" style="margin-top:12px"><span class="b">target &lt; $25</span><span class="m" style="color:var(--warning-fg)">n = 6 · as of 09:05 UTC</span></div></div></div><p><code>n</code> under the minimum. Value stays. Delta chip is replaced by a "Low n" badge. Status badge goes neutral: do not claim ok or bad on thin data.</p></div>
+      <div class="state"><h4>Status: warn</h4><div class="ab flat"><div class="mc" style="height:140px"><div class="t"><span class="tx">Cost per merged PR</span></div><div class="v">$24.10</div><div class="dl"><span class="b bad">▲ $5.68 · +30.8%</span><span class="m">vs prev 30d · $18.42</span></div><div class="foot" style="margin-top:12px"><span class="b warn">target &lt; $25 · near</span><span class="m">n = 198 · as of 09:05 UTC</span></div></div></div><p>Badge tone <code>warn</code>. The value text stays <code>content</code>. Color never goes on the number.</p></div>
+      <div class="state"><h4>Status: critical</h4><div class="ab flat"><div class="mc" style="height:140px"><div class="t"><span class="tx">Cost per merged PR</span></div><div class="v">$31.40</div><div class="dl"><span class="b bad">▲ $13.0 · +70.6%</span><span class="m">vs prev 30d · $18.42</span></div><div class="foot" style="margin-top:12px"><span class="b bad">target &lt; $25 · over</span><span class="m">n = 203 · as of 09:05 UTC</span></div></div></div><p>Badge tone <code>bad</code>. Delta tone and status tone are separate. A good delta can sit beside a critical status.</p></div>
+      <div class="state"><h4>Stale</h4><div class="ab flat"><div class="mc" style="height:140px"><div class="t"><span class="tx">Cost per merged PR</span></div><div class="v">$18.42</div><div class="dl"><span class="b good">▼ $2.10 · −10.2%</span><span class="m">vs prev 30d · $20.52</span></div><div class="foot" style="margin-top:12px"><span class="b good">target &lt; $25</span><span class="m" style="color:var(--warning-fg)"><span class="dot warn"></span> as of 06:12 UTC · 3h old</span></div></div></div><p>When <code>as_of</code> is older than twice the refresh interval, or 24 h with no interval. Meta text turns <code>warning</code>. The value stays visible.</p></div>
+      <div class="state"><h4>Error</h4><div class="ab flat"><div class="mc" style="height:140px"><div class="t"><span class="tx">Cost per merged PR</span></div><div class="v" style="color:var(--dim)">—</div><div class="dl"><span class="m" style="color:var(--danger-fg)">Could not load this card</span></div><div class="foot" style="margin-top:12px"><span class="b" style="cursor:pointer">Retry</span><span class="m">Request failed · 503</span></div></div></div><p>No stale value is shown as if it were current. "Retry" is a ghost button. The error line uses <code>danger-soft-foreground</code>. Keep the card height.</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 07 ============ -->
+<section class="sheet" id="s07">
+  <header><span class="no">07</span><h2>Delta and status color</h2><span class="sub">Color says good or bad. Direction says up or down. They are separate.</span></header>
+  <div class="body">
+    <h3>Delta chip tone: <code>metric.direction</code> × sign of <code>delta</code></h3>
+    <div class="ab flat" style="padding:20px">
+      <table class="t" style="color:var(--content);width:100%">
+        <tr><th style="background:var(--base2);color:var(--muted);border-color:var(--border-subtle)">direction</th><th style="background:var(--base2);color:var(--muted);border-color:var(--border-subtle)">delta &gt; 0</th><th style="background:var(--base2);color:var(--muted);border-color:var(--border-subtle)">delta &lt; 0</th><th style="background:var(--base2);color:var(--muted);border-color:var(--border-subtle)">delta = 0</th><th style="background:var(--base2);color:var(--muted);border-color:var(--border-subtle)"><code>previous</code> is null</th></tr>
+        <tr><td style="border-color:var(--border-subtle)"><code>up_is_good</code></td><td style="border-color:var(--border-subtle)"><span class="b good">▲ 4 pp</span></td><td style="border-color:var(--border-subtle)"><span class="b bad">▼ 4 pp</span></td><td style="border-color:var(--border-subtle)"><span class="b">● no change</span></td><td style="border-color:var(--border-subtle)"><span class="m" style="color:var(--dim)">chip hidden · "No prior data"</span></td></tr>
+        <tr><td style="border-color:var(--border-subtle)"><code>down_is_good</code></td><td style="border-color:var(--border-subtle)"><span class="b bad">▲ $2.10</span></td><td style="border-color:var(--border-subtle)"><span class="b good">▼ $2.10</span></td><td style="border-color:var(--border-subtle)"><span class="b">● no change</span></td><td style="border-color:var(--border-subtle)"><span class="m" style="color:var(--dim)">chip hidden · "No prior data"</span></td></tr>
+        <tr><td style="border-color:var(--border-subtle)"><code>neutral</code></td><td style="border-color:var(--border-subtle)"><span class="b">▲ 12</span></td><td style="border-color:var(--border-subtle)"><span class="b">▼ 12</span></td><td style="border-color:var(--border-subtle)"><span class="b">● no change</span></td><td style="border-color:var(--border-subtle)"><span class="m" style="color:var(--dim)">chip hidden · "No prior data"</span></td></tr>
+      </table>
+    </div>
+    <p>"No change" applies when <code>|delta_pct| &lt; 0.5</code>. That threshold is a proposal. Arrows point the way the number moved, never the way it should move.</p>
+
+    <h3>Status badge: from <code>metric.target</code></h3>
+    <div class="cols c2">
+      <div class="tw"><table class="t">
+        <tr><th>Direction</th><th><code>ok</code></th><th><code>warn</code></th><th><code>critical</code></th></tr>
+        <tr><td><code>down_is_good</code></td><td>value &lt; <code>warn</code></td><td><code>warn</code> ≤ value &lt; <code>critical</code></td><td>value ≥ <code>critical</code></td></tr>
+        <tr><td><code>up_is_good</code></td><td>value &gt; <code>warn</code></td><td><code>critical</code> &lt; value ≤ <code>warn</code></td><td>value ≤ <code>critical</code></td></tr>
+        <tr><td><code>neutral</code></td><td colspan="3">No status. No badge. <code>target</code> is ignored.</td></tr>
+      </table></div>
+      <div>
+        <div class="ab flat" style="padding:18px;display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+          <span class="b good">ok</span><span class="b warn">warn</span><span class="b bad">critical</span><span class="b n">no data</span><span class="b">low n</span>
+        </div>
+        <p>Order of precedence: <code>no_data</code>, then low <code>n</code>, then the target rule. A card on thin data never shows <code>ok</code> or <code>critical</code>.</p>
+      </div>
+    </div>
+    <div class="note">Existing mock: the Overview KPI tile uses <code>Badge tone="good"</code> when <code>onTrack</code> and <code>"warn"</code> otherwise, with the text "target {value}". This sheet keeps that look and replaces the boolean with the three-state rule above.</div>
+  </div>
+</section>
+
+<!-- ============ 08 ============ -->
+<section class="sheet" id="s08">
+  <header><span class="no">08</span><h2>Value formatting</h2><span class="sub">One rule per unit. Locale: en-US for now.</span></header>
+  <div class="body">
+    <div class="tw"><table class="t">
+      <tr><th><code>unit</code></th><th>Rule</th><th>Stored value → shown</th><th>Delta shown as</th></tr>
+      <tr><td><code>count</code></td><td>Full number with separators below 10,000. Compact above: 3 significant digits and <code>k</code> or <code>M</code>.</td><td class="mono">0 → 0 · 1234 → 1,234 · 12400 → 12.4k · 1250000 → 1.25M</td><td class="mono">▲ 4 · +17.4%</td></tr>
+      <tr><td><code>usd</code></td><td>Two decimals below $1,000. Whole dollars from $1,000 to $9,999. Compact from $10k. Below $0.01 show two significant digits.</td><td class="mono">0.0042 → $0.0042 · 18.42 → $18.42 · 1840 → $1,840 · 12400 → $12.4k</td><td class="mono">▼ $2.10 · −10.2%</td></tr>
+      <tr><td><code>seconds</code></td><td>Under 60 s: seconds. Under 1 h: minutes (add seconds under 10 min). Under 48 h: hours with one decimal. Else days with one decimal.</td><td class="mono">48 → 48s · 750 → 12m 30s · 2520 → 42m · 23040 → 6.4h · 190000 → 2.2d</td><td class="mono">▲ 1.1h · +20.8%</td></tr>
+      <tr><td><code>ratio</code></td><td>Stored 0 to 1. Multiply by 100. One decimal, drop a trailing <code>.0</code>.</td><td class="mono">0.912 → 91.2% · 0.62 → 62%</td><td class="mono">▲ 4 pp</td></tr>
+      <tr><td><code>percent</code></td><td>Stored 0 to 100. One decimal, drop a trailing <code>.0</code>.</td><td class="mono">62.0 → 62% · 91.24 → 91.2%</td><td class="mono">▲ 4 pp</td></tr>
+      <tr><td>custom label</td><td>Value (count rules) then a space and the label.</td><td class="mono">27 + "PRs" → 27 PRs</td><td class="mono">▲ 4 · +17.4%</td></tr>
+    </table></div>
+    <h3>Always</h3>
+    <div class="tw"><table class="t">
+      <tr><th>Case</th><th>Rule</th></tr>
+      <tr><td>Missing value</td><td>Em dash <code>—</code>. Never <code>0</code>, never "N/A", never blank.</td></tr>
+      <tr><td>Negative</td><td>True minus <code>−</code> (U+2212), not a hyphen.</td></tr>
+      <tr><td>Ratio delta</td><td>Percentage points, written <code>pp</code>. Never a percent of a percent.</td></tr>
+      <tr><td>Delta percent</td><td>One decimal. Hidden when <code>previous</code> is 0 (no base). The absolute delta still shows.</td></tr>
+      <tr><td>Digits</td><td><code>font-variant-numeric: tabular-nums</code> on every number so columns and refreshes do not jitter.</td></tr>
+      <tr><td>Non-finite</td><td>Never reaches the card. The merged API rejects <code>NaN</code> and infinity, and numbers above 2<sup>53</sup>.</td></tr>
+    </table></div>
+  </div>
+</section>
+
+<!-- ============ 09 ============ -->
+<section class="sheet" id="s09">
+  <header><span class="no">09</span><h2>Field to element map</h2><span class="sub">Every field that reaches a pixel, where it is defined, and what the merged backend offers instead.</span></header>
+  <div class="body">
+    <div class="tw"><table class="t">
+      <tr><th>Field</th><th>Defined on</th><th>Drives</th><th>Fallback if absent</th><th>Merged backend equivalent</th></tr>
+      <tr><td><code>title</code></td><td>card</td><td>Title (1)</td><td><code>metric.label</code></td><td>—</td></tr>
+      <tr><td><code>metric</code></td><td>card</td><td>Which series to query</td><td>Required</td><td><code>key</code> query param <span class="chip merged">merged</span></td></tr>
+      <tr><td><code>window</code></td><td>card · <code>display_defaults</code></td><td>Aggregate range, compare label (9)</td><td><code>30d</code></td><td><code>since</code>, <code>until</code> <span class="chip merged">merged</span></td></tr>
+      <tr><td><code>aggregation</code></td><td>card · metric</td><td>How the window becomes one value</td><td>metric default</td><td><code>operation</code>: <code>sum count avg min max count_true count_false</code> <span class="chip merged">merged</span> · <code>last p50 p90 p95 p99</code> <span class="chip gap">gap</span></td></tr>
+      <tr><td><code>compare</code></td><td>card</td><td>Delta chip (5), compare label (9)</td><td><code>none</code></td><td>Second aggregate call over the previous window <span class="chip open">#811</span></td></tr>
+      <tr><td><code>display</code></td><td>card</td><td>Card type, viz slot (6)</td><td><code>number</code></td><td>—</td></tr>
+      <tr><td><code>group_by</code></td><td>card</td><td>Breakdown rows, variant rows</td><td>none</td><td>Time buckets <code>day week month</code> <span class="chip merged">merged</span> · dimensions <span class="chip gap">gap</span></td></tr>
+      <tr><td><code>sparkline.bucket</code></td><td>card</td><td>Series resolution (6)</td><td>from window</td><td><code>group_by</code> time bucket <span class="chip merged">merged</span></td></tr>
+      <tr><td><code>filter</code></td><td>card</td><td>Which points count</td><td>none</td><td><code>source</code>, <code>automation_id</code>, <code>run_id</code> <span class="chip merged">merged</span> · dimension filters <span class="chip gap">gap</span></td></tr>
+      <tr><td><code>link.url</code></td><td>card</td><td>Chevron (8), click target</td><td>no link</td><td>—</td></tr>
+      <tr><td><code>order</code></td><td>card</td><td>Position in the grid</td><td>creation order</td><td>—</td></tr>
+      <tr><td><code>label</code></td><td>metric</td><td>Title fallback</td><td>key</td><td>Not stored. Registry holds <code>{"type"}</code> <span class="chip gap">gap</span></td></tr>
+      <tr><td><code>unit</code></td><td>metric</td><td>Value format (4), delta format (5)</td><td><code>count</code></td><td>Not stored <span class="chip gap">gap</span></td></tr>
+      <tr><td><code>direction</code></td><td>metric</td><td>Delta tone (5), status rule (sheet 07)</td><td><code>neutral</code></td><td>Not stored <span class="chip gap">gap</span></td></tr>
+      <tr><td><code>target</code></td><td>metric</td><td>Status badge (7), progress ticks</td><td>no badge</td><td>Not stored <span class="chip gap">gap</span></td></tr>
+      <tr><td><code>kind</code></td><td>metric</td><td>Default aggregation (gauge → <code>last</code>)</td><td><code>event</code></td><td>Value type only: <code>number string boolean datetime json</code> <span class="chip merged">merged</span></td></tr>
+      <tr><td><code>dimensions</code></td><td>metric</td><td>Allowed <code>group_by</code> values</td><td>none</td><td>Not stored <span class="chip gap">gap</span></td></tr>
+      <tr><td><code>description</code></td><td>metric</td><td>Info popover (2)</td><td>no icon</td><td>Not stored <span class="chip gap">gap</span></td></tr>
+      <tr><td><code>value</code></td><td>card-read</td><td>Headline (4)</td><td><code>—</code></td><td><code>value</code> <span class="chip merged">merged</span></td></tr>
+      <tr><td><code>previous</code>, <code>delta</code>, <code>delta_pct</code></td><td>card-read</td><td>Delta chip (5), compare label (9)</td><td>chip hidden</td><td>Client math from two calls</td></tr>
+      <tr><td><code>status</code></td><td>card-read</td><td>Status badge (7)</td><td>no badge</td><td>Client math from <code>target</code> <span class="chip gap">gap</span></td></tr>
+      <tr><td><code>n</code></td><td>card-read</td><td>Meta (10), low-n rule</td><td>hidden</td><td><code>count</code> <span class="chip merged">merged</span></td></tr>
+      <tr><td><code>as_of</code></td><td>card-read</td><td>Meta (10), stale rule</td><td>request time</td><td>Not returned. Use the response time.</td></tr>
+      <tr><td><code>series.values</code></td><td>card-read</td><td>Sparkline, bars (6)</td><td>no viz</td><td><code>buckets[].value</code>, non-empty buckets only <span class="chip merged">merged</span></td></tr>
+      <tr><td><code>numerator</code>, <code>denominator</code></td><td>card-read</td><td>MC-04 support line</td><td>no line</td><td><code>count_true</code> and <code>count</code> for boolean keys <span class="chip merged">merged</span> · <span class="chip ext">new field</span></td></tr>
+    </table></div>
+  </div>
+</section>
+
+<!-- ============ 10 ============ -->
+<section class="sheet" id="s10">
+  <header><span class="no">10</span><h2>Metric to card map</h2><span class="sub">The first-release metrics from the Notion Examples page, each assigned a card type and its field values.</span></header>
+  <div class="body">
+    <div class="tw"><table class="t dense">
+      <tr><th>For</th><th>Metric key</th><th>Card</th><th>Unit · direction</th><th>Window · compare</th><th>Aggregation · group_by</th><th>Source</th><th>Needs before it can ship</th></tr>
+      <tr><td>Leader</td><td><code>platform.throughput</code></td><td class="n"><b>MC-03</b> sparkline</td><td>count · up</td><td>30d · prev</td><td><code>count</code> · day</td><td>Derived</td><td>Platform writer, PR state</td></tr>
+      <tr><td>Leader</td><td><code>platform.lead_time</code></td><td class="n"><b>MC-02</b></td><td>seconds · down</td><td>30d · prev</td><td><code>p50</code> (p90 in popover)</td><td>Derived</td><td><span class="chip gap">percentile</span> PR state</td></tr>
+      <tr><td>Leader</td><td><code>platform.stage_duration</code></td><td class="n"><b>MC-08</b></td><td>seconds · down</td><td>30d</td><td><code>p50</code> + <code>p90</code> · <code>stage</code></td><td>Derived</td><td><span class="chip gap">percentile</span> <span class="chip gap">dimension</span> PR state</td></tr>
+      <tr><td>Leader</td><td><code>platform.acceptance_rate</code></td><td class="n"><b>MC-04</b></td><td>ratio · up</td><td>30d · prev</td><td><code>count_true</code> ÷ <code>count</code></td><td>Derived</td><td>PR state (opened, merged)</td></tr>
+      <tr><td>Leader</td><td><code>platform.autonomy_rate</code></td><td class="n"><b>MC-04</b></td><td>ratio · up</td><td>30d · prev</td><td><code>count_true</code> ÷ <code>count</code></td><td>Derived</td><td>PR history (human code changes)</td></tr>
+      <tr><td>Leader</td><td><code>platform.cost_per_merged_pr</code></td><td class="n"><b>MC-02</b> + MC-06 by <code>component</code></td><td>usd · down</td><td>30d · prev</td><td><code>avg</code> · <code>component</code></td><td>Derived</td><td>Cost per run, <span class="chip gap">dimension</span></td></tr>
+      <tr><td>Leader</td><td><code>platform.spend</code></td><td class="n"><b>MC-06</b> by factory</td><td>usd · neutral</td><td>30d · prev</td><td><code>sum</code> · <code>factory</code></td><td>Derived</td><td><span class="chip gap">dimension</span></td></tr>
+      <tr><td>Leader</td><td><code>platform.change_failure_rate</code></td><td class="n"><b>MC-04</b></td><td>ratio · down</td><td>90d · prev</td><td><code>count_true</code> ÷ <code>count</code></td><td>Derived from <code>deploys</code>, <code>incidents</code></td><td>Pushed deploys and incidents</td></tr>
+      <tr><td>Operator</td><td><code>platform.run_success_rate</code></td><td class="n"><b>MC-04</b> + MC-07 by <code>variant</code></td><td>ratio · up</td><td>7d · prev</td><td><code>count_true</code> ÷ <code>count</code></td><td>Derived</td><td>Run records; <span class="chip gap">dimension</span> for the variant view only</td></tr>
+      <tr><td>Operator</td><td><code>platform.run_failures</code></td><td class="n"><b>MC-06</b> by <code>error_category</code></td><td>count · down</td><td>7d · prev</td><td><code>count</code> · <code>error_category</code></td><td>Derived</td><td><span class="chip gap">dimension</span></td></tr>
+      <tr><td>Operator</td><td><code>platform.queue_time</code></td><td class="n"><b>MC-02</b></td><td>seconds · down</td><td>7d · prev</td><td><code>p90</code></td><td>Derived</td><td><span class="chip gap">percentile</span></td></tr>
+      <tr><td>Operator</td><td><code>platform.run_duration</code></td><td class="n"><b>MC-08</b> by <code>stage</code></td><td>seconds · down</td><td>7d</td><td><code>p50</code> + <code>p90</code> · <code>stage</code></td><td>Derived</td><td><span class="chip gap">percentile</span> <span class="chip gap">dimension</span></td></tr>
+      <tr><td>Operator</td><td><code>platform.human_wait</code></td><td class="n"><b>MC-08</b> by <code>gate</code></td><td>seconds · down</td><td>30d</td><td><code>p50</code> + <code>p90</code> · <code>gate</code></td><td>Derived</td><td><span class="chip gap">percentile</span> <span class="chip gap">dimension</span></td></tr>
+      <tr><td>Operator</td><td><code>platform.cost_per_run</code></td><td class="n"><b>MC-02</b></td><td>usd · down</td><td>7d · prev</td><td><code>p90</code></td><td>Derived</td><td><span class="chip gap">percentile</span></td></tr>
+      <tr><td>Operator</td><td><code>llm.tokens</code></td><td class="n"><b>MC-06</b> by <code>model</code></td><td>count · neutral</td><td>7d · prev</td><td><code>sum</code> · <code>model</code></td><td>Derived or pulled (Laminar)</td><td><span class="chip gap">dimension</span> Laminar pull</td></tr>
+      <tr><td>Operator</td><td><code>tool.error_rate</code></td><td class="n"><b>MC-06</b> by <code>tool</code>, ratio rows</td><td>ratio · down</td><td>7d · prev</td><td>per group ratio</td><td>Pulled (Laminar)</td><td><span class="chip gap">dimension</span> Laminar pull</td></tr>
+      <tr><td>Operator</td><td><code>platform.scorer_pass_rate</code></td><td class="n"><b>MC-07</b></td><td>ratio · up</td><td>7d</td><td><code>count_true</code> ÷ <code>count</code> · <code>variant</code></td><td>Derived</td><td><span class="chip gap">dimension</span> variant assignment</td></tr>
+      <tr><td>Operator</td><td><code>platform.wasted_spend</code></td><td class="n"><b>MC-02</b></td><td>usd · down</td><td>30d · prev</td><td><code>sum</code></td><td>Derived</td><td>Run outcome joined to cost</td></tr>
+      <tr><td colspan="8" style="background:#f7f8fb;color:var(--ink3);font-size:11px;text-transform:uppercase;letter-spacing:.06em">Pushed by the user, CI or an agent. These work on the merged outcome store.</td></tr>
+      <tr><td>Leader</td><td><code>deploys</code></td><td class="n"><b>MC-03</b></td><td>count · up</td><td>30d · prev</td><td><code>sum</code> · day (push <code>1</code> per deploy)</td><td>Pushed (CI/CD)</td><td><span class="chip ok">pushable today</span></td></tr>
+      <tr><td>Leader</td><td><code>ci.test_pass_rate</code></td><td class="n"><b>MC-04</b></td><td>ratio · up</td><td>30d · prev</td><td><code>count_true</code> ÷ <code>count</code> (boolean per test run)</td><td>Pushed (CI)</td><td><span class="chip ok">pushable today</span></td></tr>
+      <tr><td>Leader</td><td><code>ci.coverage_pct</code></td><td class="n"><b>MC-02</b></td><td>percent · up</td><td>30d · prev</td><td><code>last</code></td><td>Pushed (CI)</td><td><span class="chip gap"><code>last</code></span> (<code>max</code> works only if coverage never drops)</td></tr>
+      <tr><td>Leader</td><td><code>security.open_vulnerabilities</code></td><td class="n"><b>MC-05</b> or MC-06 by <code>severity</code></td><td>count · down</td><td>all</td><td><code>last</code> · <code>severity</code></td><td>Pushed (scanner)</td><td><span class="chip gap"><code>last</code></span> <span class="chip gap">dimension</span></td></tr>
+    </table></div>
+    <div class="note">Of the 18 first-release metrics, 12 need percentiles or dimensions that the merged outcome store does not have, and 16 are <code>platform.*</code> keys that need a platform-side writer. The <code>platform.</code> prefix is reserved in the open PR #812, so a user cannot claim those names first. The four pushed examples at the bottom come from the Examples page but are not in its first-release list.</div>
+  </div>
+</section>
+
+<!-- ============ 11 ============ -->
+<section class="sheet" id="s11">
+  <header><span class="no">11</span><h2>Default sets and placement</h2><span class="sub">Where cards sit on the Overview page, and the cards each factory template ships with.</span></header>
+  <div class="body">
+    <h3>Overview page: what changes</h3>
+    <div class="ab flat" style="padding:34px 28px 28px;overflow:hidden">
+      <span class="cap">Overview · shown at 72% · 1600 px content width</span>
+      <div style="zoom:.72;width:1600px;position:relative">
+        <div style="font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:600">Platform team · factory:demo</div>
+        <div style="font-size:24px;font-weight:600;margin:4px 0 16px">DemoFactory</div>
+        <div class="mc" style="padding:16px;position:relative">
+          <div style="display:grid;grid-template-columns:2fr 3fr;gap:16px">
+            <div><div class="t" style="font-size:11px;text-transform:uppercase;letter-spacing:.08em;font-weight:600;color:var(--muted)">Goal</div><div style="margin-top:4px;font-size:15px;line-height:22px">Take incoming user issues from triage to a reviewed pull request without a person repairing the pipeline.</div></div>
+            <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;position:relative">
+              <div class="mc s"><div class="t"><span class="tx">Issues → merged PR</span></div><div class="v">27<svg class="spark" data-v="3,4,3,5,6,5,7,8,7,9" style="width:80px;height:26px"></svg></div><div class="foot"><span class="b warn">target 30 / month</span></div></div>
+              <div class="mc s"><div class="t"><span class="tx">Median time to PR</span></div><div class="v">6.4h</div><div class="foot"><span class="b good">target &lt; 8h</span></div></div>
+              <div class="mc s"><div class="t"><span class="tx">Cost per merged PR</span></div><div class="v">$18.42</div><div class="foot"><span class="b good">target &lt; $25</span></div></div>
+            </div>
+          </div>
+          <span class="pin" style="right:-4px;top:-4px;left:auto;margin:0">A</span>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-top:16px;position:relative">
+          <div class="mc"><div class="t"><span class="tx">Moved without a person</span></div><div class="v">87%</div><div class="m" style="margin-top:4px">Never waited on a human this week</div></div>
+          <div class="mc"><div class="t"><span class="tx">Blocked right now</span></div><div class="v">5</div><div class="m" style="margin-top:4px">Across 4 causes</div></div>
+          <div class="mc"><div class="t"><span class="tx">Auto-resolved by rules</span></div><div class="v">17</div><div class="m" style="margin-top:4px">Last 7 days · up from 9</div></div>
+          <div class="mc"><div class="t"><span class="tx">Escalated to people</span></div><div class="v">3</div><div class="m" style="margin-top:4px">Each is a candidate for a rule</div></div>
+          <span class="pin" style="right:-4px;top:-4px;left:auto;margin:0">B</span>
+        </div>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin:28px 0 12px;position:relative"><div style="font-size:15px;font-weight:600">Metrics</div><div style="display:flex;gap:4px"><span class="b" style="background:var(--raised);color:var(--content);padding:4px 10px">Leaders</span><span class="b" style="padding:4px 10px;background:transparent">Operators</span><span class="b" style="padding:4px 10px;background:transparent;margin-left:8px">30d ▾</span></div><span class="pin" style="left:80px;top:10px">C</span></div>
+        <div class="mini" style="gap:16px;position:relative">
+          <div><b>Throughput</b>MC-03 sparkline</div><div><b>Lead time</b>MC-02 p50</div><div><b>Acceptance rate</b>MC-04</div><div><b>Autonomy rate</b>MC-04</div>
+          <div><b>Cost per merged PR</b>MC-02</div><div><b>Change failure rate</b>MC-04</div><div><b>Time in stage</b>MC-08</div><div><b>Spend by factory</b>MC-06</div>
+          <span class="pin" style="right:-4px;top:-4px;left:auto;margin:0">D</span>
+        </div>
+      </div>
+    </div>
+    <div class="tw" style="margin-top:12px"><table class="t">
+      <tr><th></th><th>Region</th><th>Today in the prototype</th><th>Becomes</th></tr>
+      <tr><td><span class="pinref">A</span></td><td>Goal card KPI strip</td><td><code>factory.kpis</code> (<code>label, value, target, onTrack</code> strings). Only the first tile has a sparkline.</td><td>Stays as in the prototype. It is not a metric card, and binding its tiles to cards belongs to the dashboard ticket.</td></tr>
+      <tr><td><span class="pinref">B</span></td><td>Flow row (<code>FlowStats</code>)</td><td>Four hard-coded <code>Stat</code> cards, <code>grid-cols-2 xl:grid-cols-4</code>.</td><td>Four size M cards, MC-01 or MC-02. Same grid. These are operator-facing flow numbers and do not count toward the 8.</td></tr>
+      <tr><td><span class="pinref">C</span></td><td>Metrics section header</td><td>New.</td><td>Segmented control Leaders · Operators filters by <code>metric.audience</code>. The window selector sets the default <code>window</code> for cards that did not pin one. Both are open questions (sheet 14).</td></tr>
+      <tr><td><span class="pinref">D</span></td><td>Card grid</td><td>New.</td><td>Grid from sheet 04. Order by <code>card.order</code>. Template default set, capped at 8 for Leaders. Operators show their own set, with no cap, in a scrolling section.</td></tr>
+    </table></div>
+
+    <h3>Default card sets per factory template</h3>
+    <p>Each template ships <code>metrics/</code> and <code>cards/</code> files (Notion: "Default card sets per template"), so a new factory opens with cards that mean something. The metrics come from the Examples page.</p>
+    <div class="cols c2">
+      <div><b style="font-size:13px">Software factory (issue to PR)</b> <span class="chip">8 cards</span>
+        <div class="mini" style="margin-top:8px"><div><b>Throughput</b><span>MC-03</span></div><div><b>Lead time</b><span>MC-02</span></div><div><b>Acceptance</b><span>MC-04</span></div><div><b>Autonomy</b><span>MC-04</span></div><div><b>Cost / merged PR</b><span>MC-02</span></div><div><b>Change failure</b><span>MC-04</span></div><div><b>Human wait</b><span>MC-08</span></div><div><b>Spend</b><span>MC-06</span></div></div></div>
+      <div><b style="font-size:13px">CVE factory</b> <span class="chip">6 cards</span>
+        <div class="mini" style="margin-top:8px"><div><b>Open CVEs by severity</b><span>MC-06</span></div><div><b>Open CVEs · trend</b><span>MC-03</span></div><div><b>Time to remediate</b><span>MC-02 p50</span></div><div><b>Fix PR acceptance</b><span>MC-04</span></div><div><b>Repos scanned of in scope</b><span>MC-04</span></div><div><b>PRs awaiting review</b><span>MC-01 link</span></div></div></div>
+      <div><b style="font-size:13px">Incident response factory</b> <span class="chip">5 cards</span>
+        <div class="mini" style="margin-top:8px"><div><b>Open incidents</b><span>MC-01 link</span></div><div><b>Resolution time</b><span>MC-02 p50</span></div><div><b>Time to first action</b><span>MC-02</span></div><div><b>Resolved w/o escalation</b><span>MC-04</span></div><div><b>Repeat incident rate</b><span>MC-04</span></div></div></div>
+      <div><b style="font-size:13px">Operator set (every template)</b> <span class="chip">10 cards</span>
+        <div class="mini" style="margin-top:8px"><div><b>Run success</b><span>MC-04 + MC-07</span></div><div><b>Run failures</b><span>MC-06</span></div><div><b>Queue time</b><span>MC-02 p90</span></div><div><b>Run duration</b><span>MC-08</span></div><div><b>Cost / run p90</b><span>MC-02</span></div><div><b>Tokens by model</b><span>MC-06</span></div><div><b>Tool errors</b><span>MC-06</span></div><div><b>Scorer pass</b><span>MC-07</span></div><div><b>Wasted spend</b><span>MC-02</span></div><div><b>Human wait</b><span>MC-08</span></div></div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 12 ============ -->
+<section class="sheet" id="s12">
+  <header><span class="no">12</span><h2>Data contract and gaps</h2><span class="sub">What <code>OpenHands/automation</code> provides on 2026-11-25, and what each card type still needs.</span></header>
+  <div class="body">
+    <h3>Merged and open work</h3>
+    <div class="tw"><table class="t">
+      <tr><th>PR</th><th>Title</th><th>Status</th><th>What it gives the cards</th></tr>
+      <tr><td class="mono">#770</td><td>store automation outcome values for analytics</td><td><span class="chip merged">merged</span></td><td>Factory-scoped typed values (<code>number string boolean datetime json</code>), table <code>automation_outcome_values</code>, <code>POST /outcomes</code>, raw read and aggregate routes.</td></tr>
+      <tr><td class="mono">#793</td><td>factory-validated outcome parsers</td><td><span class="chip merged">merged</span></td><td>Optional parsers that extract typed values from a nested payload, checked against the factory key registry.</td></tr>
+      <tr><td class="mono">#794</td><td>wire factory outcomes into automation runs</td><td><span class="chip merged">merged</span></td><td>Agents in a factory run get <code>AUTOMATION_OUTCOME_URL</code> and a run token. They push values with no setup.</td></tr>
+      <tr><td class="mono">#807 · #810</td><td>outcome keys as objects · remove shim</td><td><span class="chip merged">merged</span></td><td>Registry is <code>{"key": {"type": …}}</code>. The object leaves room for <code>label unit direction target</code> without breaking clients.</td></tr>
+      <tr><td class="mono">#811</td><td>make the <code>until</code> bound exclusive</td><td><span class="chip open">open</span></td><td>Adjacent windows no longer double count a boundary row. Needed for correct <code>number_trend</code>.</td></tr>
+      <tr><td class="mono">#812</td><td>reserve the <code>platform.</code> key prefix</td><td><span class="chip open">open</span></td><td>Keeps <code>platform.*</code> for derived metrics. The database already allows <code>source = platform</code>.</td></tr>
+      <tr><td class="mono">#809</td><td>take parsers off the plugin-spec path</td><td><span class="chip open">open</span></td><td>Not a card concern. It says outcome declarations (keys, types, "metric cards") will live in the plugin manifest later.</td></tr>
+    </table></div>
+
+    <h3>Read routes, as they exist</h3>
+    <pre class="json" style="margin-top:0">GET /api/automation/v1/factories/{factory_id}/outcomes/values
+    ?key= &amp;automation_id= &amp;run_id= &amp;source=agent|user|platform &amp;since= &amp;until= &amp;limit=1..500 &amp;offset=
+  → { values: [{ id, factory_id, automation_id, run_id, source, key, value_type, value, created_at }], total }
+
+GET /api/automation/v1/factories/{factory_id}/outcomes/aggregate
+    ?key=  &amp;operation=sum|count|avg|min|max|count_true|count_false
+    &amp;group_by=none|day|week|month  &amp;source= &amp;automation_id= &amp;run_id= &amp;since= &amp;until=
+  → { key, operation, value, count, since, until, group_by, buckets: [{ bucket, value, count }] }
+
+Limits: key [a-zA-Z0-9_.-], ≤100 chars · ≤50 values per submission · payload ≤64 KB ·
+        string ≤2048 chars · |number| ≤ 2^53 · source is derived from the credential</pre>
+
+    <h3>What each card type still needs</h3>
+    <div class="tw"><table class="t">
+      <tr><th>Gap</th><th>Needed by</th><th>Where it could live</th><th>Notion</th></tr>
+      <tr><td><code>last</code> aggregation (latest value of a gauge)</td><td>MC-01, MC-02, MC-05 for any gauge</td><td>New <code>operation</code> value</td><td><code>aggregation: last</code></td></tr>
+      <tr><td>Percentiles <code>p50 p90 p95 p99</code></td><td>MC-02 durations, MC-08</td><td>New <code>operation</code> values. Computed from raw rows.</td><td><code>aggregation</code> list</td></tr>
+      <tr><td>Dimensions on a row (<code>stage</code>, <code>model</code>, <code>variant</code>, …) and a dimension <code>group_by</code></td><td>MC-06, MC-07, MC-08</td><td>A map column on the outcome row, and <code>group_by=&lt;dimension&gt;</code> on aggregate</td><td><code>dimensions</code>, <code>group_by</code></td></tr>
+      <tr><td><code>label unit direction target description dimensions</code> on the key</td><td>All types</td><td>Optional fields on <code>OutcomeKeyDefinition</code> (the registry object)</td><td>Metric definition</td></tr>
+      <tr><td><code>hour</code> bucket</td><td>MC-03, MC-09 on a 24 h window</td><td>New <code>group_by</code> value</td><td><code>24h</code> window</td></tr>
+      <tr><td>Card resource and card-read envelope (<code>previous delta status n as_of series</code>)</td><td>All types</td><td>New <code>/factories/{f}/cards</code> routes. Until then, the client builds it from the aggregate calls.</td><td>Cards API</td></tr>
+      <tr><td>Platform writer and PR state</td><td>Every <code>platform.*</code> metric</td><td>Platform code. Not an outcome submission.</td><td>Dependencies</td></tr>
+    </table></div>
+    <div class="note warn">Without a card endpoint, one MC-02 card costs two aggregate calls, and one MC-04 card costs four (numerator and denominator, for the current and the previous window). An 8-card overview is roughly 20 to 30 calls. That is the main reason to build <code>GET /cards</code> early. This sheet assumes the card-read envelope exists. The mock can ship with client-side math first.</div>
+  </div>
+</section>
+
+<!-- ============ 13 ============ -->
+<section class="sheet" id="s13">
+  <header><span class="no">13</span><h2>Interaction and accessibility</h2><span class="sub">Behavior a developer cannot see in a still drawing.</span></header>
+  <div class="body">
+    <div class="cols c2">
+      <div>
+        <h3>Interaction</h3>
+        <div class="tw"><table class="t">
+          <tr><th>Trigger</th><th>Result</th></tr>
+          <tr><td>Hover a linked card</td><td>Hover style (sheet 02). The ⋯ menu fades in, 120 ms.</td></tr>
+          <tr><td>Click a linked card</td><td>Navigate to <code>link.url</code>. Internal URLs use the app router. External URLs open in a new tab and show ↗ in place of ›.</td></tr>
+          <tr><td>Click ⋯</td><td>Menu: Edit card · View metric · Copy API request. Clicking the menu never triggers the card link.</td></tr>
+          <tr><td>Hover or focus the info icon</td><td>Popover after 300 ms. Closes on blur or Esc.</td></tr>
+          <tr><td>Hover a sparkline or bar</td><td>Hairline and tooltip with bucket label and value. Does not move the layout.</td></tr>
+          <tr><td>Window focus, every 60 s</td><td>Refetch. Keep the old value on screen. Update <code>as_of</code>. Do not show the loading state on a refetch.</td></tr>
+          <tr><td>Reduced motion</td><td>No shimmer, no fade. Static placeholders and instant hover.</td></tr>
+        </table></div>
+      </div>
+      <div>
+        <h3>Accessibility</h3>
+        <div class="tw"><table class="t">
+          <tr><th>Topic</th><th>Rule</th></tr>
+          <tr><td>Element</td><td>A card with a link is one <code>&lt;a&gt;</code>. A card without is a <code>&lt;section aria-labelledby&gt;</code>. The ⋯ button sits outside the anchor.</td></tr>
+          <tr><td>Name</td><td><code>aria-label</code> reads the whole card: "Cost per merged PR: $18.42, down 10.2 percent versus previous 30 days, status ok, 214 samples."</td></tr>
+          <tr><td>Color is never alone</td><td>Delta uses an arrow and a signed number. Status uses badge text. Bars carry value text.</td></tr>
+          <tr><td>Charts</td><td>Sparkline and bars are <code>role="img"</code> with a label: first value, last value, min, max. Breakdown rows are a <code>&lt;ul&gt;</code>.</td></tr>
+          <tr><td>Contrast on <code>canvas-base</code></td><td><code>content</code> 17.2:1 · <code>muted</code> 8.8:1 · <code>text-dim</code> 5.5:1 · badge text 9.4:1 to 12.9:1. All meet 4.5:1 for text.</td></tr>
+          <tr><td>Card border</td><td><code>border</code> is 2.6:1, under the 3:1 guideline for UI boundaries. It is decoration here. Do not use the border alone to show a state.</td></tr>
+          <tr><td>Hit target</td><td>Whole card for the link. The ⋯ button is 20 px drawn with a 32 px hit area.</td></tr>
+        </table></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 14 ============ -->
+<section class="sheet" id="s14">
+  <header><span class="no">14</span><h2>Open questions</h2><span class="sub">Decisions this sheet makes, and the ones it leaves to you.</span></header>
+  <div class="body">
+    <div class="cols c2">
+      <div>
+        <h3>Decisions made on this sheet (change freely)</h3>
+        <table class="t">
+          <tr><td class="n"><b>D1</b></td><td>Breakdown bars show share of total, so they sum to 100%.</td></tr>
+          <tr><td class="n"><b>D2</b></td><td>Breakdown shows 5 rows plus "Other (n)". <code>UNKNOWN</code> is last.</td></tr>
+          <tr><td class="n"><b>D3</b></td><td>The variant card never says "winner". It shows <code>n</code>, deltas and guardrails.</td></tr>
+          <tr><td class="n"><b>D4</b></td><td>Ratios change by percentage points, not percent.</td></tr>
+          <tr><td class="n"><b>D5</b></td><td>Overview Leaders are capped at 8. Operators are not.</td></tr>
+          <tr><td class="n"><b>D6</b></td><td>Status never shows <code>ok</code> or <code>critical</code> on thin data.</td></tr>
+          <tr><td class="n"><b>D7</b></td><td>A series chart (MC-09) is added, though the Notion <code>display</code> list has none.</td></tr>
+          <tr><td class="n"><b>D8</b></td><td>Color goes on badges, ticks and bar fills. Never on the headline number.</td></tr>
+          <tr><td class="n"><b>D9</b></td><td>One card size (M). A card has no size or position field. Layout belongs to the dashboard ticket.</td></tr>
+        </table>
+      </div>
+      <div>
+        <h3>Questions for the team</h3>
+        <table class="t">
+          <tr><td class="n"><b>Q1</b></td><td>Minimum sample size for "low n". The mock uses 30.</td></tr>
+          <tr><td class="n"><b>Q2</b></td><td>Does the section window selector override a card's own <code>window</code>, or only fill in unpinned cards?</td></tr>
+          <tr><td class="n"><b>Q3</b></td><td>What counts as stale? Twice the refresh interval is proposed, with 24 h as a fallback.</td></tr>
+          <tr><td class="n"><b>Q4</b></td><td>How is a KPI on the Goal card bound: a card reference with a target, or a metric key (Notion decision 3)?</td></tr>
+          <tr><td class="n"><b>Q5</b></td><td>Who sets <code>numerator</code> and <code>denominator</code> for a ratio, and where is the noun ("merged PRs") stored?</td></tr>
+          <tr><td class="n"><b>Q6</b></td><td>Who assigns variants, and how is the control chosen (Notion decision 4)?</td></tr>
+          <tr><td class="n"><b>Q7</b></td><td>Should "Edit card" exist in the UI, or are all definitions repo-managed and read-only in v1?</td></tr>
+          <tr><td class="n"><b>Q8</b></td><td>Ship client-side math first, or wait for a card endpoint?</td></tr>
+        </table>
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer class="doc">Drafted by an AI agent (OpenHands) on behalf of John-Mason Shackelford. Draft for discussion. Nothing here has been built or tested. Backend facts were read from <code>OpenHands/automation</code> <code>main</code> on 2026-11-25.</footer>
+</main>
+</div>
+
+<script data-build="strip">
+(function(){
+  var NS='http://www.w3.org/2000/svg';
+  function el(n,a,p){var e=document.createElementNS(NS,n);for(var k in a)e.setAttribute(k,a[k]);if(p)p.appendChild(e);return e;}
+  function nums(s){return s.split(',').map(Number);}
+  function spark(svg){
+    var v=nums(svg.dataset.v),w=svg.parentNode.getBoundingClientRect().width||300,h=parseFloat(svg.style.height)||32;
+    if(svg.style.width&&svg.style.width.indexOf('px')>0)w=parseFloat(svg.style.width);
+    svg.setAttribute('viewBox','0 0 '+w+' '+h);svg.setAttribute('preserveAspectRatio','none');
+    var d=svg.dataset.dash?nums(svg.dataset.dash):[],all=v.concat(d),mx=Math.max.apply(null,all),mn=Math.min.apply(null,all),pad=3;
+    function pts(a){return a.map(function(x,i){return (a.length>1?i/(a.length-1)*(w-pad*2)+pad:w/2)+','+(h-pad-((x-mn)/((mx-mn)||1))*(h-pad*2));});}
+    if(d.length)el('polyline',{points:pts(d).join(' '),fill:'none',stroke:'#7e8a9e','stroke-width':1,'stroke-dasharray':'3 3'},svg);
+    var p=pts(v);el('polyline',{points:p.join(' '),fill:'none',stroke:'currentColor','stroke-width':1.5,'stroke-linejoin':'round','stroke-linecap':'round'},svg);
+    var l=p[p.length-1].split(',');el('circle',{cx:l[0],cy:l[1],r:3,fill:'currentColor'},svg);
+    svg.setAttribute('role','img');svg.setAttribute('aria-label','Trend, '+v.length+' points, first '+v[0]+', last '+v[v.length-1]);
+  }
+  var uid=0;
+  function bars(svg){
+    var v=nums(svg.dataset.v),W=svg.parentNode.getBoundingClientRect().width||400,H=parseFloat(svg.style.height)||120;
+    var L=26,B=svg.dataset.labels?16:2,T=6,pw=W-L,ph=H-B-T,mx=Math.max.apply(null,v),top=Math.ceil(mx/10)*10;
+    svg.setAttribute('viewBox','0 0 '+W+' '+H);
+    var id='ht'+(uid++),d=el('defs',{},svg),pt=el('pattern',{id:id,width:6,height:6,patternUnits:'userSpaceOnUse',patternTransform:'rotate(45)'},d);
+    el('rect',{width:6,height:6,fill:'rgba(255,255,255,.12)'},pt);el('rect',{width:3,height:6,fill:'rgba(255,255,255,.5)'},pt);
+    [0,.5,1].forEach(function(f){var y=T+ph-ph*f;el('line',{x1:L,x2:W,y1:y,y2:y,stroke:'#383f50','stroke-width':1},svg);var t=el('text',{x:L-6,y:y+3.5,'text-anchor':'end',fill:'#7e8a9e','font-size':10},svg);t.textContent=Math.round(top*f);});
+    var g=4,bw=(pw-g*(v.length-1))/v.length;
+    v.forEach(function(x,i){var bh=ph*x/top,xx=L+i*(bw+g),last=(i===v.length-1&&svg.dataset.partial);
+      el('rect',{x:xx,y:T+ph-bh,width:bw,height:bh,rx:2,fill:last?'url(#'+id+')':'rgba(255,255,255,.7)',stroke:last?'rgba(255,255,255,.6)':'none','stroke-width':last?1:0},svg);});
+    if(svg.dataset.prev){var y=T+ph-ph*Number(svg.dataset.prev)/top;el('line',{x1:L,x2:W,y1:y,y2:y,stroke:'#a3b0c4','stroke-width':1,'stroke-dasharray':'4 3'},svg);}
+    if(svg.dataset.labels){var lb=svg.dataset.labels.split(',');[[L,'start',lb[0]],[W,'end',lb[1]]].forEach(function(a){var t=el('text',{x:a[0],y:H-3,'text-anchor':a[1],fill:'#7e8a9e','font-size':10},svg);t.textContent=a[2];});}
+    svg.setAttribute('role','img');svg.setAttribute('aria-label','Bar chart, '+v.length+' buckets, first '+v[0]+', last '+v[v.length-1]+', max '+mx);
+  }
+  document.querySelectorAll('svg.spark[data-v]').forEach(spark);
+  document.querySelectorAll('svg.bars[data-v]').forEach(bars);
+})();
+</script>
+</body>
+</html>
