@@ -14,7 +14,10 @@ import {
 
 import AutomationService from "#/api/automation-service/automation-service.api";
 import { experimentalFeaturesService } from "#/api/experimental-features-service/experimental-features-service.api";
-import { displayErrorToast } from "#/utils/custom-toast-handlers";
+import {
+  displayErrorToast,
+  displaySuccessToast,
+} from "#/utils/custom-toast-handlers";
 import {
   __resetActiveStoreForTests,
   setActiveSelection,
@@ -78,6 +81,7 @@ vi.mock("#/api/automation-service/automation-service.api", () => ({
     createFactory: vi.fn(),
     renameFactory: vi.fn(),
     deleteFactory: vi.fn(),
+    updateAutomation: vi.fn(),
     checkHealth: vi.fn(),
   },
 }));
@@ -494,6 +498,257 @@ describe("renaming a factory", () => {
     renderAt("/automate");
     await screen.findByTestId("automation-card-a-reviewer");
     expect(screen.getByTestId("automations-add-automation")).toBeVisible();
+  });
+});
+
+describe("adding automations to a factory", () => {
+  const docsWriter = createAutomation({
+    id: "a-docs",
+    name: "Docs writer",
+    factory_id: "f-docs",
+  });
+  const digest = createAutomation({ id: "a-org", name: "Org digest" });
+  const nightly = createAutomation({ id: "a-nightly", name: "Nightly sweep" });
+  const hiddenDraft = createAutomation({
+    id: "a-draft",
+    name: "Draft test run",
+    state: "DRAFT",
+    enabled: false,
+  });
+
+  const openAddAutomations = async (
+    user: ReturnType<typeof userEvent.setup>,
+  ) => {
+    renderAt("/factories/f-core");
+    await screen.findByTestId("automation-card-a-reviewer");
+    await openFactoryAction(user, I18nKey.FACTORIES$ADD_AUTOMATIONS);
+    return screen.findByTestId("add-automations-modal");
+  };
+
+  beforeEach(() => {
+    vi.mocked(AutomationService.getAutomations).mockImplementation(
+      async (_limit, _offset, _runAs, _tag, factoryId) => {
+        const automations =
+          factoryId === "f-core"
+            ? [reviewer, triager]
+            : [reviewer, triager, docsWriter, digest, nightly, hiddenDraft];
+        return { automations, total: automations.length };
+      },
+    );
+    vi.mocked(AutomationService.updateAutomation).mockImplementation(
+      async (id) => createAutomation({ id, factory_id: "f-core" }),
+    );
+  });
+
+  it("lists only the automations that are in no factory", async () => {
+    // Arrange
+    const user = userEvent.setup();
+
+    // Act
+    const modal = await openAddAutomations(user);
+
+    // Assert
+    expect(
+      await within(modal).findByTestId("add-automations-check-a-org"),
+    ).toBeInTheDocument();
+    expect(
+      within(modal).getByTestId("add-automations-check-a-nightly"),
+    ).toBeInTheDocument();
+    expect(
+      within(modal).queryByTestId("add-automations-check-a-docs"),
+    ).not.toBeInTheDocument();
+    expect(
+      within(modal).queryByTestId("add-automations-check-a-reviewer"),
+    ).not.toBeInTheDocument();
+    expect(
+      within(modal).queryByTestId("add-automations-check-a-draft"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("filters the list by name", async () => {
+    // Arrange
+    const user = userEvent.setup();
+    const modal = await openAddAutomations(user);
+    await within(modal).findByTestId("add-automations-check-a-org");
+
+    // Act
+    await user.type(
+      within(modal).getByTestId("add-automations-filter"),
+      "NIGHT",
+    );
+
+    // Assert
+    expect(
+      within(modal).getByTestId("add-automations-check-a-nightly"),
+    ).toBeInTheDocument();
+    expect(
+      within(modal).queryByTestId("add-automations-check-a-org"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("says so when no automation matches the filter", async () => {
+    // Arrange
+    const user = userEvent.setup();
+    const modal = await openAddAutomations(user);
+    await within(modal).findByTestId("add-automations-check-a-org");
+
+    // Act
+    await user.type(within(modal).getByTestId("add-automations-filter"), "zzz");
+
+    // Assert
+    expect(
+      within(modal).getByTestId("add-automations-no-match"),
+    ).toBeInTheDocument();
+  });
+
+  it("says so when there is nothing left to add", async () => {
+    // Arrange
+    vi.mocked(AutomationService.getAutomations).mockResolvedValue({
+      automations: [reviewer, triager],
+      total: 2,
+    });
+    const user = userEvent.setup();
+
+    // Act
+    const modal = await openAddAutomations(user);
+
+    // Assert
+    expect(
+      await within(modal).findByTestId("add-automations-none"),
+    ).toBeInTheDocument();
+  });
+
+  it("adds each ticked automation to the factory and closes", async () => {
+    // Arrange
+    const user = userEvent.setup();
+    const modal = await openAddAutomations(user);
+    await user.click(
+      await within(modal).findByTestId("add-automations-check-a-org"),
+    );
+    await user.click(
+      within(modal).getByTestId("add-automations-check-a-nightly"),
+    );
+
+    // Act
+    await user.click(within(modal).getByTestId("add-automations-submit"));
+
+    // Assert
+    await waitFor(() =>
+      expect(
+        screen.queryByTestId("add-automations-modal"),
+      ).not.toBeInTheDocument(),
+    );
+    expect(AutomationService.updateAutomation).toHaveBeenCalledTimes(2);
+    expect(AutomationService.updateAutomation).toHaveBeenCalledWith("a-org", {
+      factory_id: "f-core",
+    });
+    expect(AutomationService.updateAutomation).toHaveBeenCalledWith(
+      "a-nightly",
+      {
+        factory_id: "f-core",
+      },
+    );
+    expect(displaySuccessToast).toHaveBeenCalledWith(
+      I18nKey.FACTORIES$ADD_AUTOMATIONS_SUCCESS,
+    );
+  });
+
+  it("adds nothing until an automation is ticked", async () => {
+    // Arrange
+    const user = userEvent.setup();
+    const modal = await openAddAutomations(user);
+    await within(modal).findByTestId("add-automations-check-a-org");
+
+    // Assert
+    expect(within(modal).getByTestId("add-automations-submit")).toBeDisabled();
+  });
+
+  it("selects only the automations that match the filter with Select all", async () => {
+    // Arrange
+    const user = userEvent.setup();
+    const modal = await openAddAutomations(user);
+    await within(modal).findByTestId("add-automations-check-a-org");
+    await user.type(within(modal).getByTestId("add-automations-filter"), "org");
+
+    // Act
+    await user.click(within(modal).getByTestId("add-automations-select-all"));
+    await user.click(within(modal).getByTestId("add-automations-submit"));
+
+    // Assert
+    await waitFor(() =>
+      expect(AutomationService.updateAutomation).toHaveBeenCalledTimes(1),
+    );
+    expect(AutomationService.updateAutomation).toHaveBeenCalledWith("a-org", {
+      factory_id: "f-core",
+    });
+  });
+
+  it("keeps the automations that could not be added selected so they can be retried", async () => {
+    // Arrange
+    const user = userEvent.setup();
+    vi.mocked(AutomationService.updateAutomation).mockImplementation(
+      async (id) => {
+        if (id === "a-nightly") throw new Error("Forbidden");
+        return createAutomation({ id, factory_id: "f-core" });
+      },
+    );
+    const modal = await openAddAutomations(user);
+    await user.click(
+      await within(modal).findByTestId("add-automations-check-a-org"),
+    );
+    await user.click(
+      within(modal).getByTestId("add-automations-check-a-nightly"),
+    );
+
+    // Act
+    await user.click(within(modal).getByTestId("add-automations-submit"));
+
+    // Assert
+    await waitFor(() =>
+      expect(displayErrorToast).toHaveBeenCalledWith(
+        I18nKey.FACTORIES$ADD_AUTOMATIONS_PARTIAL,
+      ),
+    );
+    expect(displaySuccessToast).toHaveBeenCalledTimes(1);
+    expect(screen.getByTestId("add-automations-modal")).toBeInTheDocument();
+    expect(
+      within(modal)
+        .getByTestId("add-automations-check-a-nightly")
+        .closest("label"),
+    ).toHaveTextContent(I18nKey.FACTORIES$ADD_AUTOMATIONS_ROW_FAILED);
+    expect(
+      within(modal).getByTestId("add-automations-check-a-nightly"),
+    ).toBeChecked();
+  });
+
+  it("finds an automation on a later page of the org's list", async () => {
+    // Arrange
+    const filler = Array.from({ length: 50 }, (_, index) =>
+      createAutomation({ id: `a-filler-${index}`, name: `Filler ${index}` }),
+    );
+    const late = createAutomation({ id: "a-late", name: "Late arrival" });
+    vi.mocked(AutomationService.getAutomations).mockImplementation(
+      async (_limit, offset, _runAs, _tag, factoryId) => {
+        if (factoryId === "f-core")
+          return { automations: [reviewer], total: 1 };
+        return offset === 0
+          ? { automations: filler, total: 51 }
+          : { automations: [late], total: 51 };
+      },
+    );
+    const user = userEvent.setup();
+    const modal = await openAddAutomations(user);
+
+    // Act
+    await user.type(
+      within(modal).getByTestId("add-automations-filter"),
+      "late",
+    );
+
+    // Assert
+    expect(
+      await within(modal).findByTestId("add-automations-check-a-late"),
+    ).toBeInTheDocument();
   });
 });
 

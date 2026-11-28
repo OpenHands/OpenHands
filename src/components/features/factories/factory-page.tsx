@@ -1,5 +1,5 @@
 import { useMemo, useState, type ReactNode } from "react";
-import { Pencil, ScrollText, Trash2 } from "lucide-react";
+import { Pencil, Plus, ScrollText, Trash2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useParams } from "react-router";
 import { useNavigation } from "#/context/navigation-context";
@@ -14,6 +14,7 @@ import {
   type SubPageNavItem,
 } from "#/components/features/manifest/manifest-subpage-layout";
 import { KebabMenu } from "#/components/features/automations/kebab-menu";
+import { AddAutomationsModal } from "#/components/features/factories/add-automations-modal";
 import { FactoryNameModal } from "#/components/features/factories/factory-name-modal";
 import { BackNavButton } from "#/components/shared/buttons/back-nav-button";
 import { WorklogPanel } from "#/components/features/factories/worklog/worklog-panel";
@@ -62,6 +63,7 @@ export function FactoryPage({
   const { navigate } = useNavigation();
   const renameFactory = useRenameFactory();
   const deleteFactory = useDeleteFactory();
+  const [isAddAutomationsOpen, setIsAddAutomationsOpen] = useState(false);
   const [isRenameOpen, setIsRenameOpen] = useState(false);
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
   const { isLoading: isCapabilitiesLoading, isSupported } =
@@ -181,6 +183,11 @@ export function FactoryPage({
             <KebabMenu
               items={[
                 {
+                  label: t(I18nKey.FACTORIES$ADD_AUTOMATIONS),
+                  icon: <Plus className="size-4" aria-hidden />,
+                  onClick: () => setIsAddAutomationsOpen(true),
+                },
+                {
                   label: t(I18nKey.FACTORIES$RENAME),
                   icon: <Pencil className="size-4" aria-hidden />,
                   onClick: () => setIsRenameOpen(true),
@@ -195,6 +202,11 @@ export function FactoryPage({
           </div>
         )}
       </div>
+      <AddAutomationsModal
+        factory={factory}
+        isOpen={isAddAutomationsOpen}
+        onClose={() => setIsAddAutomationsOpen(false)}
+      />
       <FactoryNameModal
         isOpen={isRenameOpen}
         title={t(I18nKey.FACTORIES$RENAME_TITLE)}

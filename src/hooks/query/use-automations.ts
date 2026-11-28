@@ -276,6 +276,50 @@ export function useChangeAutomationFactory() {
   });
 }
 
+const FACTORY_ASSIGN_BATCH_SIZE = 5;
+
+/**
+ * Put several automations in a factory. One that fails does not stop the
+ * others; the result names the ids that failed. A few requests run at once so
+ * a long selection does not flood the service.
+ */
+export function useAddAutomationsToFactory() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      ids,
+      factoryId,
+    }: {
+      ids: readonly string[];
+      factoryId: string;
+    }) => {
+      const failedIds: string[] = [];
+      for (
+        let start = 0;
+        start < ids.length;
+        start += FACTORY_ASSIGN_BATCH_SIZE
+      ) {
+        const batch = ids.slice(start, start + FACTORY_ASSIGN_BATCH_SIZE);
+        // Sequential batches are the point: each await bounds the requests in flight.
+        const results = await Promise.allSettled(
+          batch.map((id) =>
+            AutomationService.updateAutomation(id, { factory_id: factoryId }),
+          ),
+        );
+        results.forEach((result, index) => {
+          if (result.status === "rejected") failedIds.push(batch[index]!);
+        });
+      }
+      return { failedIds };
+    },
+    meta: { disableToast: true },
+    onSettled: () => {
+      invalidateAutomationLists(queryClient);
+      queryClient.invalidateQueries({ queryKey: AUTOMATION_DETAIL_QUERY_KEY });
+    },
+  });
+}
+
 export function useDeleteAutomationDraft() {
   const queryClient = useQueryClient();
   return useMutation({
