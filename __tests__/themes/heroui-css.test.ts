@@ -54,4 +54,14 @@ describe("HeroUI v3 CSS integration", () => {
     expect(css).toMatch(/--field-border:\s*var\(--oh-border\)/);
     expect(css).toMatch(/--overlay:\s*var\(--oh-overlay\)/);
   });
+
+  it("restores normal word breaking for tooltips rather than break-all (#19647)", () => {
+    // Upstream HeroUI v3 applies break-all to .tooltip. Canvas restores
+    // normal word-break with overflow-wrap so whole words do not break mid-word.
+    const tooltipBlocks = [...css.matchAll(/\.tooltip\s*\{([^}]+)\}/g)];
+    expect(tooltipBlocks.length).toBeGreaterThan(0);
+    const lastTooltipBlock = tooltipBlocks[tooltipBlocks.length - 1][1];
+    expect(lastTooltipBlock).toMatch(/word-break:\s*normal/);
+    expect(lastTooltipBlock).toMatch(/overflow-wrap:\s*anywhere/);
+  });
 });
