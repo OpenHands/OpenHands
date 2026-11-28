@@ -20,6 +20,7 @@ import AutomationTemplates, {
 import type { Backend } from "#/api/backend-registry/types";
 import {
   getCloudOrganizationMe,
+  getCloudOrganizationMember,
   getCloudOrganizations,
   getCurrentCloudApiKey,
 } from "#/api/cloud/organization-service.api";
@@ -52,6 +53,7 @@ vi.mock("#/api/cloud/organization-service.api", async (importOriginal) => ({
   >()),
   getCloudOrganizations: vi.fn(),
   getCloudOrganizationMe: vi.fn(),
+  getCloudOrganizationMember: vi.fn(),
   getCurrentCloudApiKey: vi.fn(),
 }));
 
@@ -996,6 +998,208 @@ describe("AutomationsList — created-by filter on cloud workspaces", () => {
       undefined,
       undefined,
     );
+  });
+});
+
+describe("AutomationsList — group by owner", () => {
+  const TEAM_ORG_ID = "org-team";
+  const CURRENT_USER_ID = "user-me";
+  const cloudBackend: Backend = {
+    id: "cloud-1",
+    name: "Production",
+    host: "https://app.all-hands.dev",
+    apiKey: "bearer-key",
+    kind: "cloud",
+  };
+  const mine = createAutomation({
+    id: "a-mine",
+    name: "Alpha widget",
+    user_id: CURRENT_USER_ID,
+  });
+  const alsoMine = createAutomation({
+    id: "a-also-mine",
+    name: "Beta widget",
+    user_id: CURRENT_USER_ID,
+  });
+  const theirs = createAutomation({
+    id: "a-theirs",
+    name: "Gamma widget",
+    user_id: "user-teammate",
+  });
+  const serviceRun = createAutomation({
+    id: "a-service",
+    name: "Delta widget",
+    user_id: "svc-1",
+    run_as_kind: "service",
+  });
+  const unowned = createAutomation({ id: "a-unowned", name: "Epsilon widget" });
+
+  const sectionTitles = () =>
+    screen
+      .getAllByRole("heading", { level: 2 })
+      .map((heading) => heading.textContent);
+
+  const sectionOf = (title: string) =>
+    within(
+      screen
+        .getByRole("heading", { level: 2, name: title })
+        .closest("section") as HTMLElement,
+    );
+
+  async function groupByOwner(user: ReturnType<typeof userEvent.setup>) {
+    await user.click(
+      within(await screen.findByTestId("automations-group-by")).getByTestId(
+        "dropdown-trigger",
+      ),
+    );
+    await user.click(screen.getByTestId("automations-group-by-owner"));
+  }
+
+  beforeEach(() => {
+    vi.mocked(AutomationService.getAutomations).mockResolvedValue({
+      automations: [theirs, unowned, mine, serviceRun, alsoMine],
+      total: 5,
+    });
+    vi.mocked(AutomationService.getAutomationRuns).mockResolvedValue({
+      runs: [createRun({})],
+      total: 1,
+    });
+    vi.mocked(getCloudOrganizations).mockResolvedValue({
+      items: [
+        { id: TEAM_ORG_ID, name: "Widget team", is_personal: false },
+        { id: CURRENT_USER_ID, name: "Personal", is_personal: true },
+      ],
+      currentOrgId: TEAM_ORG_ID,
+    });
+    vi.mocked(getCurrentCloudApiKey).mockResolvedValue({
+      orgId: null,
+      isLegacyKey: true,
+    });
+    vi.mocked(getCloudOrganizationMe).mockImplementation(async (orgId) => ({
+      orgId,
+      userId: CURRENT_USER_ID,
+      role: "member",
+      permissions: ["view_automations"],
+    }));
+    vi.mocked(getCloudOrganizationMember).mockImplementation(
+      async (_orgId, userId) => {
+        if (userId === CURRENT_USER_ID) {
+          return { id: userId, email: "me@example.com" } as never;
+        }
+        if (userId === "user-teammate") {
+          return { id: userId, email: "teammate@example.com" } as never;
+        }
+        throw new Error("Not a member");
+      },
+    );
+    setRegisteredBackends([cloudBackend]);
+    setActiveSelection({ backendId: cloudBackend.id, orgId: TEAM_ORG_ID });
+  });
+
+  it("sections a team workspace by who the automations run as", async () => {
+    // Arrange
+    const user = userEvent.setup();
+    renderAt("/automations", <AutomationsList />);
+    await screen.findByTestId("automation-card-a-mine");
+
+    // Act
+    await groupByOwner(user);
+
+    // Assert
+    await screen.findByRole("heading", {
+      level: 2,
+      name: "teammate@example.com",
+    });
+    expect(sectionTitles()).toEqual([
+      I18nKey.AUTOMATIONS$OWNER_YOU,
+      "teammate@example.com",
+      I18nKey.AUTOMATIONS$SERVICE_ACCOUNT_LABEL,
+      I18nKey.AUTOMATIONS$NO_OWNER,
+    ]);
+    expect(
+      sectionOf(I18nKey.AUTOMATIONS$OWNER_YOU).getByTestId(
+        "automation-card-a-mine",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      sectionOf(I18nKey.AUTOMATIONS$OWNER_YOU).getByTestId(
+        "automation-card-a-also-mine",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      sectionOf("teammate@example.com").getByTestId("automation-card-a-theirs"),
+    ).toBeInTheDocument();
+    expect(
+      sectionOf(I18nKey.AUTOMATIONS$SERVICE_ACCOUNT_LABEL).getByTestId(
+        "automation-card-a-service",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      sectionOf(I18nKey.AUTOMATIONS$NO_OWNER).getByTestId(
+        "automation-card-a-unowned",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("names an owner by id when the member lookup fails", async () => {
+    // Arrange
+    vi.mocked(getCloudOrganizationMember).mockRejectedValue(
+      new Error("Not a member"),
+    );
+    const user = userEvent.setup();
+    renderAt("/automations", <AutomationsList />);
+    await screen.findByTestId("automation-card-a-mine");
+
+    // Act
+    await groupByOwner(user);
+
+    // Assert
+    expect(
+      await screen.findByRole("heading", { level: 2, name: "user-teammate" }),
+    ).toBeInTheDocument();
+  });
+
+  it("looks up members only once the list is grouped by owner", async () => {
+    // Act
+    renderAt("/automations", <AutomationsList />);
+    await screen.findByTestId("automation-card-a-mine");
+
+    // Assert
+    expect(getCloudOrganizationMember).not.toHaveBeenCalled();
+  });
+
+  it("keeps the grouping for the next visit", async () => {
+    // Arrange
+    const user = userEvent.setup();
+    const { unmount } = renderAt("/automations", <AutomationsList />);
+    await screen.findByTestId("automation-card-a-mine");
+    await groupByOwner(user);
+    unmount();
+
+    // Act
+    renderAt("/automations", <AutomationsList />);
+
+    // Assert
+    expect(
+      await screen.findByRole("heading", {
+        level: 2,
+        name: "teammate@example.com",
+      }),
+    ).toBeInTheDocument();
+  });
+
+  it("offers no owner grouping on a personal workspace, and returns to the status sections", async () => {
+    // Arrange
+    window.localStorage.setItem("openhands-automations-group-by", "owner");
+    setActiveSelection({ backendId: cloudBackend.id, orgId: CURRENT_USER_ID });
+
+    // Act
+    renderAt("/automations", <AutomationsList />);
+    await screen.findByTestId("automation-card-a-mine");
+
+    // Assert
+    expect(sectionTitles()).toEqual([I18nKey.AUTOMATIONS$ACTIVE]);
+    expect(screen.queryByTestId("automations-group-by")).toBeNull();
   });
 });
 
