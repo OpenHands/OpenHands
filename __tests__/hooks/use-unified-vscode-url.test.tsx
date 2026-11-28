@@ -14,6 +14,7 @@ import { useRuntimeIsReady } from "#/hooks/use-runtime-is-ready";
 import type { ResolvedActiveBackend } from "#/api/backend-registry/types";
 import type { V1SandboxInfo } from "#/api/cloud/sandbox-service.types";
 import type { AppConversation } from "#/api/conversation-service/agent-server-conversation-service.types";
+import { ExecutionStatus } from "#/types/agent-server/core/base/common";
 import { I18nKey } from "#/i18n/declaration";
 
 const { mockUseConversationId } = vi.hoisted(() => ({
@@ -761,5 +762,100 @@ describe("useUnifiedVSCodeUrl", () => {
     expect(result.current.isUnavailable).toBe(false);
     expect(AgentServerConversationService.getVSCodeUrl).not.toHaveBeenCalled();
     expect(ConversationService.getVSCodeUrl).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    {
+      label: "not running",
+      status: { enabled: true, running: false },
+    },
+    {
+      label: "disabled",
+      status: { enabled: false, running: false },
+    },
+  ])(
+    "probes capability and hides the control on a paused local conversation when editor is $label",
+    async ({ status }) => {
+      // Arrange
+      vi.mocked(useActiveBackend).mockReturnValue(localBackend);
+      vi.mocked(useRuntimeIsReady).mockReturnValue(false);
+      vi.mocked(useActiveConversation).mockReturnValue({
+        data: makeConversation({ execution_status: ExecutionStatus.PAUSED }),
+      } as unknown as ReturnType<typeof useActiveConversation>);
+      vi.mocked(
+        AgentServerConversationService.getVSCodeStatus,
+      ).mockResolvedValue(status);
+
+      // Act
+      const { result } = renderHook(() => useUnifiedVSCodeUrl(), {
+        wrapper: createWrapper(),
+      });
+
+      // Assert
+      await waitFor(() => expect(result.current.isUnavailable).toBe(true));
+      expect(
+        AgentServerConversationService.getVSCodeStatus,
+      ).toHaveBeenCalledOnce();
+      expect(
+        AgentServerConversationService.getVSCodeUrl,
+      ).not.toHaveBeenCalled();
+    },
+  );
+
+  it("keeps the editor available on a paused local conversation when the editor is running", async () => {
+    // Arrange
+    const routedUrl = `${window.location.origin}/vscode/?tkn=abc&folder=workspace`;
+    vi.mocked(useActiveBackend).mockReturnValue(localBackend);
+    vi.mocked(useRuntimeIsReady).mockReturnValue(false);
+    vi.mocked(useActiveConversation).mockReturnValue({
+      data: makeConversation({ execution_status: ExecutionStatus.PAUSED }),
+    } as unknown as ReturnType<typeof useActiveConversation>);
+    vi.mocked(AgentServerConversationService.getVSCodeStatus).mockResolvedValue(
+      {
+        enabled: true,
+        running: true,
+      },
+    );
+    vi.mocked(AgentServerConversationService.getVSCodeUrl).mockResolvedValue({
+      vscode_url: routedUrl,
+    });
+
+    // Act
+    const { result } = renderHook(() => useUnifiedVSCodeUrl(), {
+      wrapper: createWrapper(),
+    });
+
+    // Assert
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(
+      AgentServerConversationService.getVSCodeStatus,
+    ).toHaveBeenCalledOnce();
+    expect(AgentServerConversationService.getVSCodeUrl).toHaveBeenCalledOnce();
+    expect(result.current.data).toEqual({ url: routedUrl, error: null });
+    expect(result.current.isUnavailable).toBe(false);
+  });
+
+  it("keeps the control visible when the capability probe fails on a paused local conversation", async () => {
+    // Arrange
+    const error = new Error("Agent server unreachable");
+    vi.mocked(useActiveBackend).mockReturnValue(localBackend);
+    vi.mocked(useRuntimeIsReady).mockReturnValue(false);
+    vi.mocked(useActiveConversation).mockReturnValue({
+      data: makeConversation({ execution_status: ExecutionStatus.PAUSED }),
+    } as unknown as ReturnType<typeof useActiveConversation>);
+    vi.mocked(AgentServerConversationService.getVSCodeStatus).mockRejectedValue(
+      error,
+    );
+
+    // Act
+    const { result } = renderHook(() => useUnifiedVSCodeUrl(), {
+      wrapper: createWrapper(),
+    });
+
+    // Assert
+    await waitFor(() => expect(result.current.isError).toBe(true));
+    expect(result.current.error).toBe(error);
+    expect(result.current.isUnavailable).toBe(false);
+    expect(AgentServerConversationService.getVSCodeUrl).not.toHaveBeenCalled();
   });
 });

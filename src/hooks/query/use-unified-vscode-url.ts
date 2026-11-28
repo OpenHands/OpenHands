@@ -10,6 +10,7 @@ import { useRuntimeIsReady } from "#/hooks/use-runtime-is-ready";
 import { useActiveConversation } from "#/hooks/query/use-active-conversation";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import { useCloudSandbox } from "#/hooks/query/use-cloud-sandbox";
+import { isExecutionPaused } from "#/utils/status";
 import {
   getOriginVSCodeBasePath,
   isVSCodeUrlServedByOrigin,
@@ -32,6 +33,10 @@ export const useUnifiedVSCodeUrl = () => {
   const sessionApiKey = conversation?.session_api_key ?? null;
   const sandboxId = conversation?.sandbox_id ?? null;
   const isCloud = active.backend.kind === "cloud";
+  // Paused Local conversations still have a reachable agent-server, so probe
+  // editor availability instead of leaving `isUnavailable` false until click.
+  const canQueryLocalEditor =
+    runtimeIsReady || isExecutionPaused(conversation?.execution_status);
 
   // The origin half of the availability question. The agent-server will
   // happily report an editor this page has no route to — see
@@ -70,7 +75,7 @@ export const useUnifiedVSCodeUrl = () => {
         sessionApiKey,
       ),
     enabled:
-      !isCloud && originServesEditor && runtimeIsReady && !!conversationId,
+      !isCloud && originServesEditor && canQueryLocalEditor && !!conversationId,
     refetchOnMount: true,
   });
 
@@ -107,7 +112,7 @@ export const useUnifiedVSCodeUrl = () => {
     enabled:
       !isCloud &&
       originServesEditor &&
-      runtimeIsReady &&
+      canQueryLocalEditor &&
       !!conversationId &&
       editorIsAvailable,
     refetchOnMount: true,
