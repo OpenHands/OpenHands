@@ -25,6 +25,14 @@ const GENERIC_SECRET_PATTERNS: RegExp[] = [
   /\blin_api_[A-Za-z0-9]{10,}\b/g,
   // JWT-shaped values (three base64url segments starting with "eyJ").
   /\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]{5,}\b/g,
+  // OpenAI API keys (legacy sk- and project-scoped sk-proj-).
+  /\bsk-(?:proj-)?[A-Za-z0-9_-]{20,}\b/g,
+  // Anthropic Claude API keys (sk-ant-...).
+  /\bsk-ant-[A-Za-z0-9_-]{16,}\b/g,
+  // Google Gemini / Cloud API keys (AIzaSy...).
+  /\bAIzaSy[A-Za-z0-9_-]{25,}\b/g,
+  // Hugging Face access tokens (hf_...).
+  /\bhf_[A-Za-z0-9]{16,}\b/g,
 ];
 
 // "Bearer <token>" keeps its prefix so the message stays readable.

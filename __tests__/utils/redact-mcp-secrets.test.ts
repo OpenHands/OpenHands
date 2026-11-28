@@ -50,6 +50,37 @@ describe("redactMcpSecrets", () => {
     expect(redacted).toContain(REDACTED_MCP_SECRET_VALUE);
   });
 
+  it("masks frontier model API keys (OpenAI, Anthropic, Gemini, Hugging Face)", () => {
+    const errorText =
+      "Failed to initialize with OPENAI_API_KEY=sk-proj-1234567890abcdefghijklmnopqrstuvwxyz12345 " +
+      "or legacy sk-1234567890abcdefghijklmnopqrstuvwxyz12345. " +
+      "ANTHROPIC_API_KEY=sk-ant-api03-abcdefghijklmnopqrstuvwxyz12345, " +
+      "GEMINI_API_KEY=AIzaSyD-1234567890abcdefghijklmnopqrstuv, " +
+      "HUGGINGFACE_TOKEN=hf_abcdefghijklmnopqrstuvwxyz12345678.";
+
+    const redacted = redactMcpSecrets(errorText);
+
+    expect(redacted).not.toContain(
+      "sk-proj-1234567890abcdefghijklmnopqrstuvwxyz12345",
+    );
+    expect(redacted).not.toContain(
+      "sk-1234567890abcdefghijklmnopqrstuvwxyz12345",
+    );
+    expect(redacted).not.toContain(
+      "sk-ant-api03-abcdefghijklmnopqrstuvwxyz12345",
+    );
+    expect(redacted).not.toContain("AIzaSyD-1234567890abcdefghijklmnopqrstuv");
+    expect(redacted).not.toContain("hf_abcdefghijklmnopqrstuvwxyz12345678");
+
+    expect(redacted).toBe(
+      `Failed to initialize with OPENAI_API_KEY=${REDACTED_MCP_SECRET_VALUE} ` +
+        `or legacy ${REDACTED_MCP_SECRET_VALUE}. ` +
+        `ANTHROPIC_API_KEY=${REDACTED_MCP_SECRET_VALUE}, ` +
+        `GEMINI_API_KEY=${REDACTED_MCP_SECRET_VALUE}, ` +
+        `HUGGINGFACE_TOKEN=${REDACTED_MCP_SECRET_VALUE}.`,
+    );
+  });
+
   it("does not treat the redaction placeholder or very short values as secrets", () => {
     const server: MCPServerConfig = {
       id: "stdio-0",
