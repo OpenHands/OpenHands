@@ -1,7 +1,8 @@
 import { useCallback } from "react";
+import { useTranslation } from "react-i18next";
 import { useConversationWebSocket } from "#/contexts/conversation-websocket-context";
 import { useOptionalConversationId } from "#/hooks/use-conversation-id";
-import { MessageContent } from "#/api/conversation-service/agent-server-conversation-service.types";
+import { buildUserMessageContent } from "#/utils/send-message-content";
 
 interface SendResult {
   queued: boolean; // true if message was queued for later delivery
@@ -18,6 +19,7 @@ export function useSendMessage() {
 
   // Get agent-server context (null outside a conversation provider)
   const conversationContext = useConversationWebSocket();
+  const { t } = useTranslation("openhands");
 
   const send = useCallback(
     async (event: Record<string, unknown>): Promise<SendResult> => {
@@ -33,35 +35,32 @@ export function useSendMessage() {
           };
         };
 
-        if (action === "message" && args?.content) {
-          // Build agent-server message content array
-          const content: Array<MessageContent> = [
-            {
-              type: "text",
-              text: args.content,
-            },
-          ];
+        const hasAttachments =
+          (args?.image_urls?.length ?? 0) > 0 ||
+          (args?.file_urls?.length ?? 0) > 0;
 
-          // Add images if present - using SDK's ImageContent format
-          if (args.image_urls && args.image_urls.length > 0) {
-            content.push({
-              type: "image",
-              image_urls: args.image_urls,
-            });
-          }
+        if (action === "message" && (args?.content || hasAttachments)) {
+          // The shared builder keeps the WebSocket payload identical to the
+          // REST path's, including uploaded-file references (previously
+          // typed but never forwarded here).
+          const content = buildUserMessageContent({
+            text: args?.content ?? "",
+            imageUrls: args?.image_urls,
+            fileUrls: args?.file_urls,
+            t,
+          });
 
           // Send via WebSocket context (uses correct host/port)
-          const result = await conversationContext.sendMessage({
+          return await conversationContext.sendMessage({
             role: "user",
             content,
           });
-          return result;
         }
         return { queued: false };
       }
       return { queued: false };
     },
-    [conversationContext, conversationId],
+    [conversationContext, conversationId, t],
   );
 
   return { send };

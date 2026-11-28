@@ -6,12 +6,14 @@ import {
   uploadFilesToConversation,
 } from "#/api/conversation-file-upload.api";
 import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
-import type { SendMessageRequest } from "#/api/conversation-service/agent-server-conversation-service.types";
 import { convertImageToBase64 } from "#/utils/convert-image-to-base-64";
 import { displayErrorToast } from "#/utils/custom-toast-handlers";
 import { partitionImagesForUpload } from "#/components/features/chat/utils/chat-input.utils";
 import { validateFiles } from "#/utils/file-validation";
-import { I18nKey } from "#/i18n/declaration";
+import {
+  buildUserMessageContent,
+  buildUserMessagePrompt,
+} from "#/utils/send-message-content";
 
 export interface SendMessageWithAttachmentsResult {
   text: string;
@@ -69,23 +71,17 @@ export async function sendMessageWithAttachments(options: {
   }
   skippedFiles.forEach((file) => displayErrorToast(file.reason));
 
-  const filePrompt = `${t(I18nKey.CHAT_INTERFACE$AUGMENTED_PROMPT_FILES_TITLE)}: ${uploadedFiles.join("\n\n")}`;
-  const prompt =
-    uploadedFiles.length > 0 ? `${content}\n\n${filePrompt}` : content;
-
   const timestamp = new Date().toISOString();
 
-  const messageContent: SendMessageRequest = {
-    role: "user",
-    content: [{ type: "text", text: prompt }],
+  const messageContent = {
+    role: "user" as const,
+    content: buildUserMessageContent({
+      text: content,
+      imageUrls,
+      fileUrls: uploadedFiles,
+      t,
+    }),
   };
-
-  if (imageUrls.length > 0) {
-    messageContent.content.push({
-      type: "image",
-      image_urls: imageUrls,
-    });
-  }
 
   assertActiveEnvironment(environment);
   await AgentServerConversationService.sendMessage(
@@ -96,7 +92,13 @@ export async function sendMessageWithAttachments(options: {
 
   return {
     text: content,
-    content: prompt,
+    // The optimistic bubble mirrors the sent prompt, file augmentation
+    // included.
+    content: buildUserMessagePrompt({
+      text: content,
+      fileUrls: uploadedFiles,
+      t,
+    }),
     imageUrls,
     fileUrls: uploadedFiles,
     timestamp,

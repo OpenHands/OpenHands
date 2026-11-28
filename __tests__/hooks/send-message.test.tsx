@@ -100,9 +100,60 @@ describe("sending chat messages", () => {
       }),
     ).resolves.toEqual({ queued: true });
     expect(sendMessage).toHaveBeenCalledOnce();
+    // Uploaded-file references are forwarded through the shared payload
+    // builder — the same augmentation the REST send path produces.
     expect(sendMessage).toHaveBeenCalledWith({
       role: "user",
-      content: [{ type: "text", text: "Explain this code" }],
+      content: [
+        {
+          type: "text",
+          text: "Explain this code\n\nCHAT_INTERFACE$AUGMENTED_PROMPT_FILES_TITLE: file:///workspace/example.ts",
+        },
+      ],
+    });
+  });
+
+  it("builds the same payload as the REST send path for text, images, and files", async () => {
+    const sendMessage = vi.fn().mockResolvedValue({ queued: false });
+    const { result } = renderSendMessageHook({ sendMessage });
+
+    await result.current.send({
+      action: "message",
+      args: {
+        content: "Review this",
+        image_urls: ["data:image/png;base64,shot"],
+        file_urls: ["/workspace/notes.txt"],
+      },
+    });
+
+    expect(sendMessage).toHaveBeenCalledWith({
+      role: "user",
+      content: [
+        {
+          type: "text",
+          text: "Review this\n\nCHAT_INTERFACE$AUGMENTED_PROMPT_FILES_TITLE: /workspace/notes.txt",
+        },
+        { type: "image", image_urls: ["data:image/png;base64,shot"] },
+      ],
+    });
+  });
+
+  it("sends an image-only message instead of dropping it", async () => {
+    const sendMessage = vi.fn().mockResolvedValue({ queued: false });
+    const { result } = renderSendMessageHook({ sendMessage });
+
+    await expect(
+      result.current.send({
+        action: "message",
+        args: { content: "", image_urls: ["data:image/png;base64,shot"] },
+      }),
+    ).resolves.toEqual({ queued: false });
+    expect(sendMessage).toHaveBeenCalledWith({
+      role: "user",
+      content: [
+        { type: "text", text: "" },
+        { type: "image", image_urls: ["data:image/png;base64,shot"] },
+      ],
     });
   });
 
