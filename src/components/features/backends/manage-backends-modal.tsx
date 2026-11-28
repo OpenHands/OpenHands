@@ -97,7 +97,22 @@ export function ManageBackendsModal({
   const modalTitle =
     isLockedToCloud && !isCookieAuthBackend
       ? t(I18nKey.BACKEND$RECONNECT_CLOUD_TITLE)
-      : t(I18nKey.BACKEND$MANAGE_TITLE);
+      : recoveryMode && !isLockedToCloud
+        ? t(I18nKey.BACKEND$RECOVERY_TITLE)
+        : t(I18nKey.BACKEND$MANAGE_TITLE);
+  // The gate has no close control, so the description has to carry the reason
+  // and the heading an id for screen readers to read as the dialog's name.
+  // Locked-to-Cloud recovery reconnects an existing backend instead of adding
+  // one, so the reason has to name that action too.
+  const reconnectOnly =
+    recoveryMode && isLockedToCloud && lockedCloudBackend !== null;
+  const titleId = recoveryMode ? "manage-backends-title" : undefined;
+  const recoveryReasonId = recoveryMode
+    ? "manage-backends-recovery-reason"
+    : undefined;
+  const recoveryReason = reconnectOnly
+    ? t(I18nKey.BACKEND$RECOVERY_REASON_RECONNECT)
+    : t(I18nKey.BACKEND$RECOVERY_REASON);
   const [pendingRemoval, setPendingRemoval] =
     React.useState<PendingRemoval | null>(null);
   const [editingBackend, setEditingBackend] = React.useState<Backend | null>(
@@ -161,6 +176,7 @@ export function ManageBackendsModal({
         closeOnEscape={isClosable}
         closeOnBackdropClick={isClosable}
         aria-label={modalTitle}
+        aria-describedby={recoveryReasonId}
       >
         <div
           data-testid="manage-backends-modal"
@@ -185,50 +201,65 @@ export function ManageBackendsModal({
           ) : (
             <>
               <div className={cn("p-5", !recoveryMode && "pr-12")}>
-                <h2 className={modalTitleLgClassName}>{modalTitle}</h2>
+                <h2 id={titleId} className={modalTitleLgClassName}>
+                  {modalTitle}
+                </h2>
+                {recoveryReasonId ? (
+                  <p
+                    id={recoveryReasonId}
+                    data-testid="manage-backends-recovery-reason"
+                    className="mt-2 text-sm text-text-secondary"
+                  >
+                    {recoveryReason}
+                  </p>
+                ) : null}
               </div>
 
               <div className="flex min-h-0 flex-1 flex-col px-5">
-                <div
-                  className="flex-1 overflow-auto rounded-md border border-border bg-surface-raised custom-scrollbar-always"
-                  data-testid="manage-backends-list"
-                >
-                  {backends.length === 0 ? (
-                    <p className="px-3 py-6 text-center text-sm text-text-secondary">
-                      {t(I18nKey.BACKEND$MANAGE_EMPTY)}
-                    </p>
-                  ) : (
-                    <ul className="divide-y divide-border">
-                      {backends.map((backend) => (
-                        <BackendRow
-                          key={backend.id}
-                          backend={backend}
-                          health={healthByBackendId[backend.id]}
-                          orgLabel={resolveBackendOrgLabel(
-                            backend,
-                            cloudOrgs,
-                            currentUserIds,
-                            personalWorkspaceLabel,
-                          )}
-                          onSelect={() => handleSelectBackend(backend)}
-                          onEdit={() => setEditingBackend(backend)}
-                          onRemove={() =>
-                            setPendingRemoval({
-                              id: backend.id,
-                              name: backend.name,
-                              marsSessionId: backend.marsSessionId,
-                            })
-                          }
-                          onLogin={
-                            backend.authMode === "cookie"
-                              ? undefined
-                              : (apiKey) => handleCloudLogin(backend, apiKey)
-                          }
-                        />
-                      ))}
-                    </ul>
-                  )}
-                </div>
+                {/* The recovery reason already says a backend is needed, so an
+                    empty list would only repeat it in different words. */}
+                {recoveryMode && backends.length === 0 ? null : (
+                  <div
+                    className="flex-1 overflow-auto rounded-md border border-border bg-surface-raised custom-scrollbar-always"
+                    data-testid="manage-backends-list"
+                  >
+                    {backends.length === 0 ? (
+                      <p className="px-3 py-6 text-center text-sm text-text-secondary">
+                        {t(I18nKey.BACKEND$MANAGE_EMPTY)}
+                      </p>
+                    ) : (
+                      <ul className="divide-y divide-border">
+                        {backends.map((backend) => (
+                          <BackendRow
+                            key={backend.id}
+                            backend={backend}
+                            health={healthByBackendId[backend.id]}
+                            orgLabel={resolveBackendOrgLabel(
+                              backend,
+                              cloudOrgs,
+                              currentUserIds,
+                              personalWorkspaceLabel,
+                            )}
+                            onSelect={() => handleSelectBackend(backend)}
+                            onEdit={() => setEditingBackend(backend)}
+                            onRemove={() =>
+                              setPendingRemoval({
+                                id: backend.id,
+                                name: backend.name,
+                                marsSessionId: backend.marsSessionId,
+                              })
+                            }
+                            onLogin={
+                              backend.authMode === "cookie"
+                                ? undefined
+                                : (apiKey) => handleCloudLogin(backend, apiKey)
+                            }
+                          />
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                )}
               </div>
 
               <div className="flex justify-end gap-2 p-5">
@@ -252,7 +283,13 @@ export function ManageBackendsModal({
                     testId="manage-backends-add"
                     startContent={<Plus width={14} height={14} />}
                   >
-                    {t(I18nKey.BACKEND$ADD)}
+                    {t(
+                      reconnectOnly
+                        ? I18nKey.BACKEND$RECONNECT_CLOUD
+                        : recoveryMode
+                          ? I18nKey.BACKEND$ADD_TO_CONTINUE
+                          : I18nKey.BACKEND$ADD,
+                    )}
                   </BrandButton>
                 )}
                 {recoveryMode ? null : (
