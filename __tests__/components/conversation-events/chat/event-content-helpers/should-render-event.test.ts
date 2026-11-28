@@ -5,7 +5,6 @@ import {
   isReactionResult,
   shouldRenderEvent,
 } from "#/components/conversation-events/chat/event-content-helpers/should-render-event";
-import { CHILD_CONVERSATION_RESULT_PREFIX } from "#/constants/child-conversation";
 import { SECRET_REQUEST_RESULT_PREFIX } from "#/constants/secret-request";
 import {
   createPlanningFileEditorActionEvent,
@@ -286,7 +285,6 @@ describe("shouldRenderEvent - /goal loop re-prompts", () => {
   });
 
   it.each([
-    `${CHILD_CONVERSATION_RESULT_PREFIX}{"status":"launched","target":"local"}`,
     `${SECRET_REQUEST_RESULT_PREFIX}{"status":"saved","name":"GITHUB_TOKEN"}`,
   ])("hides the client tool result the frontend posts back: %s", (text) => {
     expect(shouldRenderEvent(makeUserMessage(text))).toBe(false);

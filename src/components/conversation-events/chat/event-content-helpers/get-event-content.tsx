@@ -1,7 +1,6 @@
 import { Trans } from "react-i18next";
 import React from "react";
 import { CANVAS_UI_CLIENT_TOOL_NAME } from "#/constants/canvas-ui";
-import { LAUNCH_CHILD_CONVERSATION_TOOL_NAME } from "#/constants/child-conversation";
 import { REQUEST_SECRET_TOOL_NAME } from "#/constants/secret-request";
 import {
   OpenHandsEvent,
@@ -222,13 +221,12 @@ const getObservationEventTitle = (
     case "CanvasUIObservation":
       observationKey = "OBSERVATION_MESSAGE$CANVAS_UI";
       break;
+    case "StartChildConversationObservation":
+      observationKey = "OBSERVATION_MESSAGE$START_CHILD_CONVERSATION";
+      break;
     case "ClientToolObservation":
       if (event.tool_name === CANVAS_UI_CLIENT_TOOL_NAME) {
         observationKey = "OBSERVATION_MESSAGE$CANVAS_UI";
-        break;
-      }
-      if (event.tool_name === LAUNCH_CHILD_CONVERSATION_TOOL_NAME) {
-        observationKey = "OBSERVATION_MESSAGE$LAUNCH_CHILD_CONVERSATION";
         break;
       }
       if (event.tool_name === REQUEST_SECRET_TOOL_NAME) {

@@ -1925,11 +1925,10 @@ describe("AgentServerConversationService", () => {
       });
       expect(body.client_tools.map((tool) => tool.name)).toEqual([
         "canvas_ui_control",
-        "launch_child_conversation",
         "automation_form_update",
       ]);
       // The form tool carries this deployment's event sources.
-      expect(body.client_tools[2].description).toContain(
+      expect(body.client_tools[1].description).toContain(
         "* jira_dc (Jira Data Center): event keys jira:issue_updated.",
       );
     });

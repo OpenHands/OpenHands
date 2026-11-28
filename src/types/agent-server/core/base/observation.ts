@@ -328,6 +328,23 @@ export interface TaskObservation extends ObservationBase<"TaskObservation"> {
   status: string;
 }
 
+export interface StartChildConversationObservation extends ObservationBase<"StartChildConversationObservation"> {
+  /** Rendered outcome the agent-server returned to the parent agent. */
+  content: Array<TextContent | ImageContent>;
+  /** Whether the launch failed. */
+  is_error?: boolean;
+  conversation_id: string | null;
+  parent_conversation_id: string | null;
+  status: string | null;
+  title: string | null;
+  /** Link to the child's UI, when the backend knows one. */
+  url: string | null;
+  /** Directory the child runs in. */
+  workspace: string | null;
+  /** Workspace isolation actually applied. */
+  isolation: "worktree" | "shared" | null;
+}
+
 export interface CanvasUIObservation extends ObservationBase<
   "CanvasUIObservation" | "ClientToolObservation"
 > {
@@ -405,6 +422,7 @@ export type Observation =
   | GrepObservation
   | InvokeSkillObservation
   | TaskObservation
+  | StartChildConversationObservation
   | CanvasUIObservation
   | SwitchLLMObservation
   | ClassifyAndSwitchLLMObservation;
