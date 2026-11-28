@@ -97,7 +97,9 @@ export function ManageBackendsModal({
   const modalTitle =
     isLockedToCloud && !isCookieAuthBackend
       ? t(I18nKey.BACKEND$RECONNECT_CLOUD_TITLE)
-      : t(I18nKey.BACKEND$MANAGE_TITLE);
+      : recoveryMode && !isLockedToCloud
+        ? t(I18nKey.BACKEND$RECOVERY_TITLE)
+        : t(I18nKey.BACKEND$MANAGE_TITLE);
   // The gate has no close control, so the description has to carry the reason
   // and the heading an id for screen readers to read as the dialog's name.
   // Locked-to-Cloud recovery reconnects an existing backend instead of adding
@@ -214,46 +216,50 @@ export function ManageBackendsModal({
               </div>
 
               <div className="flex min-h-0 flex-1 flex-col px-5">
-                <div
-                  className="flex-1 overflow-auto rounded-md border border-border bg-surface-raised custom-scrollbar-always"
-                  data-testid="manage-backends-list"
-                >
-                  {backends.length === 0 ? (
-                    <p className="px-3 py-6 text-center text-sm text-text-secondary">
-                      {t(I18nKey.BACKEND$MANAGE_EMPTY)}
-                    </p>
-                  ) : (
-                    <ul className="divide-y divide-border">
-                      {backends.map((backend) => (
-                        <BackendRow
-                          key={backend.id}
-                          backend={backend}
-                          health={healthByBackendId[backend.id]}
-                          orgLabel={resolveBackendOrgLabel(
-                            backend,
-                            cloudOrgs,
-                            currentUserIds,
-                            personalWorkspaceLabel,
-                          )}
-                          onSelect={() => handleSelectBackend(backend)}
-                          onEdit={() => setEditingBackend(backend)}
-                          onRemove={() =>
-                            setPendingRemoval({
-                              id: backend.id,
-                              name: backend.name,
-                              marsSessionId: backend.marsSessionId,
-                            })
-                          }
-                          onLogin={
-                            backend.authMode === "cookie"
-                              ? undefined
-                              : (apiKey) => handleCloudLogin(backend, apiKey)
-                          }
-                        />
-                      ))}
-                    </ul>
-                  )}
-                </div>
+                {/* The recovery reason already says a backend is needed, so an
+                    empty list would only repeat it in different words. */}
+                {recoveryMode && backends.length === 0 ? null : (
+                  <div
+                    className="flex-1 overflow-auto rounded-md border border-border bg-surface-raised custom-scrollbar-always"
+                    data-testid="manage-backends-list"
+                  >
+                    {backends.length === 0 ? (
+                      <p className="px-3 py-6 text-center text-sm text-text-secondary">
+                        {t(I18nKey.BACKEND$MANAGE_EMPTY)}
+                      </p>
+                    ) : (
+                      <ul className="divide-y divide-border">
+                        {backends.map((backend) => (
+                          <BackendRow
+                            key={backend.id}
+                            backend={backend}
+                            health={healthByBackendId[backend.id]}
+                            orgLabel={resolveBackendOrgLabel(
+                              backend,
+                              cloudOrgs,
+                              currentUserIds,
+                              personalWorkspaceLabel,
+                            )}
+                            onSelect={() => handleSelectBackend(backend)}
+                            onEdit={() => setEditingBackend(backend)}
+                            onRemove={() =>
+                              setPendingRemoval({
+                                id: backend.id,
+                                name: backend.name,
+                                marsSessionId: backend.marsSessionId,
+                              })
+                            }
+                            onLogin={
+                              backend.authMode === "cookie"
+                                ? undefined
+                                : (apiKey) => handleCloudLogin(backend, apiKey)
+                            }
+                          />
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                )}
               </div>
 
               <div className="flex justify-end gap-2 p-5">

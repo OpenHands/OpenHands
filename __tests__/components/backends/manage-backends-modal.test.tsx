@@ -9,7 +9,10 @@ import {
   BACKEND_HEALTH_STORAGE_KEY,
   MAX_CONSECUTIVE_FAILURES,
 } from "#/api/backend-registry/health-storage";
-import { __resetActiveStoreForTests } from "#/api/backend-registry/active-store";
+import {
+  __resetActiveStoreForTests,
+  setRegisteredBackends,
+} from "#/api/backend-registry/active-store";
 import { __resetHealthStoreForTests } from "#/api/backend-registry/health-store";
 import {
   ActiveBackendProvider,
@@ -766,9 +769,9 @@ describe("ManageBackendsModal", () => {
     );
 
     const title = screen.getByRole("heading", {
-      name: "BACKEND$MANAGE_TITLE",
+      name: "BACKEND$RECOVERY_TITLE",
     });
-    const dialog = screen.getByLabelText("BACKEND$MANAGE_TITLE");
+    const dialog = screen.getByLabelText("BACKEND$RECOVERY_TITLE");
     const reason = screen.getByTestId("manage-backends-recovery-reason");
     expect(reason).toHaveTextContent("BACKEND$RECOVERY_REASON");
     expect(title).toHaveAttribute("id", "manage-backends-title");
@@ -776,6 +779,32 @@ describe("ManageBackendsModal", () => {
     expect(dialog).toHaveAttribute(
       "aria-describedby",
       reason.getAttribute("id"),
+    );
+  });
+
+  it("hides the empty backend list on the recovery gate", () => {
+    setRegisteredBackends([]);
+    renderWithProviders(
+      <TestSeed onMount={vi.fn()}>
+        <ManageBackendsModal onClose={vi.fn()} recoveryMode />
+      </TestSeed>,
+    );
+
+    expect(
+      screen.queryByTestId("manage-backends-list"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("keeps the empty backend list in the normal modal", () => {
+    setRegisteredBackends([]);
+    renderWithProviders(
+      <TestSeed onMount={vi.fn()}>
+        <ManageBackendsModal onClose={vi.fn()} />
+      </TestSeed>,
+    );
+
+    expect(screen.getByTestId("manage-backends-list")).toHaveTextContent(
+      "BACKEND$MANAGE_EMPTY",
     );
   });
 
