@@ -295,7 +295,7 @@ ENVIRONMENT VARIABLES:
                               bind accepts (e.g. abc.ngrok.app)
   OH_AUTOMATION_GIT_REF       Git ref for automation (overrides default version)
   OH_AUTOMATION_VERSION       Specific PyPI version for automation (default: ${DEFAULT_AUTOMATION_VERSION})
-  OH_AUTOMATION_LOCAL_PATH    Absolute path to a local automation checkout (overridden only by --automation-git-ref)
+  OH_AUTOMATION_LOCAL_PATH    Absolute path to a local automation checkout (overridden only by --automation-ref)
   OH_AGENT_SERVER_LOCAL_PATH  Absolute path to a local software-agent-sdk checkout (highest precedence)
   OH_AGENT_SERVER_GIT_REF     Git ref for agent-server SDK (overrides default version)
   OH_AGENT_SERVER_VERSION     Specific PyPI version for agent-server
@@ -372,7 +372,7 @@ function buildAutomationCommand(env = process.env) {
     // Run straight from a local checkout via `uv run --project`, so
     // uncommitted working-tree changes are picked up. Outranks the other
     // automation env vars, mirroring OH_AGENT_SERVER_LOCAL_PATH for the
-    // agent-server SDK; buildConfig drops it when --automation-git-ref asks
+    // agent-server SDK; buildConfig drops it when --automation-ref asks
     // for a specific ref.
     return {
       command: "uv",
@@ -436,7 +436,7 @@ async function buildConfig(args, env = process.env) {
     if (env.OH_AUTOMATION_LOCAL_PATH) {
       logStep(
         "automation",
-        `--automation-git-ref ${args.automationGitRef} overrides OH_AUTOMATION_LOCAL_PATH (${env.OH_AUTOMATION_LOCAL_PATH})`,
+        `--automation-ref ${args.automationGitRef} overrides OH_AUTOMATION_LOCAL_PATH (${env.OH_AUTOMATION_LOCAL_PATH})`,
       );
       delete env.OH_AUTOMATION_LOCAL_PATH;
     }
@@ -1913,7 +1913,7 @@ async function main(options = {}) {
     }
   }
 
-  // Same for the automation checkout -- skipped when --automation-git-ref was
+  // Same for the automation checkout; skipped when --automation-ref was
   // passed, since buildConfig drops the env var in favor of the explicit flag.
   if (
     !args.frontendOnly &&
