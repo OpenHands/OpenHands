@@ -14,7 +14,7 @@ import { SessionStatusDot } from "./session-status-dot";
 import { useSessionMeta } from "./use-session-meta";
 
 const ICON_BUTTON_CLASS =
-  "inline-flex size-8 cursor-pointer items-center justify-center rounded-md text-muted transition-colors hover:bg-interactive-hover hover:text-white disabled:cursor-not-allowed disabled:opacity-40";
+  "inline-flex size-8 cursor-pointer items-center justify-center rounded-md text-muted transition-colors hover:bg-interactive-hover hover:text-contrast disabled:cursor-not-allowed disabled:opacity-40";
 
 interface ManagedAgentsSessionRowProps {
   session: MarsSession;
@@ -79,7 +79,7 @@ export function ManagedAgentsSessionRow({
       <div className="flex items-center gap-3">
         <SessionStatusDot phase={phase} />
         <div className="flex min-w-0 flex-1 flex-col">
-          <span className="truncate text-sm text-white" title={name}>
+          <span className="truncate text-sm text-contrast" title={name}>
             {name}
           </span>
           <span
