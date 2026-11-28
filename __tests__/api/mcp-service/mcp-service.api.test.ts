@@ -142,16 +142,28 @@ describe("McpService.testServer", () => {
 
   const SLACK_SERVER: MCPServerConfig = {
     id: "slack",
-    type: "stdio",
+    type: "shttp",
     name: "slack",
+    url: "https://mcp.slack.com/mcp",
+    auth: { strategy: "bearer", value: "xoxp-abc" },
+  };
+
+  // A custom stdio server used to exercise env-redaction and the cloud stdio
+  // short-circuit. It deliberately doesn't match any catalog entry — those
+  // code paths (env placeholder substitution, cloud stdio synthetic ok) are
+  // meant to handle arbitrary user-defined stdio servers.
+  const CUSTOM_STDIO_SERVER: MCPServerConfig = {
+    id: "custom-stdio",
+    type: "stdio",
+    name: "custom-stdio",
     command: "npx",
-    args: ["-y", "@zencoderai/slack-mcp-server"],
-    env: { SLACK_TEAM_ID: "T01", SLACK_BOT_TOKEN: "xoxb-abc" },
+    args: ["-y", "some-custom-mcp-server"],
+    env: { CUSTOM_API_KEY: "secret-abc", CUSTOM_TEAM_ID: "T01" },
   };
 
   const slackToolResult = (text: string, isError = false) => ({
     ok: true,
-    tools: ["slack_list_channels"],
+    tools: ["slack_list_user_channels"],
     tool_result: { is_error: isError, text },
   });
 
@@ -162,7 +174,10 @@ describe("McpService.testServer", () => {
 
     expect(mockTestServer).toHaveBeenCalledWith(
       expect.objectContaining({
-        tool_call: { name: "slack_list_channels", arguments: { limit: 1 } },
+        tool_call: {
+          name: "slack_list_user_channels",
+          arguments: { limit: 1 },
+        },
       }),
     );
   });
@@ -203,14 +218,14 @@ describe("McpService.testServer", () => {
 
   it("maps an errored verification call to a credentials failure", async () => {
     mockTestServer.mockResolvedValue(
-      slackToolResult("Tool 'slack_list_channels' call timed out", true),
+      slackToolResult("Tool 'slack_list_user_channels' call timed out", true),
     );
 
     const result = await McpService.testServer(SLACK_SERVER);
 
     expect(result).toEqual({
       ok: false,
-      error: "Tool 'slack_list_channels' call timed out",
+      error: "Tool 'slack_list_user_channels' call timed out",
       error_kind: "credentials",
     });
   });
@@ -224,15 +239,15 @@ describe("McpService.testServer", () => {
   });
 
   it("skips credential interpretation when the probe tool is not advertised", async () => {
-    // A server variant that doesn't expose the probe tool (e.g. Slack's
-    // hosted MCP) returns a deterministic "not advertised" tool error; that
-    // proves nothing about credentials and must not block the install.
+    // A server variant that doesn't expose the probe tool returns a
+    // deterministic "not advertised" tool error; that proves nothing about
+    // credentials and must not block the install.
     const response = {
       ok: true,
       tools: ["conversations_history"],
       tool_result: {
         is_error: true,
-        text: "Tool 'slack_list_channels' not advertised by server",
+        text: "Tool 'slack_list_user_channels' not advertised by server",
       },
     };
     mockTestServer.mockResolvedValue(response);
@@ -329,9 +344,12 @@ describe("McpService.testServer", () => {
   // the test exercises the real credentials.
   // -------------------------------------------------------------------------
 
-  const REDACTED_SLACK_SERVER: MCPServerConfig = {
-    ...SLACK_SERVER,
-    env: { SLACK_TEAM_ID: "T01", SLACK_BOT_TOKEN: REDACTED_MCP_SECRET_VALUE },
+  const REDACTED_CUSTOM_SERVER: MCPServerConfig = {
+    ...CUSTOM_STDIO_SERVER,
+    env: {
+      CUSTOM_TEAM_ID: "T01",
+      CUSTOM_API_KEY: REDACTED_MCP_SECRET_VALUE,
+    },
   };
 
   it("substitutes redacted env values with encrypted stored values", async () => {
@@ -339,12 +357,14 @@ describe("McpService.testServer", () => {
     vi.spyOn(SettingsService, "fetchSettingsFromApi").mockResolvedValue({
       agent_settings: {
         mcp_config: {
-          slack: { env: { SLACK_BOT_TOKEN: "gAAAAA-encrypted-token" } },
+          "custom-stdio": {
+            env: { CUSTOM_API_KEY: "gAAAAA-encrypted-token" },
+          },
         },
       },
     } as unknown as SettingsApiResponse);
 
-    await McpService.testServer(REDACTED_SLACK_SERVER);
+    await McpService.testServer(REDACTED_CUSTOM_SERVER);
 
     expect(SettingsService.fetchSettingsFromApi).toHaveBeenCalledWith(
       "encrypted",
@@ -354,8 +374,8 @@ describe("McpService.testServer", () => {
         server: expect.objectContaining({
           // Placeholder replaced by ciphertext; typed value left untouched.
           env: {
-            SLACK_TEAM_ID: "T01",
-            SLACK_BOT_TOKEN: "gAAAAA-encrypted-token",
+            CUSTOM_TEAM_ID: "T01",
+            CUSTOM_API_KEY: "gAAAAA-encrypted-token",
           },
         }),
       }),
@@ -370,14 +390,14 @@ describe("McpService.testServer", () => {
       new Error("503 no cipher"),
     );
 
-    await McpService.testServer(REDACTED_SLACK_SERVER);
+    await McpService.testServer(REDACTED_CUSTOM_SERVER);
 
     expect(mockTestServer).toHaveBeenCalledWith(
       expect.objectContaining({
         server: expect.objectContaining({
           env: {
-            SLACK_TEAM_ID: "T01",
-            SLACK_BOT_TOKEN: REDACTED_MCP_SECRET_VALUE,
+            CUSTOM_TEAM_ID: "T01",
+            CUSTOM_API_KEY: REDACTED_MCP_SECRET_VALUE,
           },
         }),
       }),
@@ -389,10 +409,10 @@ describe("McpService.testServer", () => {
     // browser cannot reach. Previously, the helper threw
     // `NoBackendAvailableError("No backend is configured.")` which surfaced
     // in the install modal and blocked users from creating any MCP server
-    // (e.g. Slack) on a cloud session.
+    // on a cloud session.
     cloudActive();
 
-    const result = await McpService.testServer(SLACK_SERVER);
+    const result = await McpService.testServer(CUSTOM_STDIO_SERVER);
 
     expect(result).toEqual({ ok: true, tools: [] });
     expect(mockTestServer).not.toHaveBeenCalled();

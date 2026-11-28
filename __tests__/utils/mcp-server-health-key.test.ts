@@ -52,18 +52,18 @@ describe("getMcpServerHealthKey", () => {
     const stdio: MCPServerConfig = {
       id: "stdio-0",
       type: "stdio",
-      name: "slack",
+      name: "tavily",
       command: "npx",
-      args: ["-y", "@zencoderai/slack-mcp-server"],
-      env: { SLACK_BOT_TOKEN: "xoxb-one" },
+      args: ["-y", "tavily-mcp"],
+      env: { TAVILY_API_KEY: "tvly-one" },
     };
     const rotatedToken: MCPServerConfig = {
       ...stdio,
-      env: { SLACK_BOT_TOKEN: "xoxb-two" },
+      env: { TAVILY_API_KEY: "tvly-two" },
     };
     const extraEnvVar: MCPServerConfig = {
       ...stdio,
-      env: { SLACK_BOT_TOKEN: "xoxb-one", SLACK_TEAM_ID: "T01" },
+      env: { TAVILY_API_KEY: "tvly-one", TAVILY_TEAM_ID: "T01" },
     };
 
     expect(getMcpServerHealthKey(rotatedToken)).toBe(

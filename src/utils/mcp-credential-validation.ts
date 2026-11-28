@@ -63,9 +63,11 @@ const VALIDATION_BY_ENTRY_ID: Record<string, CredentialValidation> = {
     interpret: interpretReadOnlyToolResult,
   },
   slack: {
-    // Read-only: lists at most one channel. The Slack MCP server returns
-    // the raw Slack API JSON ({ok: boolean, error?: string}) as text.
-    toolCall: { name: "slack_list_channels", arguments: { limit: 1 } },
+    // Read-only: lists at most one user channel. The Slack hosted MCP server
+    // (mcp.slack.com/mcp) does not advertise `slack_list_channels`; it exposes
+    // `slack_list_user_channels` instead. Returns the raw Slack API JSON
+    // ({ok: boolean, error?: string}) as text.
+    toolCall: { name: "slack_list_user_channels", arguments: { limit: 1 } },
     interpret: (toolResult) => {
       if (toolResult.is_error) {
         return toolResult.text || "tool call failed";

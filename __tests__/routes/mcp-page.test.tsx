@@ -103,16 +103,14 @@ describe("MCPPage", () => {
       expect(screen.getByTestId("mcp-install-modal")).toBeInTheDocument();
     });
     expect(
-      screen.getByTestId("mcp-install-field-command-readonly"),
-    ).toHaveValue("npx -y @zencoderai/slack-mcp-server");
+      screen.getByTestId("mcp-install-field-url"),
+    ).toHaveValue("https://mcp.slack.com/mcp");
     expect(
-      screen.getByTestId("mcp-install-field-SLACK_BOT_TOKEN"),
+      screen.getByTestId("mcp-install-field-api_key"),
     ).toBeInTheDocument();
     expect(
-      screen.getByTestId("mcp-install-field-SLACK_TEAM_ID"),
-    ).toBeInTheDocument();
-    expect(screen.queryByTestId("mcp-install-field-url")).toBeNull();
-    expect(screen.queryByTestId("mcp-install-field-api_key")).toBeNull();
+      screen.queryByTestId("mcp-install-field-command-readonly"),
+    ).toBeNull();
   });
 
   it("filters marketplace tiles by the search input", async () => {
@@ -246,9 +244,8 @@ describe("MCPPage", () => {
           ...MOCK_DEFAULT_USER_SETTINGS.agent_settings,
           mcp_config: {
             slack: {
-              command: "npx",
-              args: ["-y", "@zencoderai/slack-mcp-server"],
-              env: { SLACK_BOT_TOKEN: "xoxb-abc", SLACK_TEAM_ID: "T01" },
+              url: "https://mcp.slack.com/mcp",
+              auth: { strategy: "bearer", value: "xoxp-abc" },
             },
           },
         },
@@ -262,17 +259,16 @@ describe("MCPPage", () => {
     expect(await screen.findByTestId("mcp-custom-editor")).toBeInTheDocument();
   });
 
-  it("deletes an installed stdio server through the confirmation modal", async () => {
-    // Pre-install a Slack stdio server via the SDK-shaped mcp_config
+  it("deletes an installed shttp server through the confirmation modal", async () => {
+    // Pre-install a Slack shttp server via the SDK-shaped mcp_config
     // the route reads from agent_settings.mcp_config.
     const settingsWithSlack = buildSettings({
       agent_settings: {
         ...MOCK_DEFAULT_USER_SETTINGS.agent_settings,
         mcp_config: {
           slack: {
-            command: "npx",
-            args: ["-y", "@zencoderai/slack-mcp-server"],
-            env: { SLACK_BOT_TOKEN: "xoxb-abc", SLACK_TEAM_ID: "T01" },
+            url: "https://mcp.slack.com/mcp",
+            auth: { strategy: "bearer", value: "xoxp-abc" },
           },
         },
       },
@@ -365,9 +361,8 @@ describe("MCPPage", () => {
           ...MOCK_DEFAULT_USER_SETTINGS.agent_settings,
           mcp_config: {
             slack: {
-              command: "npx",
-              args: ["-y", "@zencoderai/slack-mcp-server"],
-              env: { SLACK_BOT_TOKEN: "xoxb-old", SLACK_TEAM_ID: "T01" },
+              url: "https://mcp.slack.com/mcp",
+              auth: { strategy: "bearer", value: "xoxp-old" },
             },
           },
         },
@@ -392,20 +387,16 @@ describe("MCPPage", () => {
       "MCP$INSTALL_BUTTON",
     );
 
-    fireEvent.change(screen.getByTestId("mcp-install-field-SLACK_BOT_TOKEN"), {
-      target: { value: "xoxb-new" },
-    });
-    fireEvent.change(screen.getByTestId("mcp-install-field-SLACK_TEAM_ID"), {
-      target: { value: "T02" },
+    fireEvent.change(screen.getByTestId("mcp-install-field-api_key"), {
+      target: { value: "xoxp-new" },
     });
     fireEvent.click(screen.getByTestId("mcp-install-submit"));
 
     await waitFor(() => expect(saveSpy).toHaveBeenCalledTimes(1));
     expect(saveSpy).toHaveBeenCalledWith("slack_1", {
-      transport: "stdio",
-      command: "npx",
-      args: ["-y", "@zencoderai/slack-mcp-server"],
-      env: { SLACK_BOT_TOKEN: "xoxb-new", SLACK_TEAM_ID: "T02" },
+      transport: "http",
+      url: "https://mcp.slack.com/mcp",
+      auth: { strategy: "bearer", value: "xoxp-new" },
     });
   });
 
