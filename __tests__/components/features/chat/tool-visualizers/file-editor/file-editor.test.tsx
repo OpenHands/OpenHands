@@ -286,6 +286,52 @@ describe("fileEditorVisualizer", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("reveals a copy button on the markdown preview only while hovered", async () => {
+    const user = userEvent.setup();
+
+    renderVisualizer(
+      <Body
+        observation={fileEditorObservation({
+          command: "create",
+          path: "canvas.md",
+          new_content: "# Agent Canvas Demo",
+        })}
+      />,
+    );
+
+    expect(screen.getByTestId("copy-to-clipboard")).not.toBeVisible();
+
+    await user.hover(screen.getByTestId("markdown-file-preview"));
+    expect(screen.getByTestId("copy-to-clipboard")).toBeVisible();
+
+    await user.unhover(screen.getByTestId("markdown-file-preview"));
+    expect(screen.getByTestId("copy-to-clipboard")).not.toBeVisible();
+  });
+
+  it("copies the full raw markdown, not just the clipped preview, from an in-flight create", async () => {
+    const user = userEvent.setup();
+    const markdown = [
+      "# Long report",
+      ...Array.from({ length: 60 }, (_, i) => `- **point ${i + 1}**`),
+    ].join("\n");
+
+    renderVisualizer(
+      <Body
+        action={fileEditorAction({
+          command: "create",
+          path: "/workspace/report.md",
+          file_text: markdown,
+        })}
+      />,
+    );
+
+    await user.hover(screen.getByTestId("markdown-file-preview"));
+    await user.click(screen.getByTestId("copy-to-clipboard"));
+
+    expect(await navigator.clipboard.readText()).toBe(markdown);
+    expect(screen.getByTestId("copy-to-clipboard")).toBeDisabled();
+  });
+
   it("stores a workspace-relative path when View opens an absolute .md create", async () => {
     const user = userEvent.setup();
 
