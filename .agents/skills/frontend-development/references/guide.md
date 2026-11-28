@@ -68,6 +68,12 @@ value's owner before moving it to classes or CSS variables.
 public `style` / `styleOverrides` API forwards caller-owned styles, so the
 implementation must accept an opaque object. Other lint policies keep their scope.
 
+## Settings list height
+
+`settings-list-height` retains the scrollable list's `min(70vh, 39rem)`
+cap. Keep scrolling and sticky headers on their current elements. The shared
+settings list helper rejects new arbitrary values.
+
 ## Skill Loading
 
 Public skills are loaded from the `@openhands/extensions` npm package at build time through `SKILLS_CATALOG` from `@openhands/extensions/skills`. `SkillsService` maps catalog entries to `SkillInfo` and merges them with user and project skills fetched from the Agent Server using `load_public: false`.

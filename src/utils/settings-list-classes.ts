@@ -19,7 +19,7 @@ export const settingsListContainerClassName = cn(
 /** Scrollable variant for long settings lists (e.g. secrets). */
 export const settingsListScrollContainerClassName = cn(
   settingsListContainerClassName,
-  "overflow-auto max-h-[min(70vh,39rem)]",
+  "overflow-auto settings-list-height",
 );
 
 export const settingsListDividerClassName = "divide-y divide-border";

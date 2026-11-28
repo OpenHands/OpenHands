@@ -736,6 +736,9 @@ describe("vite library build", () => {
       "automation-import-width": {
         width: "min(36rem,100vw - 2rem)",
       },
+      "settings-list-height": {
+        "max-height": "min(70vh,39rem)",
+      },
       "dialog-scroll-height": {
         "max-height": "60vh",
       },
