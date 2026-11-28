@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import React from "react";
 import { act, renderHook, waitFor } from "@testing-library/react";
-import { QueryClientProvider } from "@tanstack/react-query";
+import { type QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { AxiosError, type AxiosResponse } from "axios";
 
 import AutomationService from "#/api/automation-service/automation-service.api";
@@ -12,6 +12,11 @@ import {
 } from "#/api/backend-registry/active-store";
 import type { Backend } from "#/api/backend-registry/types";
 import { ActiveBackendProvider } from "#/contexts/active-backend-context";
+import { AUTOMATIONS_QUERY_KEY } from "#/hooks/query/use-automations";
+import {
+  AUTOMATION_DETAIL_QUERY_KEY,
+  useAutomationDetail,
+} from "#/hooks/query/use-automation-detail";
 import { useHomeAutomationActions } from "#/hooks/use-home-automation-actions";
 import { createAgentServerQueryClient } from "#/query-client-config";
 import * as telemetry from "#/services/telemetry";
@@ -25,6 +30,7 @@ import * as ToastHandlers from "#/utils/custom-toast-handlers";
 vi.mock("#/api/automation-service/automation-service.api", () => ({
   default: {
     dispatchAutomation: vi.fn(),
+    getAutomation: vi.fn(),
     cancelAutomationRun: vi.fn(),
     toggleAutomation: vi.fn(),
   },
@@ -39,7 +45,8 @@ vi.mock("#/hooks/use-automation-permissions", () => ({
   useIsAutomationOwner: () => true,
 }));
 
-vi.mock("#/hooks/query/use-settings", () => ({
+vi.mock("#/hooks/query/use-settings", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("#/hooks/query/use-settings")>()),
   useSettings: () => ({ data: { user_consents_to_analytics: false } }),
 }));
 
@@ -86,8 +93,9 @@ const notFound = new AxiosError(
 );
 
 // The app's real client, whose MutationCache toasts unless a mutation opts out.
-function makeAppClientWrapper() {
-  const queryClient = createAgentServerQueryClient();
+function makeAppClientWrapper(
+  queryClient: QueryClient = createAgentServerQueryClient(),
+) {
   return function Wrapper({ children }: { children: React.ReactNode }) {
     return (
       <QueryClientProvider client={queryClient}>
@@ -160,4 +168,103 @@ describe("useHomeAutomationActions — error toasts", () => {
       expect(errorToast).toHaveBeenCalledTimes(1);
     },
   );
+});
+
+describe("useHomeAutomationActions — failed Run now", () => {
+  const listKey = [...AUTOMATIONS_QUERY_KEY, "list"];
+  const detailKey = [...AUTOMATION_DETAIL_QUERY_KEY, automation.id];
+
+  // The cloud backend throws the shared TypeScript client's HttpError.
+  const cloudNotFound = Object.assign(new Error("Automation not found"), {
+    name: "HttpError",
+    status: 404,
+  });
+
+  const serverError = new AxiosError(
+    "Request failed with status code 500",
+    "ERR_BAD_RESPONSE",
+    undefined,
+    undefined,
+    {
+      status: 500,
+      data: { detail: "Automation service unavailable" },
+    } as AxiosResponse,
+  );
+
+  function renderWithLoadedAutomation() {
+    const queryClient = createAgentServerQueryClient();
+    queryClient.setQueryData(listKey, { items: [automation] });
+    queryClient.setQueryData(detailKey, automation);
+    const { result } = renderHook(
+      () => useHomeAutomationActions(automation, runningRun),
+      { wrapper: makeAppClientWrapper(queryClient) },
+    );
+    return { queryClient, result };
+  }
+
+  it.each([
+    { backend: "local", error: notFound },
+    { backend: "cloud", error: cloudNotFound },
+  ])(
+    "a $backend 404 marks the automation list and detail stale so they refetch",
+    async ({ error }) => {
+      // Arrange
+      vi.mocked(AutomationService.dispatchAutomation).mockRejectedValue(error);
+      const { queryClient, result } = renderWithLoadedAutomation();
+
+      // Act
+      act(() => result.current.runNow());
+
+      // Assert
+      await waitFor(() =>
+        expect(queryClient.getQueryState(listKey)?.isInvalidated).toBe(true),
+      );
+      expect(queryClient.getQueryState(detailKey)?.isInvalidated).toBe(true);
+    },
+  );
+
+  it("a 404 refetches the mounted detail query without a second toast", async () => {
+    // Arrange
+    vi.mocked(AutomationService.getAutomation)
+      .mockResolvedValueOnce(automation)
+      .mockRejectedValue(notFound);
+    const queryClient = createAgentServerQueryClient();
+    // Fail the refetch at once instead of after the default retries.
+    queryClient.setQueryDefaults(AUTOMATION_DETAIL_QUERY_KEY, { retry: false });
+    const { result } = renderHook(
+      () => ({
+        actions: useHomeAutomationActions(automation, runningRun),
+        detail: useAutomationDetail({ id: automation.id }),
+      }),
+      { wrapper: makeAppClientWrapper(queryClient) },
+    );
+    await waitFor(() => expect(result.current.detail.data).toEqual(automation));
+
+    // Act
+    act(() => result.current.actions.runNow());
+
+    // Assert
+    await waitFor(() => expect(result.current.detail.isError).toBe(true));
+    expect(errorToast).toHaveBeenCalledTimes(1);
+    expect(errorToast).toHaveBeenCalledWith("Automation not found");
+  });
+
+  it("a non-404 failure leaves the loaded automation in place", async () => {
+    // Arrange
+    vi.mocked(AutomationService.dispatchAutomation).mockRejectedValue(
+      serverError,
+    );
+    const { queryClient, result } = renderWithLoadedAutomation();
+
+    // Act
+    act(() => result.current.runNow());
+
+    // Assert
+    await waitFor(() =>
+      expect(errorToast).toHaveBeenCalledWith("Automation service unavailable"),
+    );
+    expect(queryClient.getQueryState(listKey)?.isInvalidated).toBe(false);
+    expect(queryClient.getQueryState(detailKey)?.isInvalidated).toBe(false);
+    expect(queryClient.getQueryData(listKey)).toEqual({ items: [automation] });
+  });
 });
