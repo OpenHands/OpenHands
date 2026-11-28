@@ -325,8 +325,19 @@ export function ConversationWebSocketProvider({
 
   // Resume cursors, one per socket. Started at connect time (see the lazy
   // `queryParams` below) and advanced per durable frame without re-rendering.
-  const mainCursorRef = useRef<SeqCursor>(createSeqCursor());
-  const planningCursorRef = useRef<SeqCursor>(createSeqCursor());
+  // A cursor gap is an explicit, recorded outcome: the server skipped those
+  // events as unreadable and will never resend them, so refetching cannot
+  // restore them. The store keeps the ranges for the UI to surface.
+  const mainCursorRef = useRef<SeqCursor>(
+    createSeqCursor((from, to) =>
+      useEventStore.getState().recordSkippedEventRange(from, to),
+    ),
+  );
+  const planningCursorRef = useRef<SeqCursor>(
+    createSeqCursor((from, to) =>
+      useEventStore.getState().recordSkippedEventRange(from, to),
+    ),
+  );
   const mainReplayThroughSeqRef = useRef<number | null>(null);
   const planningReplayThroughSeqRef = useRef<number | null>(null);
   // The newest status seen in the replay so far. Applied once the replay

@@ -1,0 +1,131 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bounded event store with explicit sequence gaps — design doc</title>
+<style>
+  :root{
+    --fg:#1a1a1a; --muted:#5a5a5a; --subtle:#8a8a82;
+    --bg:#fdfdfb; --card:#ffffff; --elevated:#f7f6f1;
+    --accent:#2b4eaa; --accent-soft:#e6ecfa;
+    --rule:#e2e2dc; --rule-strong:#bdbcb4;
+    --code-bg:#f3f1ec; --warn:#b25b0e; --ok:#2f7a3a; --crit:#a02020;
+    --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Helvetica,Arial,sans-serif;
+  }
+  *{box-sizing:border-box} html,body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--sans)}
+  body{line-height:1.6;font-size:16px}
+  .wrap{display:grid;grid-template-columns:240px minmax(0,1fr);gap:48px;max-width:1180px;margin:0 auto;padding:32px 28px 96px}
+  nav.toc{position:sticky;top:24px;align-self:start;font-size:13px}
+  nav.toc h2{font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin:0 0 10px}
+  nav.toc ol{list-style:none;padding:0;margin:0;counter-reset:toc}
+  nav.toc li{counter-increment:toc;margin:4px 0} nav.toc li::before{content:counter(toc) ". ";color:var(--muted)}
+  nav.toc a{color:var(--fg);text-decoration:none} nav.toc a:hover{color:var(--accent)}
+  header.title{border-bottom:1px solid var(--rule);padding-bottom:22px;margin-bottom:28px}
+  header.title .eyebrow{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--accent);font-weight:700}
+  header.title h1{font-size:34px;margin:6px 0 4px;letter-spacing:-.01em}
+  header.title .sub{color:var(--muted);max-width:740px}
+  h2{font-size:22px;margin:44px 0 10px} h2 .num{color:var(--muted);font-weight:500;margin-right:8px}
+  code{font-family:var(--mono);font-size:.88em;background:var(--code-bg);padding:1px 5px;border-radius:3px}
+  table{border-collapse:collapse;width:100%;font-size:14px;margin:12px 0}
+  th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--rule);vertical-align:top}
+  th{font-weight:600;background:var(--code-bg)}
+  .callout{border-left:3px solid var(--accent);background:var(--accent-soft);padding:10px 14px;margin:14px 0;border-radius:0 4px 4px 0;font-size:14.5px}
+  .callout.warn{border-color:var(--warn);background:#fbf1e6} .callout.note{border-color:var(--muted);background:#f3f1ec}
+  .fig{margin:18px 0 22px}
+  .fig svg{display:block;max-width:100%;height:auto;background:#fff;border:1px solid var(--rule);border-radius:6px}
+  .fig figcaption{font-size:13px;color:var(--muted);margin-top:6px;text-align:center}
+  a.src{font-family:var(--mono);font-size:12px;color:var(--accent);text-decoration:none;border-bottom:1px dotted var(--accent)}
+  details{border:1px solid var(--rule);border-radius:6px;margin:12px 0}
+  details>summary{cursor:pointer;padding:8px 12px;color:var(--muted);font-size:13px;list-style:none}
+  details>summary::-webkit-details-marker{display:none}
+  details>summary::before{content:"▸ "} details[open]>summary::before{content:"▾ "}
+</style></head><body>
+<div class="wrap">
+  <nav class="toc"><h2>Contents</h2><ol>
+    <li><a href="#sec1">Two failure modes: unbounded memory and silent gaps</a></li>
+    <li><a href="#sec2">Before → after: the store's own invariants</a></li>
+    <li><a href="#sec3">The dedupe set is load-bearing — never trimmed</a></li>
+    <li><a href="#sec4">Gaps are recorded, not hidden</a></li>
+    <li><a href="#sec5">Evidence and tests</a></li>
+  </ol></nav>
+  <main>
+    <header class="title"><div class="eyebrow">Design doc · PR #19968 · fix/bounded-event-store</div>
+      <h1>Bounded event store, explicit sequence gaps</h1>
+      <p class="sub">The global conversation event store keeps a bounded window of events (cap 2000, history prepends exempt) while preserving its dedupe bookkeeping, and a server-side sequence gap becomes an explicit, user-visible notice instead of a silently contiguous-looking transcript.</p></header>
+
+    <section id="sec1"><h2><span class="num">1</span>Two failure modes: unbounded memory and silent gaps</h2>
+      <p>On <code>main</code>, <code>use-event-store.ts</code> accumulated every event for the life of the tab <a class="src" href="https://github.com/OpenHands/OpenHands/blob/7eb410802/src/stores/use-event-store.ts#L66-L190">use-event-store.ts:66-190 (before)</a> — long agent sessions grew memory monotonically. Separately, <code>session-seq-cursor.ts</code> recorded the next expected sequence but nothing told the user when a range never arrived.</p>
+      <div class="callout">★ The bound is on the <strong>list</strong>; the <strong>dedupe set is never trimmed</strong> — trimming it would re-open replay side effects that the set exists to prevent.</div>
+    </section>
+
+    <section id="sec2"><h2><span class="num">2</span>Before → after: the store's own invariants</h2>
+      <figure class="fig">
+        <svg viewBox="0 0 960 360" role="img" aria-labelledby="f1-t f1-d">
+         <title id="f1-t">event store growth - before vs after</title>
+         <desc id="f1-d">Before, the event list and dedupe set grew without bound. After, the list is capped at 2000 with prepends exempt while the dedupe set keeps full history, and skipped sequence ranges are recorded explicitly.</desc>
+         <defs>
+          <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 Z" fill="var(--subtle)"/></marker>
+          <marker id="arr-chg" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 Z" fill="var(--warn)"/></marker>
+          <style>
+            .existing{fill:var(--code-bg);stroke:var(--subtle);stroke-width:1.4;stroke-dasharray:5 3}
+            .ex-title{font:700 13px var(--sans);fill:var(--muted)} .ex-detail{font:11.5px var(--mono);fill:var(--subtle)}
+            .new{fill:var(--accent-soft);stroke:var(--accent);stroke-width:2}
+            .new-title{font:800 13px var(--sans);fill:var(--accent)} .detail{font:11.5px var(--mono);fill:var(--fg)}
+            .edge{stroke:var(--subtle);stroke-width:1.5;stroke-dasharray:5 3;fill:none}
+            .edge-chg{stroke:var(--warn);stroke-width:1.8;fill:none;stroke-dasharray:5 3}
+            .lbl{font:600 10.5px var(--mono);fill:var(--accent)}
+          </style>
+         </defs>
+         <g><!-- BEFORE -->
+          <text class="ex-title" x="230" y="34" text-anchor="middle">BEFORE — nothing is ever evicted</text>
+          <rect class="existing" x="60" y="56" width="340" height="120" rx="6"/>
+          <text class="ex-title" x="230" y="86" text-anchor="middle">events[ ] grows monotonically</text>
+          <text class="ex-detail" x="230" y="110" text-anchor="middle">every conversation event kept for tab lifetime</text>
+          <text class="ex-detail" x="230" y="130" text-anchor="middle">long sessions: unbounded memory</text>
+          <rect class="existing" x="60" y="196" width="340" height="72" rx="6"/>
+          <text class="ex-title" x="230" y="224" text-anchor="middle">seq gap → silently contiguous</text>
+          <text class="ex-detail" x="230" y="246" text-anchor="middle">cursor advances; user never told</text>
+         </g>
+         <g><!-- AFTER -->
+          <text class="new-title" x="710" y="34" text-anchor="middle">AFTER — bounded list, full bookkeeping</text>
+          <rect class="new" x="520" y="56" width="380" height="86" rx="6"/>
+          <text class="new-title" x="710" y="84" text-anchor="middle">events[ ] capped at 2000</text>
+          <text class="detail" x="710" y="106" text-anchor="middle">history prepends exempt · append trims tail</text>
+          <rect class="new" x="520" y="160" width="380" height="60" rx="6"/>
+          <text class="new-title" x="710" y="186" text-anchor="middle">eventIds dedupe set — never trimmed</text>
+          <text class="detail" x="710" y="206" text-anchor="middle">load-bearing for replay side-effect protection</text>
+          <rect class="new" x="520" y="236" width="380" height="76" rx="6"/>
+          <text class="new-title" x="710" y="264" text-anchor="middle">skipped seq ranges recorded</text>
+          <text class="detail" x="710" y="286" text-anchor="middle">chat notice: CHAT_INTERFACE$EVENTS_SKIPPED_NOTICE</text>
+          <path class="edge-chg" d="M400,116 L520,116" marker-end="url(#arr-chg)"/>
+          <path class="edge-chg" d="M400,232 L520,232" marker-end="url(#arr-chg)"/>
+          <rect x="418" y="106" width="84" height="18" rx="5" fill="var(--elevated)" stroke="var(--rule)"/>
+          <text class="lbl" x="460" y="119" text-anchor="middle">bounded</text>
+          <rect x="404" y="222" width="96" height="18" rx="5" fill="var(--elevated)" stroke="var(--rule)"/>
+          <text class="lbl" x="452" y="235" text-anchor="middle">explicit</text>
+         </g>
+        </svg>
+        <figcaption>Fig 1 · The cap changes what the list holds; the invariants (dedupe, replay) stay intact.</figcaption>
+      </figure>
+      <div class="callout note">ⓘ Refetch cannot restore skipped sequence events — the server never resends them (documented in <code>session-seq-cursor.ts</code>'s own comment). That is why the fix records and announces gaps instead of attempting a refetch.</div>
+    </section>
+
+    <section id="sec3"><h2><span class="num">3</span>The dedupe set is load-bearing — never trimmed</h2>
+      <p>Trimming the list alongside <code>eventIds</code> would have been the easy bound, but the set guards replay side effects across the whole session; the implementation keeps it full while the list window moves <a class="src" href="https://github.com/tahabehzad/OpenHands/blob/9ef8686b9/src/stores/use-event-store.ts">use-event-store.ts (after)</a>. This exact point is pinned by the cap/dedupe cases in <code>use-event-store.test.ts</code>.</p>
+    </section>
+
+    <section id="sec4"><h2><span class="num">4</span>Gaps are recorded, not hidden</h2>
+      <p><code>session-seq-cursor.ts</code> now records skipped ranges <a class="src" href="https://github.com/tahabehzad/OpenHands/blob/9ef8686b9/src/utils/session-seq-cursor.ts">session-seq-cursor.ts</a>, and the chat layer renders a notice when a recorded range exists. Short conversations are unaffected: prepend behavior and dedupe are pinned unchanged by the suites.</p>
+    </section>
+
+    <section id="sec5"><h2><span class="num">5</span>Evidence and tests</h2>
+      <ul>
+        <li>Targeted suites (real run committed under <code>.pr/bounded-event-store/event-store-tests-output.png</code>): <code>use-event-store.test.ts</code> (+129 lines), <code>session-seq-cursor.test.ts</code> (+46), <code>events-gap-notice.test.tsx</code> (+37) — 29/29 passing: cap behavior, exempt prepends, dedupe preservation, gap recording + notice rendering.</li>
+      </ul>
+      <details><summary>Sources</summary>
+        <a class="src" href="https://github.com/tahabehzad/OpenHands/blob/9ef8686b9/src/stores/use-event-store.ts">use-event-store.ts</a> ·
+        <a class="src" href="https://github.com/tahabehzad/OpenHands/blob/9ef8686b9/src/utils/session-seq-cursor.ts">session-seq-cursor.ts</a> ·
+        <a class="src" href="https://github.com/OpenHands/OpenHands/blob/7eb410802/src/stores/use-event-store.ts">use-event-store.ts (before)</a>
+      </details>
+    </section>
+  </main>
+</div></body></html>

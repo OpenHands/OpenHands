@@ -23,7 +23,15 @@ export interface SeqCursor {
  */
 const MAX_AHEAD = 1024;
 
-export function createSeqCursor(): SeqCursor {
+export function createSeqCursor(
+  /**
+   * Reports the `seq` interval stepped over when a hole stays open past
+   * `MAX_AHEAD`. The skipped events are unreadable on the server, so they
+   * cannot be refetched — the callback exists so the skip is recorded
+   * instead of silent.
+   */
+  onGap?: (from: number, to: number) => void,
+): SeqCursor {
   let value: number | null = null;
   let ahead = new Set<number>();
 
@@ -51,8 +59,12 @@ export function createSeqCursor(): SeqCursor {
       drain();
       if (ahead.size > MAX_AHEAD) {
         // Step over the hole: the skipped event is unreadable on replay too.
-        value = Math.min(...ahead) - 1;
+        // Record the interval so the skip is explicit.
+        const skippedFrom = value + 1;
+        const skippedTo = Math.min(...ahead) - 1;
+        value = skippedTo;
         drain();
+        onGap?.(skippedFrom, skippedTo);
       }
     },
     clear: () => {

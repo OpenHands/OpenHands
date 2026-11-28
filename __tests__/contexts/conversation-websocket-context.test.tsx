@@ -1511,6 +1511,26 @@ describe("ConversationWebSocketProvider — conversation-scoped event store", ()
       expect(mainAfterSeq()).toBe("2");
     });
 
+    it("records a skipped seq interval in the event store when it steps over a hole", async () => {
+      renderProviderWithUrl("conv-gap-record");
+      await waitFor(() => expect(wsCapture.mainOnMessage).not.toBeNull());
+      await waitFor(() => expect(mainAfterSeq()).toBe("0"));
+
+      act(() => {
+        // Hole at seq 1: everything from 2 on arrives, one frame past the
+        // cursor's MAX_AHEAD buffer, so the cursor steps over the hole.
+        for (let seq = 2; seq <= 1026; seq += 1) {
+          wsCapture.mainOnMessage!({
+            data: durable(makeAgentMessage(`gap-record-${seq}`, "later"), seq),
+          });
+        }
+      });
+
+      expect(useEventStore.getState().skippedEventRanges).toEqual([
+        { from: 1, to: 1 },
+      ]);
+    });
+
     it("does not carry a cursor into the next conversation", async () => {
       const { rerender } = renderProviderWithUrl("conv-first");
       await waitFor(() => expect(wsCapture.mainOnMessage).not.toBeNull());

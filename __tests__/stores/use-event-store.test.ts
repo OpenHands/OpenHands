@@ -1,6 +1,7 @@
 import { act, renderHook } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { useEventStore } from "#/stores/use-event-store";
+import { isStreamingDeltaEvent } from "#/types/agent-server/type-guards";
 import {
   ActionEvent,
   MessageEvent,
@@ -329,5 +330,131 @@ describe("useEventStore", () => {
     // Verify events were cleared
     expect(result.current.events).toEqual([]);
     expect(result.current.uiEvents).toEqual([]);
+  });
+});
+
+describe("event store cap", () => {
+  let counter = 0;
+  function makeEvent(offsetMinutes: number): MessageEvent {
+    counter += 1;
+    return {
+      ...mockUserMessageEvent,
+      id: `cap-event-${counter}`,
+      // Lexicographic ordering matches chronological ordering here.
+      timestamp: (Date.now() + offsetMinutes).toString(),
+    };
+  }
+
+  beforeEach(() => {
+    act(() => useEventStore.getState().clearEvents());
+  });
+
+  it("keeps the newest events and every id once live appends exceed the cap", () => {
+    const { result } = renderHook(() => useEventStore());
+    const incoming = Array.from({ length: 2005 }, (_, i) =>
+      makeEvent(i * 1000),
+    );
+
+    act(() => {
+      result.current.addEvents(incoming);
+    });
+
+    expect(result.current.events).toHaveLength(2000);
+    expect(result.current.uiEvents).toHaveLength(2000);
+    // The oldest events were evicted; the newest are intact and ordered.
+    expect(result.current.events[0].id).toBe(incoming[5].id);
+    expect(result.current.events[result.current.events.length - 1].id).toBe(
+      incoming[2004].id,
+    );
+    // Evicted ids still dedupe: replaying them must not re-append.
+    act(() => {
+      result.current.addEvents([incoming[0], incoming[1]]);
+    });
+    expect(result.current.events).toHaveLength(2000);
+    expect(result.current.eventIds.size).toBe(2005);
+  });
+
+  it("does not trim pages the user explicitly loaded (history prepends)", () => {
+    const { result } = renderHook(() => useEventStore());
+    const tail = Array.from({ length: 2000 }, (_, i) => makeEvent(i * 1000));
+    const olderPage = Array.from({ length: 50 }, (_, i) =>
+      makeEvent(-1000000 - i * 1000),
+    );
+
+    act(() => {
+      result.current.addEvents(tail, {
+        nextPageId: "page-2",
+        hasMore: true,
+      });
+    });
+    act(() => {
+      result.current.addEvents(olderPage, {
+        nextPageId: null,
+        hasMore: false,
+        prepend: true,
+      });
+    });
+
+    expect(result.current.events).toHaveLength(2050);
+    expect(result.current.uiEvents).toHaveLength(2050);
+  });
+
+  it("never evicts an open streaming slot", () => {
+    const { result } = renderHook(() => useEventStore());
+    const incoming = Array.from({ length: 2000 }, (_, i) =>
+      makeEvent(i * 1000),
+    );
+
+    act(() => {
+      result.current.addEvents(incoming);
+      result.current.openStreamingSlot({
+        type: "item_started",
+        item_id: "streaming-item-1",
+      });
+    });
+    // More live events push the store past the cap again.
+    act(() => {
+      result.current.addEvents([makeEvent(99999999)]);
+    });
+
+    expect(result.current.events).toHaveLength(2000);
+    const slot = result.current.uiEvents.find(
+      (event) =>
+        isStreamingDeltaEvent(event) && event.id === "streaming-item-1",
+    );
+    expect(slot).toBeDefined();
+  });
+});
+
+describe("event store skipped seq ranges", () => {
+  beforeEach(() => {
+    act(() => useEventStore.getState().clearEvents());
+  });
+
+  it("records a skipped range and reports it once per distinct gap", () => {
+    const { result } = renderHook(() => useEventStore());
+
+    act(() => {
+      result.current.recordSkippedEventRange(5, 9);
+      result.current.recordSkippedEventRange(5, 9);
+      result.current.recordSkippedEventRange(12, 13);
+    });
+
+    expect(result.current.skippedEventRanges).toEqual([
+      { from: 5, to: 9 },
+      { from: 12, to: 13 },
+    ]);
+  });
+
+  it("resets skipped ranges with the conversation's events", () => {
+    const { result } = renderHook(() => useEventStore());
+
+    act(() => {
+      result.current.recordSkippedEventRange(1, 2);
+      result.current.clearEventsForConversation("conv-1");
+    });
+
+    expect(result.current.skippedEventRanges).toEqual([]);
+    expect(result.current.loadedConversationId).toBe("conv-1");
   });
 });
