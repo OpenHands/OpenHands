@@ -58,7 +58,10 @@ function ConnectionBanner({
           "flex items-start gap-3 rounded-xl border border-status-success/40 bg-status-success/5 px-4 py-3",
         )}
       >
-        <CheckCircle2 className="mt-0.5 size-5 shrink-0 text-status-success" />
+        <CheckCircle2
+          className="mt-0.5 size-5 shrink-0 text-status-success"
+          aria-hidden="true"
+        />
         <div className="flex flex-col gap-1">
           <span className="text-sm font-medium text-feedback-success">
             {t(I18nKey.ONBOARDING$BACKEND_CONNECTED_TITLE)}
@@ -82,7 +85,10 @@ function ConnectionBanner({
         data-testid="onboarding-backend-disconnected"
         className="flex items-start gap-3 rounded-xl border border-status-error/40 bg-status-error/5 px-4 py-3"
       >
-        <AlertCircle className="mt-0.5 size-5 shrink-0 text-status-error" />
+        <AlertCircle
+          className="mt-0.5 size-5 shrink-0 text-status-error"
+          aria-hidden="true"
+        />
         <div className="flex flex-col gap-1">
           <span className="text-sm font-medium text-feedback-error">
             {statusLabel}
@@ -101,7 +107,10 @@ function ConnectionBanner({
       data-testid="onboarding-backend-checking"
       className="flex items-start gap-3 rounded-xl border border-contrast/10 bg-contrast/5 px-4 py-3"
     >
-      <Loader2 className="mt-0.5 size-5 shrink-0 animate-spin text-text-tertiary" />
+      <Loader2
+        className="mt-0.5 size-5 shrink-0 animate-spin text-text-tertiary"
+        aria-hidden="true"
+      />
       <span className="text-sm text-text-tertiary">
         {t(I18nKey.ONBOARDING$BACKEND_CHECKING)}
       </span>
