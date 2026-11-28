@@ -53,7 +53,18 @@ export async function searchAllSubdirectories(
 export const useSearchSubdirs = (path: string | null) => {
   const active = useActiveBackend();
   return useQuery({
-    queryKey: ["file", "search_subdirs", path, active.backend.id, active.orgId],
+    queryKey: [
+      "file",
+      "search_subdirs",
+      path,
+      active.backend.id,
+      active.orgId,
+      // Editing a saved connection's host or API key keeps the backend id and
+      // organization but points at a different server, so the revision has to
+      // be part of the key — otherwise the previous connection's listing is
+      // served from cache.
+      active.backend.connectionRevision ?? 0,
+    ],
     queryFn: () => searchAllSubdirectories(path as string),
     enabled: !!path,
     retry: false,
@@ -64,7 +75,15 @@ export const useSearchSubdirs = (path: string | null) => {
 export const useHomeDirectory = () => {
   const active = useActiveBackend();
   return useQuery({
-    queryKey: ["file", "home", active.backend.id, active.orgId],
+    queryKey: [
+      "file",
+      "home",
+      active.backend.id,
+      active.orgId,
+      // HOME is cached forever (`staleTime: Infinity` below), so it must be
+      // scoped to the connection revision for the same reason.
+      active.backend.connectionRevision ?? 0,
+    ],
     queryFn: async (): Promise<HomeDirectoryResponse> =>
       getFileClient().getHome(),
     retry: false,

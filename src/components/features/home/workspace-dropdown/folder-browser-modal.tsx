@@ -146,11 +146,14 @@ export function FolderBrowserModal({
     }
   }, [isOpen, homeData?.home, currentPath]);
 
-  // A backend switch invalidates the previous path — clear it so the
-  // open/close effect can re-seed from the new backend's homeData.home.
+  // A backend switch or a connection edit invalidates the previous path —
+  // clear it so the open/close effect can re-seed from the new
+  // homeData.home. Editing a saved connection's host or API key keeps the
+  // backend id (only `connectionRevision` moves), so the revision has to be
+  // part of this trigger too.
   useEffect(() => {
     setCurrentPath(null);
-  }, [active.backend.id, active.orgId]);
+  }, [active.backend.id, active.orgId, active.backend.connectionRevision]);
 
   const {
     data: listing,
