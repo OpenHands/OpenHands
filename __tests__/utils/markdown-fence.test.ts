@@ -1,4 +1,6 @@
 import { describe, it, expect } from "vitest";
+import { fromMarkdown } from "mdast-util-from-markdown";
+import type { InlineCode, Paragraph } from "mdast";
 
 import { markdownFence, markdownInlineCode } from "#/utils/markdown-fence";
 
@@ -41,5 +43,53 @@ describe("markdownInlineCode", () => {
   it("pads content that starts or ends with a backtick", () => {
     expect(markdownInlineCode("`a")).toBe("`` `a ``");
     expect(markdownInlineCode("a`")).toBe("`` a` ``");
+  });
+
+  it("pads content that starts and ends with a space when not all spaces", () => {
+    expect(markdownInlineCode(" keepep this ")).toBe("`  keepep this  `");
+    expect(markdownInlineCode(" >  ")).toBe("`  >   `");
+    expect(markdownInlineCode("  two  ")).toBe("`   two   `");
+    expect(markdownInlineCode(" `a` ")).toBe("``  `a`  ``");
+  });
+
+  it("does not add space padding to single-side space or all-space content", () => {
+    expect(markdownInlineCode(" a")).toBe("` a`");
+    expect(markdownInlineCode("a ")).toBe("`a `");
+    expect(markdownInlineCode("   ")).toBe("`   `");
+    expect(markdownInlineCode(" ")).toBe("` `");
+  });
+
+  it("renders back to the exact content when parsed as CommonMark", () => {
+    const parseInlineCode = (markdown: string): string => {
+      const paragraph = fromMarkdown(markdown).children[0] as Paragraph;
+      const inlineCode = paragraph.children[0] as InlineCode;
+      return inlineCode.value;
+    };
+
+    const contents = [
+      " keepep this ",
+      " >  ",
+      "  two  ",
+      " `a` ",
+      " a",
+      "a ",
+      "   ",
+      " ",
+      "src/app.ts",
+      "a`b",
+      "`a",
+      "a`",
+      "`",
+      "`foo`",
+      " `a",
+      "a` ",
+      "` ",
+      " `",
+    ];
+
+    for (const content of contents) {
+      const markdown = markdownInlineCode(content);
+      expect(parseInlineCode(markdown)).toBe(content);
+    }
   });
 });
