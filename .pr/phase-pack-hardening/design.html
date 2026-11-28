@@ -1,0 +1,122 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hardening bundle: launch, packaging, and CI — design doc</title>
+<style>
+  :root{
+    --fg:#1a1a1a; --muted:#5a5a5a; --subtle:#8a8a82;
+    --bg:#fdfdfb; --card:#ffffff; --elevated:#f7f6f1;
+    --accent:#2b4eaa; --accent-soft:#e6ecfa;
+    --rule:#e2e2dc; --rule-strong:#bdbcb4;
+    --code-bg:#f3f1ec; --warn:#b25b0e; --ok:#2f7a3a; --crit:#a02020;
+    --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Helvetica,Arial,sans-serif;
+  }
+  *{box-sizing:border-box} html,body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--sans)}
+  body{line-height:1.6;font-size:16px}
+  .wrap{display:grid;grid-template-columns:240px minmax(0,1fr);gap:48px;max-width:1180px;margin:0 auto;padding:32px 28px 96px}
+  nav.toc{position:sticky;top:24px;align-self:start;font-size:13px}
+  nav.toc h2{font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin:0 0 10px}
+  nav.toc ol{list-style:none;padding:0;margin:0;counter-reset:toc}
+  nav.toc li{counter-increment:toc;margin:4px 0} nav.toc li::before{content:counter(toc) ". ";color:var(--muted)}
+  nav.toc a{color:var(--fg);text-decoration:none} nav.toc a:hover{color:var(--accent)}
+  header.title{border-bottom:1px solid var(--rule);padding-bottom:22px;margin-bottom:28px}
+  header.title .eyebrow{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--accent);font-weight:700}
+  header.title h1{font-size:34px;margin:6px 0 4px;letter-spacing:-.01em}
+  header.title .sub{color:var(--muted);max-width:740px}
+  h2{font-size:22px;margin:44px 0 10px} h2 .num{color:var(--muted);font-weight:500;margin-right:8px}
+  h3{font-size:16px;margin:22px 0 8px}
+  code{font-family:var(--mono);font-size:.88em;background:var(--code-bg);padding:1px 5px;border-radius:3px}
+  table{border-collapse:collapse;width:100%;font-size:14px;margin:12px 0}
+  th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--rule);vertical-align:top}
+  th{font-weight:600;background:var(--code-bg)}
+  .callout{border-left:3px solid var(--accent);background:var(--accent-soft);padding:10px 14px;margin:14px 0;border-radius:0 4px 4px 0;font-size:14.5px}
+  .callout.warn{border-color:var(--warn);background:#fbf1e6} .callout.note{border-color:var(--muted);background:#f3f1ec}
+  .fig{margin:18px 0 22px}
+  .fig svg{display:block;max-width:100%;height:auto;background:#fff;border:1px solid var(--rule);border-radius:6px}
+  .fig figcaption{font-size:13px;color:var(--muted);margin-top:6px;text-align:center}
+  a.src{font-family:var(--mono);font-size:12px;color:var(--accent);text-decoration:none;border-bottom:1px dotted var(--accent)}
+  details{border:1px solid var(--rule);border-radius:6px;margin:12px 0}
+  details>summary{cursor:pointer;padding:8px 12px;color:var(--muted);font-size:13px;list-style:none}
+  details>summary::-webkit-details-marker{display:none}
+  details>summary::before{content:"▸ "} details[open]>summary::before{content:"▾ "}
+</style></head><body>
+<div class="wrap">
+  <nav class="toc"><h2>Contents</h2><ol>
+    <li><a href="#sec1">What the sweep found</a></li>
+    <li><a href="#sec2">Finding → fix → file map</a></li>
+    <li><a href="#sec3">Release-path pinning, before → after</a></li>
+    <li><a href="#sec4">Commit layout and evidence</a></li>
+  </ol></nav>
+  <main>
+    <header class="title"><div class="eyebrow">Design doc · PR #19969 · chore/phase-pack-hardening</div>
+      <h1>Hardening bundle: launch, packaging, and CI</h1>
+      <p class="sub">Nine independent hardening gaps found by one review sweep, fixed in nine focused commits: Electron MARS IPC sender validation, a single-instance lock, ACP loopback binding, one container route table, a published-package smoke test, SHA-pinned release workflows, WebSocket-safe Helm defaults, checksum-verified runtime downloads, and a testing-matrix that matches CI.</p></header>
+
+    <section id="sec1"><h2><span class="num">1</span>What the sweep found</h2>
+      <div class="callout">★ The two security-critical items — MARS IPC accepting events from any renderer, and the ACP example publishing the agent-server unauthenticated on every interface — are the ones a maintainer should read first; the rest are robustness and supply-chain hygiene.</div>
+      <p>Findings were established by code inspection with line anchors (tracked in <a class="src" href="https://github.com/OpenHands/OpenHands/issues/19962">#19962</a>); none had a pre-existing issue.</p>
+    </section>
+
+    <section id="sec2"><h2><span class="num">2</span>Finding → fix → file map</h2>
+      <table>
+        <tr><th>#</th><th>Finding (before anchor)</th><th>Fix (after)</th></tr>
+        <tr><td>1</td><td>MARS IPC discards the sender event — any window can drive the bridge <a class="src" href="https://github.com/OpenHands/OpenHands/blob/7eb410802/scripts/mars-tunnel-bridge.mjs#L429-L433">mars-tunnel-bridge.mjs:429-433</a></td><td><code>isTrustedWindowSender</code> validation; untrusted senders get one warn + rejected promise <a class="src" href="https://github.com/tahabehzad/OpenHands/blob/5ecfca970/electron/lib/window-sender-policy.mjs">window-sender-policy.mjs</a> · <a class="src" href="https://github.com/tahabehzad/OpenHands/blob/5ecfca970/scripts/mars-tunnel-bridge.mjs">mars-tunnel-bridge.mjs</a></td></tr>
+        <tr><td>2</td><td>No single-instance lock — second launch collides on ports 8000/18000/18001</td><td><code>requestSingleInstanceLock</code>; second launch focuses the existing window <a class="src" href="https://github.com/tahabehzad/OpenHands/blob/5ecfca970/electron/main.mjs">electron/main.mjs</a></td></tr>
+        <tr><td>3</td><td>ACP example: agent-server on <code>0.0.0.0</code>, auth off <a class="src" href="https://github.com/OpenHands/OpenHands/blob/7eb410802/examples/acp-docker/docker-compose.yml#L29-L63">docker-compose.yml:29-63</a></td><td>Loopback binding + auth enabled <a class="src" href="https://github.com/tahabehzad/OpenHands/blob/5ecfca970/examples/acp-docker/docker-compose.yml">docker-compose.yml</a></td></tr>
+        <tr><td>4</td><td>Container route table duplicated across both static-server invocations <a class="src" href="https://github.com/OpenHands/OpenHands/blob/7eb410802/docker/entrypoint.sh#L775-L840">entrypoint.sh:775-840</a></td><td>One route table, shared <a class="src" href="https://github.com/tahabehzad/OpenHands/blob/5ecfca970/docker/entrypoint.sh">entrypoint.sh</a></td></tr>
+        <tr><td>5</td><td>Publish workflow never installs the published package</td><td>Post-publish smoke test <a class="src" href="https://github.com/tahabehzad/OpenHands/blob/5ecfca970/.github/workflows/npm-publish.yml">npm-publish.yml</a></td></tr>
+        <tr><td>6</td><td>Release-path reusable workflows pinned to <code>@main</code> <a class="src" href="https://github.com/OpenHands/OpenHands/blob/7eb410802/.github/workflows/release.yml#L86-L87">release.yml:86-87</a></td><td>Commit-SHA pins with bump instructions (5 workflows — see Fig 1)</td></tr>
+        <tr><td>7</td><td>Helm defaults break WebSocket traffic; probes only test <code>/alive</code></td><td>WebSocket-safe defaults + NetworkPolicy + UI-path probes <a class="src" href="https://github.com/tahabehzad/OpenHands/blob/5ecfca970/helm/agent-canvas">helm/agent-canvas/</a></td></tr>
+        <tr><td>8</td><td>uv/Node downloads unverified; uv resolves "latest" <a class="src" href="https://github.com/OpenHands/OpenHands/blob/7eb410802/scripts/download-uv.mjs#L80-L101">download-uv.mjs:80-101</a></td><td>Publisher-checksum verification + pinned versions <a class="src" href="https://github.com/tahabehzad/OpenHands/blob/5ecfca970/scripts/download-uv.mjs">download-uv.mjs</a> · <a class="src" href="https://github.com/tahabehzad/OpenHands/blob/5ecfca970/scripts/download-node.mjs">download-node.mjs</a></td></tr>
+        <tr><td>9</td><td><code>docs/TESTING_MATRIX.md</code> contradicts actual CI</td><td>Split into CI-automated vs manual QA sections <a class="src" href="https://github.com/tahabehzad/OpenHands/blob/5ecfca970/docs/TESTING_MATRIX.md">TESTING_MATRIX.md</a></td></tr>
+      </table>
+    </section>
+
+    <section id="sec3"><h2><span class="num">3</span>Release-path pinning, before → after</h2>
+      <figure class="fig">
+        <svg viewBox="0 0 960 240" role="img" aria-labelledby="f1-t f1-d">
+         <title id="f1-t">workflow pinning - before vs after</title>
+         <desc id="f1-d">Reusable workflow references move from the moving @main branch to a commit SHA, with an inline bump instruction.</desc>
+         <defs>
+          <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 Z" fill="var(--subtle)"/></marker>
+          <marker id="arr-chg" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 Z" fill="var(--warn)"/></marker>
+          <style>
+            .existing{fill:var(--code-bg);stroke:var(--subtle);stroke-width:1.4;stroke-dasharray:5 3}
+            .ex-title{font:700 13px var(--sans);fill:var(--muted)} .ex-detail{font:11.5px var(--mono);fill:var(--subtle)}
+            .new{fill:var(--accent-soft);stroke:var(--accent);stroke-width:2}
+            .new-title{font:800 13px var(--sans);fill:var(--accent)} .detail{font:11.5px var(--mono);fill:var(--fg)}
+            .edge-chg{stroke:var(--warn);stroke-width:1.8;fill:none;stroke-dasharray:5 3}
+            .lbl{font:600 10.5px var(--mono);fill:var(--accent)}
+          </style>
+         </defs>
+         <g><!-- BEFORE -->
+          <rect class="existing" x="60" y="70" width="380" height="96" rx="6"/>
+          <text class="ex-title" x="250" y="100" text-anchor="middle">release-please.yml@main</text>
+          <text class="ex-detail" x="250" y="124" text-anchor="middle">release.yml · release-ready.yml · pr.yml</text>
+          <text class="ex-detail" x="250" y="144" text-anchor="middle">bump-pins.yml · bump-chart.yml — all @main</text>
+         </g>
+         <g><!-- AFTER -->
+          <rect class="new" x="560" y="70" width="360" height="96" rx="6"/>
+          <text class="new-title" x="740" y="100" text-anchor="middle">@dd650d6aca265b9fd2653ec22c1d6b8f5e7e483c</text>
+          <text class="detail" x="740" y="124" text-anchor="middle">same five workflows, pinned to the commit</text>
+          <text class="detail" x="740" y="144" text-anchor="middle">inline bump: gh api repos/OpenHands/release-actions/commits/main --jq .sha</text>
+          <path class="edge-chg" d="M440,118 L560,118" marker-end="url(#arr-chg)"/>
+          <rect x="462" y="106" width="76" height="18" rx="5" fill="var(--elevated)" stroke="var(--rule)"/>
+          <text class="lbl" x="500" y="119" text-anchor="middle">pinned</text>
+         </g>
+        </svg>
+        <figcaption>Fig 1 · A compromised or broken upstream <code>main</code> is no longer code execution in the release path. The real diff is committed under <code>.pr/phase-pack-hardening/workflow-pins-diff.png</code>.</figcaption>
+      </figure>
+    </section>
+
+    <section id="sec4"><h2><span class="num">4</span>Commit layout and evidence</h2>
+      <p>One commit per finding (nine <code>fix</code>/<code>ci</code>/<code>refactor</code>/<code>docs</code> commits), so each can be reverted or cherry-picked independently; a merge commit keeps the branch current with <code>main</code>. Electron/IPC and script behaviors are pinned by unit suites under <code>__tests__/electron/</code> and <code>__tests__/scripts/</code> (e.g. <code>mars-tunnel-bridge.test.ts</code> now covers untrusted-sender rejection).</p>
+      <details><summary>Sources</summary>
+        <a class="src" href="https://github.com/tahabehzad/OpenHands/blob/5ecfca970/electron/lib/window-sender-policy.mjs">window-sender-policy.mjs</a> ·
+        <a class="src" href="https://github.com/tahabehzad/OpenHands/blob/5ecfca970/electron/main.mjs">main.mjs</a> ·
+        <a class="src" href="https://github.com/tahabehzad/OpenHands/blob/5ecfca970/scripts/download-uv.mjs">download-uv.mjs</a> ·
+        <a class="src" href="https://github.com/OpenHands/OpenHands/issues/19962">#19962</a>
+      </details>
+    </section>
+  </main>
+</div></body></html>

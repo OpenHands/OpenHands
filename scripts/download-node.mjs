@@ -31,6 +31,10 @@
  *   NODE_VERSION=24.22.1 node scripts/download-node.mjs
  *   ELECTRON_ARCH=universal node scripts/download-node.mjs  # macOS only
  *
+ * Every download is verified against nodejs.org's published SHASUMS256.txt
+ * before extraction (see scripts/download-integrity.mjs) — a mismatch or a
+ * missing checksum entry aborts the build, including NODE_VERSION overrides.
+ *
  * Output (per platform):
  *   POSIX:   resources/node/bin/{node,npm,npx} + resources/node/lib/node_modules/npm/...
  *   Windows: resources/node/{node.exe,npm.cmd,npx.cmd} + resources/node/node_modules/npm/...
@@ -61,6 +65,7 @@ import {
   resolveDownloadArches,
   resourceDirName,
 } from "./download-arch-utils.mjs";
+import { verifyChecksum } from "./download-integrity.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const projectRoot = join(__dirname, "..");
@@ -139,6 +144,27 @@ function downloadFile(url, dest) {
 }
 
 // ── Extraction ───────────────────────────────────────────────────────────────
+
+/** GET a small text resource (the publisher's checksum file), following redirects. */
+function downloadText(url) {
+  return new Promise((resolve, reject) => {
+    function doGet(u) {
+      get(u, { headers: { "User-Agent": "agent-canvas-build" } }, (res) => {
+        if (res.statusCode === 301 || res.statusCode === 302) {
+          return doGet(res.headers.location);
+        }
+        if (res.statusCode !== 200) {
+          return reject(new Error(`GET ${u} → HTTP ${res.statusCode}`));
+        }
+        let body = "";
+        res.on("data", (chunk) => (body += chunk));
+        res.on("end", () => resolve(body));
+        res.on("error", reject);
+      }).on("error", reject);
+    }
+    doGet(url);
+  });
+}
 
 function extract(archivePath, targetDir, ext) {
   // Both tar.gz and zip extract via system `tar`:
@@ -382,6 +408,19 @@ async function main() {
 
       console.log(`[download-node] Downloading to ${tmpFile}`);
       await downloadFile(url, tmpFile);
+
+      // Verify against nodejs.org's SHASUMS256.txt before touching the
+      // archive — a mismatched or missing entry aborts the build.
+      const checksumsUrl = `https://nodejs.org/dist/v${version}/SHASUMS256.txt`;
+      console.log(`[download-node] Verifying against ${checksumsUrl}`);
+      verifyChecksum(
+        tmpFile,
+        archiveName,
+        await downloadText(checksumsUrl),
+        "nodejs.org/dist SHASUMS256.txt",
+      );
+      console.log(`[download-node] ✓ checksum verified`);
+
       console.log(`[download-node] Extracting to ${outDir}`);
       extract(tmpFile, outDir, spec.ext);
 

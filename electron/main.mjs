@@ -54,7 +54,12 @@ import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { spawnSync } from "node:child_process";
 
-import { isExternalBrowsableUrl, isLoopbackAppUrl } from "./lib/window-url-policy.mjs";
+import {
+  isExternalBrowsableUrl,
+  isLoopbackAppUrl,
+} from "./lib/window-url-policy.mjs";
+import { isTrustedWindowSender } from "./lib/window-sender-policy.mjs";
+import { chooseWindowToFocus } from "./lib/window-focus-selection.mjs";
 import { resolveBundledRuntimeDir } from "./lib/bundled-runtime-dir.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -748,6 +753,25 @@ function failStartup(err) {
   app.quit();
 }
 
+// ── Single-instance lock ─────────────────────────────────────────────────────────────
+//
+// A second launch would collide on fixed ports (8000, 18000, 18001) and
+// the same userData directory. Acquire the lock before anything starts;
+// if we lose, exit immediately without running any cleanup (no stack was
+// started). On a second-instance event, focus the existing window instead
+// of booting a duplicate stack.
+const gotTheLock = app.requestSingleInstanceLock();
+if (!gotTheLock) {
+  app.exit(0);
+}
+
+app.on("second-instance", (_event, _argv, _workingDirectory) => {
+  const target = chooseWindowToFocus(mainWin, loadingWin);
+  if (!target) return;
+  if (target.isMinimized()) target.restore();
+  target.focus();
+});
+
 // ── App lifecycle ─────────────────────────────────────────────────────────────
 
 app.whenReady().then(async () => {
@@ -776,7 +800,9 @@ app.whenReady().then(async () => {
     safeStorage,
     openExternal: (url) => shell.openExternal(url),
   });
-  marsTunnelBridge.registerIpc(ipcMain);
+  marsTunnelBridge.registerIpc(ipcMain, {
+    isTrustedSender: (event) => isTrustedWindowSender(event, () => mainWin),
+  });
 
   if (!uvxAvailable()) {
     dialog.showErrorBox(

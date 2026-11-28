@@ -28,7 +28,9 @@ services:
     container_name: oh-acp
     ports:
       # host:container — Canvas points VITE_BACKEND_BASE_URL at http://localhost:8010.
-      - "8010:8000"
+      # Bound to loopback only by default; expose on another interface deliberately
+      # (set SESSION_API_KEY and publish the port on that interface).
+      - "127.0.0.1:8010:8000"
     environment:
       # New conversations define canvas_ui_control through client_tools. Keep the
       # old Python module importable so conversations persisted before that migration

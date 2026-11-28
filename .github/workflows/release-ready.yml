@@ -12,7 +12,7 @@ jobs:
       issues: write
       pull-requests: write
     secrets: inherit
-    uses: OpenHands/release-actions/.github/workflows/release-ready.yml@main
+    uses: OpenHands/release-actions/.github/workflows/release-ready.yml@dd650d6aca265b9fd2653ec22c1d6b8f5e7e483c  # SHA pinned 2026-11-21; bump with: gh api repos/OpenHands/release-actions/commits/main --jq .sha
     with:
       product-name: OpenHands Agent Canvas
       slack-channel: '#proj-agent-canvas'

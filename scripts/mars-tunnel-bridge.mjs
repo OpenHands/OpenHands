@@ -426,10 +426,25 @@ export function createMarsTunnelBridge({
       return registry.get(sessionId);
     },
 
-    /** @param {import("electron").IpcMain} ipcMain */
-    registerIpc(ipcMain) {
+    /**
+     * @param {import("electron").IpcMain} ipcMain
+     * @param {object} [options]
+     * @param {(event: unknown) => boolean} [options.isTrustedSender] Reject
+     *   callers that are not the main app window before reaching any bridge
+     *   method. Returns false → one warn line + a thrown Error.
+     * @param {(msg: string) => void} [options.log] Warn sink for rejections;
+     *   defaults to console.warn.
+     */
+    registerIpc(ipcMain, { isTrustedSender, log } = {}) {
+      const warn = log ?? ((msg) => console.warn(msg));
       for (const [method, channel] of Object.entries(MARS_TUNNEL_IPC)) {
-        ipcMain.handle(channel, (_event, ...args) => this[method](...args));
+        ipcMain.handle(channel, (event, ...args) => {
+          if (isTrustedSender && !isTrustedSender(event)) {
+            warn(`[mars-tunnel-bridge] rejected untrusted sender on ${channel}`);
+            throw new Error("untrusted sender");
+          }
+          return this[method](...args);
+        });
       }
     },
 
