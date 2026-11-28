@@ -89,6 +89,7 @@ export function ErrorToastContent({ message }: { message: ReactNode }) {
 export const ERROR_TOAST_OPTIONS: ToastOptions = {
   ...TOAST_OPTIONS,
   icon: null,
+  ariaProps: { role: "alert", "aria-live": "assertive" },
 };
 
 function showErrorToast(message: string) {

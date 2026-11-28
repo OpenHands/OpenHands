@@ -6,6 +6,7 @@ interface OnboardingProgressBarProps {
   /** Total number of steps in the flow. */
   totalSteps: number;
   className?: string;
+  "aria-label"?: string;
 }
 
 /**
@@ -17,6 +18,7 @@ export function OnboardingProgressBar({
   currentStep,
   totalSteps,
   className,
+  "aria-label": ariaLabel,
 }: OnboardingProgressBarProps) {
   return (
     <div
@@ -24,6 +26,7 @@ export function OnboardingProgressBar({
       aria-valuemin={1}
       aria-valuemax={totalSteps}
       aria-valuenow={currentStep + 1}
+      aria-label={ariaLabel}
       data-testid="onboarding-progress-bar"
       className={cn("flex w-full items-center gap-2", className)}
     >

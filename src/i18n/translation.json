@@ -47518,5 +47518,23 @@
     "uk": "Відкрити {{ref}} на GitHub",
     "ca": "Obre {{ref}} a GitHub",
     "id": "Buka {{ref}} di GitHub"
+  },
+  "ONBOARDING$STEP_ANNOUNCEMENT": {
+    "en": "Step {{current}} of {{total}}: {{title}}",
+    "ja": "ステップ {{current}}/{{total}}: {{title}}",
+    "zh-CN": "第 {{current}} 步，共 {{total}} 步：{{title}}",
+    "zh-TW": "第 {{current}} 步，共 {{total}} 步：{{title}}",
+    "ko-KR": "{{total}}단계 중 {{current}}단계: {{title}}",
+    "no": "Steg {{current}} av {{total}}: {{title}}",
+    "it": "Passaggio {{current}} di {{total}}: {{title}}",
+    "pt": "Passo {{current}} de {{total}}: {{title}}",
+    "es": "Paso {{current}} de {{total}}: {{title}}",
+    "ar": "الخطوة {{current}} من {{total}}: {{title}}",
+    "fr": "Étape {{current}} sur {{total}} : {{title}}",
+    "tr": "Adım {{current}} / {{total}}: {{title}}",
+    "de": "Schritt {{current}} von {{total}}: {{title}}",
+    "uk": "Крок {{current}} з {{total}}: {{title}}",
+    "ca": "Pas {{current}} de {{total}}: {{title}}",
+    "id": "Langkah {{current}} dari {{total}}: {{title}}"
   }
 }

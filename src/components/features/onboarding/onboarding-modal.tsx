@@ -39,6 +39,15 @@ import { SayHelloStep } from "./steps/say-hello-step";
  */
 type OnboardingPhase = "backend" | "agent" | "setup" | "hello";
 
+const PHASE_TITLE_KEYS: Record<OnboardingPhase, I18nKey> = {
+  backend: I18nKey.ONBOARDING$BACKEND_TITLE,
+  agent: I18nKey.ONBOARDING$AGENT_TITLE,
+  setup: I18nKey.ONBOARDING$LLM_TITLE,
+  hello: I18nKey.ONBOARDING$HELLO_TITLE,
+};
+
+const ACP_SETUP_TITLE_KEY = I18nKey.ONBOARDING$ACP_SECRETS_TITLE;
+
 const PHASE_ORDER_WITH_BACKEND: readonly OnboardingPhase[] = [
   "backend",
   "agent",
@@ -216,6 +225,10 @@ export function OnboardingModal({
     healthByBackendId[backend.id]?.isConnected !== undefined;
 
   const isOpenHands = selectedAgentId === "openhands";
+  const stepTitleKey =
+    currentPhase === "setup" && !isOpenHands
+      ? ACP_SETUP_TITLE_KEY
+      : PHASE_TITLE_KEYS[currentPhase];
   const hideSkip = currentStep === 0 && getLockedCloudHost() !== null;
   const goNext = React.useCallback(() => {
     setPhase((prev) => {
@@ -324,8 +337,21 @@ export function OnboardingModal({
             <OnboardingProgressBar
               currentStep={currentStep}
               totalSteps={totalSteps}
+              aria-label={t(I18nKey.ONBOARDING$STEP_ANNOUNCEMENT, {
+                current: currentStep + 1,
+                total: totalSteps,
+                title: t(stepTitleKey),
+              })}
             />
           </header>
+
+          <div className="sr-only" aria-live="polite" aria-atomic="true">
+            {t(I18nKey.ONBOARDING$STEP_ANNOUNCEMENT, {
+              current: currentStep + 1,
+              total: totalSteps,
+              title: t(stepTitleKey),
+            })}
+          </div>
 
           <div
             data-testid="onboarding-scroll-area"
