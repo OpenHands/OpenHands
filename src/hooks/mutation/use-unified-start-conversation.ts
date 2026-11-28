@@ -10,8 +10,8 @@ import {
 
 export const useUnifiedResumeConversation = () => {
   const queryClient = useQueryClient();
-  const removeErrorMessage = useErrorMessageStore(
-    (state) => state.removeErrorMessage,
+  const resetErrorMessages = useErrorMessageStore(
+    (state) => state.resetErrorMessages,
   );
 
   return useMutation({
@@ -41,7 +41,7 @@ export const useUnifiedResumeConversation = () => {
       invalidateConversationQueries(queryClient, variables.conversationId);
     },
     onSuccess: (_, variables) => {
-      removeErrorMessage();
+      resetErrorMessages();
 
       updateConversationExecutionStatusInCache(
         queryClient,

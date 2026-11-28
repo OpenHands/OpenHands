@@ -19,6 +19,8 @@ interface ErrorMessageBannerProps {
   /** Where the user can act on the error (e.g. their budget page). */
   link?: { href: string; label: string; openInNewTab: boolean };
   classification?: ErrorClassification | null;
+  /** Names the agent that failed when it is not the main conversation. */
+  sourceLabel?: string;
 }
 
 const DEFAULT_MAX_COLLAPSED_CHARS = 220;
@@ -31,6 +33,7 @@ export function ErrorMessageBanner({
   onReauth,
   link,
   classification,
+  sourceLabel,
 }: ErrorMessageBannerProps) {
   const { t, i18n } = useTranslation("openhands");
   const headerKey = getAcpErrorHeaderKey(code);
@@ -121,6 +124,14 @@ export function ErrorMessageBanner({
         />
       )}
       <div className="min-w-0 flex-1">
+        {sourceLabel && (
+          <div
+            className="text-xs font-medium text-muted"
+            data-testid="error-message-banner-source"
+          >
+            {sourceLabel}
+          </div>
+        )}
         {headerKey && (
           <div
             className="text-sm font-medium text-foreground"

@@ -293,6 +293,26 @@ describe("conversation route — backend switch", () => {
   });
 });
 
+it("clears both main and planner errors when another conversation opens", async () => {
+  vi.mocked(
+    AgentServerConversationService.batchGetAppConversations,
+  ).mockImplementation(async (ids) => ids.map((id) => makeConversation(id)));
+  setActiveSelection({ backendId: cloudBackend.id, orgId: "org-a" });
+  const { rerender } = renderConversation();
+  await screen.findByTestId("conversation-main");
+  act(() => {
+    useErrorMessageStore.getState().setErrorMessage("Main failed");
+    useErrorMessageStore.getState().setPlannerError("Planner failed");
+  });
+
+  rerender(conversationTree("conv-other"));
+
+  await waitFor(() => {
+    expect(useErrorMessageStore.getState().errorMessage).toBeNull();
+  });
+  expect(useErrorMessageStore.getState().plannerError).toBeNull();
+});
+
 describe("conversation route — cloud sandbox resume", () => {
   it("resumes an already-paused cloud sandbox when the conversation is opened", async () => {
     setActiveSelection({ backendId: cloudBackend.id, orgId: "org-a" });

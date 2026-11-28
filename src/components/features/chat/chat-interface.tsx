@@ -127,9 +127,16 @@ export function ChatInterface({
     errorClassification,
     removeErrorMessage,
     setErrorMessage,
+    plannerError,
+    removePlannerError,
   } = useErrorMessageStore();
   const budgetLimitError = useBudgetLimitError(errorMessage);
   const navigate = useNavigate();
+  // Locked-to-Cloud blocks the Canvas agent settings page (OHE-3457).
+  const getReauthAction = (code: string | null) =>
+    isAcpAuthErrorCode(code) && getLockedCloudHost() === null
+      ? () => navigate("/settings/agents")
+      : undefined;
   const { isTask, taskStatus, taskDetail } = useTaskPolling();
   // Hide empty-state chrome for the entire `/conversations/task-{uuid}` route,
   // including the brief READY window before redirect completes.
@@ -919,7 +926,7 @@ export function ChatInterface({
               conversationWebSocket && (
                 <ConnectionRecoveryNotice
                   state={conversationWebSocket.recoveryState}
-                  onRetry={conversationWebSocket.reconnect}
+                  onRetry={() => conversationWebSocket.reconnect()}
                 />
               )}
             {errorMessage && !hideConnectionError && (
@@ -931,16 +938,25 @@ export function ChatInterface({
                 onDismiss={removeErrorMessage}
                 onRetry={
                   errorMessage === SERVER_CONNECTION_ERROR_MESSAGE
-                    ? () => conversationWebSocket?.reconnect()
+                    ? () => conversationWebSocket?.reconnect("main")
                     : undefined
                 }
-                // Locked-to-Cloud blocks the Canvas agent settings page
-                // (OHE-3457).
-                onReauth={
-                  isAcpAuthErrorCode(errorCode) && getLockedCloudHost() === null
-                    ? () => navigate("/settings/agents")
+                onReauth={getReauthAction(errorCode)}
+              />
+            )}
+            {plannerError && (
+              <ErrorMessageBanner
+                sourceLabel={t(I18nKey.COMMON$PLANNER)}
+                message={plannerError.message}
+                code={plannerError.code}
+                classification={plannerError.classification}
+                onDismiss={removePlannerError}
+                onRetry={
+                  plannerError.message === SERVER_CONNECTION_ERROR_MESSAGE
+                    ? () => conversationWebSocket?.reconnect("planner")
                     : undefined
                 }
+                onReauth={getReauthAction(plannerError.code)}
               />
             )}
 

@@ -8,47 +8,71 @@ import type { ErrorClassification } from "@openhands/typescript-client";
  */
 export type ErrorMessageType = "connection" | "conversation";
 
-interface ErrorMessageState {
-  errorMessage: string | null;
-  errorType: ErrorMessageType | null;
+/** Which agent of the open conversation reported an error. */
+export type ErrorRole = "main" | "planner";
+
+export interface ErrorEntry {
+  message: string;
+  type: ErrorMessageType;
   /**
    * Structured error code from a ConversationErrorEvent/ServerErrorEvent (e.g.
    * "ACPAuthRequired"), used to render a code-specific header + recovery action.
    * null for errors that carry no code (connection errors, plain strings).
    */
-  errorCode: string | null;
-  errorClassification: ErrorClassification | null;
+  code: string | null;
+  classification: ErrorClassification | null;
 }
 
+interface ErrorMessageState {
+  /** The main conversation's error. */
+  errorMessage: string | null;
+  errorType: ErrorMessageType | null;
+  errorCode: string | null;
+  errorClassification: ErrorClassification | null;
+  /**
+   * The planning sub-conversation's error, kept apart so a planner failure
+   * never replaces or clears the main conversation's error (or vice versa).
+   */
+  plannerError: ErrorEntry | null;
+}
+
+type SetError = (
+  message: string,
+  type?: ErrorMessageType,
+  code?: string | null,
+  classification?: ErrorClassification | null,
+) => void;
+
 interface ErrorMessageActions {
-  setErrorMessage: (
-    message: string,
-    type?: ErrorMessageType,
-    code?: string | null,
-    classification?: ErrorClassification | null,
-  ) => void;
+  setErrorMessage: SetError;
   removeErrorMessage: () => void;
   /** Clears the error only when it is a transient connection error. */
   clearConnectionError: () => void;
+  setPlannerError: SetError;
+  removePlannerError: () => void;
+  clearPlannerConnectionError: () => void;
+  /** Clears both roles' errors, e.g. when the open conversation changes. */
+  resetErrorMessages: () => void;
 }
 
 type ErrorMessageStore = ErrorMessageState & ErrorMessageActions;
 
-const initialState: ErrorMessageState = {
+const initialMainState = {
   errorMessage: null,
   errorType: null,
   errorCode: null,
   errorClassification: null,
-};
+} satisfies Omit<ErrorMessageState, "plannerError">;
 
 export const useErrorMessageStore = create<ErrorMessageStore>((set) => ({
-  ...initialState,
+  ...initialMainState,
+  plannerError: null,
 
   setErrorMessage: (
-    message: string,
-    type: ErrorMessageType = "conversation",
-    code: string | null = null,
-    classification: ErrorClassification | null = null,
+    message,
+    type = "conversation",
+    code = null,
+    classification = null,
   ) =>
     set(() => ({
       errorMessage: message,
@@ -57,10 +81,29 @@ export const useErrorMessageStore = create<ErrorMessageStore>((set) => ({
       errorClassification: classification,
     })),
 
-  removeErrorMessage: () => set(() => ({ ...initialState })),
+  removeErrorMessage: () => set(() => ({ ...initialMainState })),
 
   clearConnectionError: () =>
     set((state) =>
-      state.errorType === "connection" ? { ...initialState } : state,
+      state.errorType === "connection" ? { ...initialMainState } : state,
     ),
+
+  setPlannerError: (
+    message,
+    type = "conversation",
+    code = null,
+    classification = null,
+  ) => set(() => ({ plannerError: { message, type, code, classification } })),
+
+  removePlannerError: () => set(() => ({ plannerError: null })),
+
+  clearPlannerConnectionError: () =>
+    set((state) =>
+      state.plannerError?.type === "connection"
+        ? { plannerError: null }
+        : state,
+    ),
+
+  resetErrorMessages: () =>
+    set(() => ({ ...initialMainState, plannerError: null })),
 }));
