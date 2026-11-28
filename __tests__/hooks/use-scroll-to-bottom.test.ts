@@ -20,20 +20,16 @@ function createMockScrollElement(initialScrollHeight = 1000) {
     state.scrollTop = value;
   });
 
-  const element = {
-    get scrollTop() {
-      return state.scrollTop;
+  // A real element, so the hook can observe it and its children.
+  const element = document.createElement("div");
+  Object.defineProperties(element, {
+    scrollTop: {
+      get: () => state.scrollTop,
+      set: scrollTopSetter,
     },
-    set scrollTop(value: number) {
-      scrollTopSetter(value);
-    },
-    get scrollHeight() {
-      return state.scrollHeight;
-    },
-    get clientHeight() {
-      return state.clientHeight;
-    },
-  } as unknown as HTMLDivElement;
+    scrollHeight: { get: () => state.scrollHeight },
+    clientHeight: { get: () => state.clientHeight },
+  });
 
   return { element, scrollTopSetter, state };
 }
@@ -215,6 +211,100 @@ describe("useScrollToBottom", () => {
 
       rerender({ follow: false });
       expect(frames.size).toBe(0);
+    });
+  });
+
+  describe("staying at the bottom when the transcript resizes", () => {
+    let observed: Set<Element>;
+    let notifyResize: () => void;
+
+    beforeEach(() => {
+      observed = new Set();
+      vi.stubGlobal(
+        "ResizeObserver",
+        class {
+          constructor(callback: () => void) {
+            notifyResize = () => act(() => callback());
+          }
+
+          observe = (target: Element) => observed.add(target);
+
+          unobserve = (target: Element) => observed.delete(target);
+
+          disconnect = () => observed.clear();
+        },
+      );
+      // The issue's numbers: at the bottom at 1440x1000, then 390x844.
+      mock.state.scrollHeight = 1888;
+      mock.state.clientHeight = 814;
+    });
+
+    afterEach(() => {
+      vi.unstubAllGlobals();
+    });
+
+    const narrow = () => {
+      mock.state.scrollHeight = 1912;
+      mock.state.clientHeight = 650;
+      notifyResize();
+    };
+
+    it("re-pins a reader who was at the bottom when the container reflows taller", () => {
+      const { result } = renderHook(() => useScrollToBottom(ref));
+      mock.state.scrollTop = 1074;
+      act(() => result.current.onChatBodyScroll(mock.element));
+
+      narrow();
+
+      expect(mock.state.scrollTop).toBe(1262);
+    });
+
+    it("keeps a reader who scrolled up in place", () => {
+      const { result } = renderHook(() => useScrollToBottom(ref));
+      mock.state.scrollTop = 1074;
+      act(() => result.current.onChatBodyScroll(mock.element));
+      mock.state.scrollTop = 600;
+      act(() => result.current.onChatBodyScroll(mock.element));
+
+      narrow();
+
+      expect(mock.state.scrollTop).toBe(600);
+    });
+
+    it("stays pinned when a scroll event reads the gap after the content grew", () => {
+      const { result } = renderHook(() => useScrollToBottom(ref));
+      mock.state.scrollTop = 1074;
+      act(() => result.current.onChatBodyScroll(mock.element));
+
+      // The scroll lands on the old bottom, but its event is dispatched after
+      // the content has grown again, so the element reads a gap.
+      mock.state.scrollTop = 1080;
+      mock.state.scrollHeight = 1924;
+      act(() => result.current.onChatBodyScroll(mock.element));
+      notifyResize();
+
+      expect(mock.state.scrollTop).toBe(1110);
+    });
+
+    it("observes the container and the rows inside its content wrappers", async () => {
+      // Rows render inside `display: contents` wrappers, which have no box.
+      // Styles only compute for a connected element.
+      document.body.appendChild(mock.element);
+      const wrapper = mock.element.appendChild(document.createElement("div"));
+      wrapper.style.display = "contents";
+      const first = wrapper.appendChild(document.createElement("article"));
+      const { unmount } = renderHook(() => useScrollToBottom(ref));
+      expect(observed).toEqual(new Set([mock.element, first]));
+
+      const later = wrapper.appendChild(document.createElement("article"));
+      first.remove();
+      await vi.waitFor(() =>
+        expect(observed).toEqual(new Set([mock.element, later])),
+      );
+
+      unmount();
+      expect(observed.size).toBe(0);
+      mock.element.remove();
     });
   });
 });
