@@ -91,6 +91,8 @@ ENVIRONMENT VARIABLES:
                                mode; optional otherwise (auto-generated if
                                omitted, persisted across restarts).
   OH_BIND_HOST                 Bind address for ingress/static (default: 127.0.0.1)
+  OH_ALLOWED_HOSTS             Comma-separated tunnel/proxy hostnames a loopback
+                               bind accepts (e.g. abc.ngrok.app)
   OH_SECRET_KEY                Secret key for encrypting settings
   OH_AGENT_SERVER_GIT_REF      Git ref for agent-server
   OH_AGENT_SERVER_LOCAL_PATH   Path to local SDK checkout (for development)

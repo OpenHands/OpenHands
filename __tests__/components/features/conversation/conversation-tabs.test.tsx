@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -31,6 +31,11 @@ vi.mock("#/hooks/use-task-list", () => ({
     hasTaskList: mockHasTaskList,
     taskList: [],
   }),
+}));
+
+let mockProjectId: string | undefined;
+vi.mock("#/hooks/query/use-conversation-project", () => ({
+  useConversationProjectId: () => mockProjectId,
 }));
 
 const mockRefetchGitChanges = vi.fn();
@@ -109,7 +114,7 @@ function seedActiveBackend(backend: Backend): void {
   __resetActiveStoreForTests();
 }
 
-const setActiveTabState = (tab: "files" | "planner") => {
+const setActiveTabState = (tab: "files" | "planner" | "usage") => {
   seedConversationState(REAL_CONVERSATION_ID, {
     selectedTab: tab,
     rightPanelShown: true,
@@ -130,6 +135,7 @@ describe("ConversationTabs localStorage behavior", () => {
     mockHandleBuildPlanClick.mockReset();
     mockConversationId = TASK_CONVERSATION_ID;
     mockHasTaskList = false;
+    mockProjectId = undefined;
     mockIsFetchingGitChanges = false;
     mockCurAgentState = AgentState.AWAITING_USER_INPUT;
     useConversationStore.setState({
@@ -137,6 +143,35 @@ describe("ConversationTabs localStorage behavior", () => {
       isRightPanelShown: false,
       hasRightPanelToggled: false,
       planContent: null,
+    });
+  });
+
+  describe("Project tab", () => {
+    it("is absent outside projects", () => {
+      mockConversationId = REAL_CONVERSATION_ID;
+      render(<ConversationTabs />, {
+        wrapper: createWrapper(REAL_CONVERSATION_ID),
+      });
+      expect(screen.queryByTestId("conversation-tab-project")).toBeNull();
+    });
+
+    it("leads the strip in a project conversation and opens the panel on it", async () => {
+      mockConversationId = REAL_CONVERSATION_ID;
+      mockProjectId = "aa000000000040008000000000000001";
+      const user = userEvent.setup();
+      render(<ConversationTabs />, {
+        wrapper: createWrapper(REAL_CONVERSATION_ID),
+      });
+
+      const tabs = screen
+        .getAllByRole("tab")
+        .map((tab) => tab.getAttribute("data-testid"));
+      expect(tabs[0]).toBe("conversation-tab-project");
+      expect(tabs[1]).toBe("conversation-tab-files");
+
+      await user.click(screen.getByTestId("conversation-tab-project"));
+      expect(useConversationStore.getState().selectedTab).toBe("project");
+      expect(useConversationStore.getState().isRightPanelShown).toBe(true);
     });
   });
 
@@ -788,6 +823,47 @@ describe("ConversationTabs localStorage behavior", () => {
       // Wraps around the start of the strip.
       await user.keyboard("{ArrowLeft}{ArrowLeft}");
       expect(screen.getByTestId("conversation-tab-usage")).toHaveFocus();
+    });
+
+    it("keeps a later selected tab visible when the strip overflows", async () => {
+      setActiveTabState("usage");
+      const originalRect = HTMLElement.prototype.getBoundingClientRect;
+      vi.spyOn(
+        HTMLElement.prototype,
+        "getBoundingClientRect",
+      ).mockImplementation(function getTabRect(this: HTMLElement) {
+        const element = this;
+        if (element.dataset.tabMeasure === "true") {
+          return { width: 40 } as DOMRect;
+        }
+        if (element.className.includes("w-full min-w-0 flex-nowrap")) {
+          return { width: 245 } as DOMRect;
+        }
+        if (element.querySelector('[data-testid="ellipsis-button"]')) {
+          return { width: 40 } as DOMRect;
+        }
+        if (element.querySelector('[data-testid="drawer-vscode-link"]')) {
+          return { width: 0 } as DOMRect;
+        }
+        return originalRect.call(element);
+      });
+
+      render(<ConversationTabs />, {
+        wrapper: createWrapper(REAL_CONVERSATION_ID),
+      });
+
+      await waitFor(() =>
+        expect(screen.getByTestId("conversation-tab-usage")).toHaveAttribute(
+          "aria-selected",
+          "true",
+        ),
+      );
+
+      const tablist = screen.getByRole("tablist");
+      expect(
+        within(tablist).getByRole("tab", { name: "COMMON$USAGE" }),
+      ).toBeInTheDocument();
+      expect(screen.queryByTestId("conversation-tab-browser")).toBeNull();
     });
 
     it("activates the focused tab with Enter", async () => {

@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { act, renderHook } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import React from "react";
@@ -12,6 +12,12 @@ function makeWrapper(client: QueryClient) {
   return ({ children }: { children: React.ReactNode }) => (
     <QueryClientProvider client={client}>{children}</QueryClientProvider>
   );
+}
+
+function advancePastRefreshThrottle() {
+  act(() => {
+    vi.advanceTimersByTime(2000);
+  });
 }
 
 function makeObservationEvent(
@@ -40,12 +46,17 @@ function makeObservationEvent(
 
 describe("useAutoRefreshFilesOnEdit", () => {
   beforeEach(() => {
+    vi.useFakeTimers();
     act(() => {
       useEventStore.getState().clearEvents();
       // Reset the workspace mutation counter so per-test counter assertions
       // don't see ticks bled over from earlier tests.
       useWorkspaceMutationCounter.setState({ count: 0 });
     });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it("invalidates workspace queries when a mutating file editor observation arrives", () => {
@@ -76,7 +87,7 @@ describe("useAutoRefreshFilesOnEdit", () => {
   });
 
   it.each(["ExecuteBashObservation", "TerminalObservation"])(
-    "refreshes only the git diff queries when a %s arrives",
+    "refreshes git diff queries and the file tree when a %s arrives",
     (kind) => {
       // Arrange
       const client = new QueryClient();
@@ -93,9 +104,9 @@ describe("useAutoRefreshFilesOnEdit", () => {
           .addEvent(makeObservationEvent("1", kind, "git commit -m 'done'"));
       });
 
-      // Assert — the diff and commit-list queries refresh, and nothing
-      // else does (workspace file queries on every shell command would
-      // churn the Files tab; per-commit queries are immutable).
+      // Assert — the diff, commit-list, and workspace tree queries refresh.
+      // Per-file content still waits for file-editor observations so terminal
+      // commands do not cache-bust rich previews or iframes on every command.
       const invalidatedKeys = spy.mock.calls.map(
         (call) => (call[0] as { queryKey: unknown[] }).queryKey[0],
       );
@@ -103,9 +114,35 @@ describe("useAutoRefreshFilesOnEdit", () => {
         "file_changes",
         "file_diff",
         "git_commits",
+        "workspace-files",
       ]);
     },
   );
+
+  it("does not repeatedly refresh workspace files for the same bash observation", () => {
+    const client = new QueryClient();
+    const spy = vi.spyOn(client, "invalidateQueries");
+
+    const { rerender } = renderHook(() => useAutoRefreshFilesOnEdit(), {
+      wrapper: makeWrapper(client),
+    });
+
+    act(() => {
+      useEventStore
+        .getState()
+        .addEvent(
+          makeObservationEvent("1", "TerminalObservation", "touch x.md"),
+        );
+    });
+
+    const callsAfterBash = spy.mock.calls.length;
+    expect(callsAfterBash).toBeGreaterThan(0);
+
+    rerender();
+    rerender();
+
+    expect(spy.mock.calls.length).toBe(callsAfterBash);
+  });
 
   it("does not apply the file-editor read-only filter to bash commands", () => {
     // Arrange — `READ_ONLY_COMMANDS` matches editor sub-commands; for bash
@@ -180,6 +217,7 @@ describe("useAutoRefreshFilesOnEdit", () => {
     });
     expect(useWorkspaceMutationCounter.getState().count).toBe(1);
 
+    advancePastRefreshThrottle();
     act(() => {
       useEventStore
         .getState()
@@ -243,6 +281,7 @@ describe("useAutoRefreshFilesOnEdit", () => {
     expect(callsAfterInitial).toBeGreaterThan(0);
     const countAfterInitial = useWorkspaceMutationCounter.getState().count;
     expect(countAfterInitial).toBe(1);
+    advancePastRefreshThrottle();
 
     // Now insert an OLDER event (id "5" → earliest timestamp). The store
     // re-sorts so the events array becomes [e5, e10, e20]. The previous
@@ -306,11 +345,13 @@ describe("useAutoRefreshFilesOnEdit", () => {
     });
     expect(useWorkspaceMutationCounter.getState().count).toBe(1);
 
+    advancePastRefreshThrottle();
     act(() => {
       useEventStore.getState().addEvent(idlessEvent(2));
     });
     expect(useWorkspaceMutationCounter.getState().count).toBe(2);
 
+    advancePastRefreshThrottle();
     act(() => {
       useEventStore.getState().addEvent(idlessEvent(3));
     });
@@ -403,6 +444,39 @@ describe("useAutoRefreshFilesOnEdit", () => {
       useEventStore.getState().addEvent({ ...numericEvent });
     });
     expect(useWorkspaceMutationCounter.getState().count).toBe(afterFirst);
+  });
+
+  it("coalesces a burst of observations into one leading and one trailing file-tree refresh", () => {
+    // Arrange
+    const client = new QueryClient();
+    const spy = vi.spyOn(client, "invalidateQueries");
+    renderHook(() => useAutoRefreshFilesOnEdit(), {
+      wrapper: makeWrapper(client),
+    });
+    const workspaceFileRefreshes = () =>
+      spy.mock.calls.filter(
+        (call) =>
+          (call[0] as { queryKey: unknown[] }).queryKey[0] ===
+          "workspace-files",
+      ).length;
+
+    // Act — a history replay delivers many bash observations back to back.
+    for (let i = 1; i <= 50; i += 1) {
+      act(() => {
+        useEventStore
+          .getState()
+          .addEvent(
+            makeObservationEvent(String(i), "TerminalObservation", "ls"),
+          );
+      });
+    }
+
+    // Assert
+    expect(workspaceFileRefreshes()).toBe(1);
+    advancePastRefreshThrottle();
+    expect(workspaceFileRefreshes()).toBe(2);
+    advancePastRefreshThrottle();
+    expect(workspaceFileRefreshes()).toBe(2);
   });
 
   it("only invalidates once per new event batch", () => {

@@ -497,6 +497,55 @@ describe("createMarsWebBridge", () => {
     expect(status).toBe(403);
   });
 
+  it("refuses a Host header containing URL userinfo on a loopback bind", async () => {
+    const { port } = new URL(web.origin);
+    const status = await new Promise<number>((resolve, reject) => {
+      httpRequest(
+        {
+          host: "127.0.0.1",
+          port,
+          path: "/mars/health",
+          headers: { Host: `evil.example@127.0.0.1:${port}` },
+        },
+        (res) => {
+          res.resume();
+          resolve(res.statusCode ?? 0);
+        },
+      )
+        .on("error", reject)
+        .end();
+    });
+    expect(status).toBe(403);
+
+    const caseInsensitive = await fetch(`${web.origin}/mars/health`, {
+      headers: { Origin: `http://LOCALHOST:${port}` },
+    });
+    // web.origin uses 127.0.0.1, so a LOCALHOST Origin against a 127.0.0.1 Host
+    // is cross-origin; the matching case-variant pair below must succeed.
+    expect(caseInsensitive.status).toBe(403);
+
+    const matchingCaseStatus = await new Promise<number>((resolve, reject) => {
+      httpRequest(
+        {
+          host: "127.0.0.1",
+          port,
+          path: "/mars/health",
+          headers: {
+            Host: `LOCALHOST:${port}`,
+            Origin: `http://localhost:${port}`,
+          },
+        },
+        (res) => {
+          res.resume();
+          resolve(res.statusCode ?? 0);
+        },
+      )
+        .on("error", reject)
+        .end();
+    });
+    expect(matchingCaseStatus).toBe(200);
+  });
+
   it("streams a JSON body past the rewrite limit through untouched instead of truncating it", async () => {
     const big = "x".repeat(9 * 1024 * 1024);
     upstream.setLargeBody(JSON.stringify({ blob: big }));

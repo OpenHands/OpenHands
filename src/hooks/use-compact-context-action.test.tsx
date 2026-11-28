@@ -63,6 +63,7 @@ describe("useCompactContextAction (integration)", () => {
       {
         cost: null,
         max_budget_per_task: null,
+        usage_breakdown: null,
         usage: usage(50_000),
       },
       "c1",
@@ -100,6 +101,7 @@ describe("useCompactContextAction (integration)", () => {
         {
           cost: null,
           max_budget_per_task: null,
+          usage_breakdown: null,
           usage: usage(20_000),
         },
         "c1",

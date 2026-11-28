@@ -3,21 +3,45 @@ import { useTranslation } from "react-i18next";
 import { CircleCheck } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { I18nKey } from "#/i18n/declaration";
-import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
 import type { AppConversation } from "#/api/conversation-service/agent-server-conversation-service.types";
 import { useActiveConversation } from "#/hooks/query/use-active-conversation";
-import { useUpdateConversationTagFlags } from "#/hooks/mutation/use-update-conversation-tag-flags";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import { useEventStore } from "#/stores/use-event-store";
 import { isUserMessageEvent } from "#/types/agent-server/type-guards";
 import type { OHEvent } from "#/stores/use-event-store";
 import {
   RESOLVED_CONVERSATION_TAG_KEY,
+  RESOLVE_NOTE_TAG_KEY,
   getConversationResolution,
+  autoResolveMessage,
+  parseAutoResolveNote,
 } from "#/utils/conversation-tag-flags";
 import { displayErrorToast } from "#/utils/custom-toast-handlers";
+import ProjectsService from "#/api/projects-service/projects-service.api";
+import {
+  projectsQueryRoot,
+  useProjectsEnabled,
+} from "#/hooks/query/use-projects";
+
+/** Agent Server tags a project's member with the project's id. */
+const PROJECT_TAG_KEY = "project";
 
 const COMPOSER_INPUT_SELECTOR = "[contenteditable='true']";
+
+/**
+ * Matches this conversation's cached detail whichever id form keyed it: the
+ * route uses the plain hex id, the server's `id` has dashes.
+ */
+const conversationDetailFilter = (id: string) => {
+  const key = id.replace(/-/g, "").toLowerCase();
+  return {
+    queryKey: ["user", "conversation"],
+    predicate: (query: { queryKey: readonly unknown[] }) =>
+      String(query.queryKey[2] ?? "")
+        .replace(/-/g, "")
+        .toLowerCase() === key,
+  };
+};
 
 function latestUserMessageId(events: OHEvent[]): string | null {
   for (let i = events.length - 1; i >= 0; i -= 1) {
@@ -31,9 +55,7 @@ function latestUserMessageId(events: OHEvent[]): string | null {
  * Notice above the composer for a project thread the Agent Server marked
  * resolved (`resolved=user|auto` tag). The composer stays usable.
  *
- * - Reopen re-reads the tags and PATCHes them without `resolved`, so tags
- *   the server wrote since the last poll are kept (the local PATCH replaces
- *   the whole map).
+ * - Reopen uses the project's reopen route; the server owns the tags.
  * - Sending a message reopens the thread on the server. When the server
  *   echoes a new user message, the conversation is refetched so the banner
  *   follows the server rather than guessing.
@@ -46,8 +68,7 @@ export function ResolvedConversationBanner() {
   const queryClient = useQueryClient();
   const { backend } = useActiveBackend();
   const { data: conversation } = useActiveConversation();
-  const { mutate: updateTagFlags, isPending: isUpdating } =
-    useUpdateConversationTagFlags();
+  const projectsEnabled = useProjectsEnabled();
   const [isReading, setIsReading] = useState(false);
   const bannerRef = useRef<HTMLDivElement>(null);
 
@@ -65,19 +86,23 @@ export function ResolvedConversationBanner() {
     if (userMessageId === seenUserMessageId.current) return;
     seenUserMessageId.current = userMessageId;
     if (resolution && conversationId) {
-      queryClient.invalidateQueries({
-        queryKey: ["user", "conversation", conversationId],
-      });
+      queryClient.invalidateQueries(conversationDetailFilter(conversationId));
       // The sidebar list shows the tag too.
       queryClient.invalidateQueries({ queryKey: ["user", "conversations"] });
     }
   }, [userMessageId, resolution, conversationId, queryClient]);
 
-  if (!conversation || !resolution) {
+  // Resolving is a project's board state: only members carry it.
+  const projectId = conversation?.tags?.[PROJECT_TAG_KEY];
+  if (!projectsEnabled || !conversation || !resolution || !projectId) {
     return null;
   }
 
-  const isPending = isReading || isUpdating;
+  const isPending = isReading;
+  const autoNote =
+    resolution === "auto"
+      ? parseAutoResolveNote(conversation.tags?.[RESOLVE_NOTE_TAG_KEY])
+      : null;
 
   const handleReopen = async () => {
     if (isPending) return;
@@ -88,37 +113,35 @@ export function ResolvedConversationBanner() {
       ) ?? null;
 
     setIsReading(true);
-    let currentTags = conversation.tags;
     try {
-      const [fresh] =
-        await AgentServerConversationService.batchGetAppConversations([
-          conversation.id,
-        ]);
-      if (fresh) {
-        currentTags = fresh.tags;
-        queryClient.setQueriesData<AppConversation | null | undefined>(
-          { queryKey: ["user", "conversation", conversation.id] },
-          (old) => (old ? { ...old, tags: fresh.tags } : old),
-        );
-      }
+      await ProjectsService.setConversationResolved(
+        projectId,
+        conversation.id,
+        false,
+      );
     } catch {
-      // Fall back to the cached tags; the PATCH reports any real failure.
-    } finally {
       setIsReading(false);
+      displayErrorToast(t(I18nKey.CHAT_INTERFACE$RESOLVED_REOPEN_FAILED));
+      return;
     }
-
-    updateTagFlags(
-      {
-        conversationId: conversation.id,
-        currentTags,
-        changes: { [RESOLVED_CONVERSATION_TAG_KEY]: false },
-      },
-      {
-        onError: () =>
-          displayErrorToast(t(I18nKey.CHAT_INTERFACE$RESOLVED_REOPEN_FAILED)),
+    // Hide at once; the refetch below confirms from the server.
+    queryClient.setQueriesData<AppConversation | null | undefined>(
+      conversationDetailFilter(conversation.id),
+      (old) => {
+        if (!old?.tags) return old;
+        const tags = { ...old.tags };
+        delete tags[RESOLVED_CONVERSATION_TAG_KEY];
+        delete tags[RESOLVE_NOTE_TAG_KEY];
+        return { ...old, tags };
       },
     );
+    setIsReading(false);
     composer?.focus();
+    await Promise.all([
+      queryClient.invalidateQueries(conversationDetailFilter(conversation.id)),
+      queryClient.invalidateQueries({ queryKey: ["user", "conversations"] }),
+      queryClient.invalidateQueries({ queryKey: projectsQueryRoot(backend) }),
+    ]);
   };
 
   return (
@@ -132,6 +155,14 @@ export function ResolvedConversationBanner() {
         <p className="text-sm text-foreground">
           {t(I18nKey.CHAT_INTERFACE$RESOLVED_TITLE)}
         </p>
+        {autoNote ? (
+          <p
+            className="text-xs text-muted mt-0.5"
+            data-testid="resolved-conversation-auto-note"
+          >
+            {t(...autoResolveMessage(autoNote))}
+          </p>
+        ) : null}
         <p className="text-xs text-muted mt-0.5">
           {t(I18nKey.CHAT_INTERFACE$RESOLVED_DESCRIPTION)}
         </p>

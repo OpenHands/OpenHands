@@ -291,6 +291,8 @@ OPTIONS:
 ENVIRONMENT VARIABLES:
   PORT                        Alternative to --port
   OH_BIND_HOST                Alternative to --host (default: 127.0.0.1)
+  OH_ALLOWED_HOSTS            Comma-separated tunnel/proxy hostnames a loopback
+                              bind accepts (e.g. abc.ngrok.app)
   OH_AUTOMATION_GIT_REF       Git ref for automation (overrides default version)
   OH_AUTOMATION_VERSION       Specific PyPI version for automation (default: ${DEFAULT_AUTOMATION_VERSION})
   OH_AUTOMATION_LOCAL_PATH    Absolute path to a local automation checkout (overridden only by --automation-git-ref)

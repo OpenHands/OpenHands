@@ -121,10 +121,22 @@ export const COMMAND_MENU_GROUP_ORDER: CommandMenuGroupId[] = [
 export const createCommandMenuItems = ({
   toggleSidebar,
   backendKind,
+  includeDesktopSidebarToggle,
 }: {
   toggleSidebar: () => void;
   backendKind: BackendKind;
+  includeDesktopSidebarToggle: boolean;
 }): CommandMenuItemDefinition[] => {
+  const desktopSidebarToggleItem: CommandMenuItemDefinition = {
+    id: "toggle-sidebar",
+    group: "actions",
+    titleKey: I18nKey.COMMAND_MENU$TOGGLE_SIDEBAR_TITLE,
+    descriptionKey: I18nKey.COMMAND_MENU$TOGGLE_SIDEBAR_DESCRIPTION,
+    keywordsKey: I18nKey.COMMAND_MENU$TOGGLE_SIDEBAR_KEYWORDS,
+    icon: <Keyboard size={ICON_SIZE} />,
+    perform: toggleSidebar,
+  };
+
   const items: CommandMenuItemDefinition[] = [
     {
       id: "new-chat",
@@ -267,15 +279,7 @@ export const createCommandMenuItems = ({
       icon: <FlaskConical size={ICON_SIZE} />,
       to: COMMAND_MENU_ROUTE.experimentalSettings,
     },
-    {
-      id: "toggle-sidebar",
-      group: "actions",
-      titleKey: I18nKey.COMMAND_MENU$TOGGLE_SIDEBAR_TITLE,
-      descriptionKey: I18nKey.COMMAND_MENU$TOGGLE_SIDEBAR_DESCRIPTION,
-      keywordsKey: I18nKey.COMMAND_MENU$TOGGLE_SIDEBAR_KEYWORDS,
-      icon: <Keyboard size={ICON_SIZE} />,
-      perform: toggleSidebar,
-    },
+    ...(includeDesktopSidebarToggle ? [desktopSidebarToggleItem] : []),
   ];
 
   // Locked-to-Cloud (SaaS / self-hosted OHE) lists only the Application page;

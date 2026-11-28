@@ -23,6 +23,7 @@ import { basename, dirname, extname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { redactStorage } from "./lib/redact-storage.mjs";
 import { HeldKeys } from "./lib/held-keys.mjs";
+import { installMediaObservation } from "./lib/media-observation.mjs";
 import {
   observeWebSocket,
   isWebSocketObservation,
@@ -171,19 +172,28 @@ await context.addInitScript(() => {
   });
 });
 
-// Instrumentation, not mocking: record media playback so sound features can
-// be observed (`browser media`); playback itself still happens.
-await context.addInitScript(() => {
-  const original = HTMLMediaElement.prototype.play;
-  window.__ohMediaPlays = [];
-  HTMLMediaElement.prototype.play = function play(...args) {
-    window.__ohMediaPlays.push({
-      src: this.currentSrc || this.src || "",
-      ts: new Date().toISOString(),
-    });
-    return original.apply(this, args);
-  };
-});
+// Runs start in the Paper theme, so screenshots share one look. Seeded once per
+// browser profile: a check that clears or changes the theme keeps that choice
+// across reloads. CONTROL_OPENHANDS_THEME picks another theme; "default" keeps
+// the app's own default.
+const seedTheme = process.env.CONTROL_OPENHANDS_THEME ?? "paper";
+if (seedTheme && seedTheme !== "default") {
+  await context.addInitScript((theme) => {
+    try {
+      const marker = "openhands-verify-theme-seeded";
+      if (window.localStorage.getItem(marker)) return;
+      window.localStorage.setItem(marker, "1");
+      if (!window.localStorage.getItem("openhands-color-theme"))
+        window.localStorage.setItem("openhands-color-theme", theme);
+    } catch {
+      // Opaque origins (about:blank, data:) have no localStorage.
+    }
+  }, seedTheme);
+}
+
+// Read-only media observation. Normal microphone, playback and peer APIs still
+// execute; no responses, constraints, permissions or media are substituted.
+await context.addInitScript(installMediaObservation);
 
 let dialogPolicy = "dismiss";
 let networkOffline = false;
@@ -1375,6 +1385,68 @@ const handlers = {
     await activePage.mouse.up();
     return { dragged: source, by: { dx, dy: dy || 0 } };
   },
+  async swipe({ selector, from, to, steps, holdMs }) {
+    // A one-finger swipe through Chromium's native touch input (CDP), the way
+    // a phone delivers it: touchStart, stepped touchMoves, a short rest, then
+    // touchEnd. --from/--to are offsets from the element's top-left corner.
+    const box = await locate(selector).first().boundingBox();
+    if (!box) throw new Error(`${selector} has no box to swipe on`);
+    const parse = (value, flag) => {
+      const [x, y] = String(value ?? "")
+        .split(",")
+        .map(Number);
+      if (!Number.isFinite(x) || !Number.isFinite(y))
+        throw new Error(`--${flag} needs X,Y offsets inside ${selector}`);
+      return [box.x + x, box.y + y];
+    };
+    const start = parse(from, "from");
+    const end = parse(to, "to");
+    const count = Math.max(1, Number(steps ?? 8));
+    const point = (step) => ({
+      x: start[0] + ((end[0] - start[0]) * step) / count,
+      y: start[1] + ((end[1] - start[1]) * step) / count,
+    });
+    const urlBefore = activePage.url();
+    const cdp = await activePage.context().newCDPSession(activePage);
+    try {
+      await cdp.send("Input.dispatchTouchEvent", {
+        type: "touchStart",
+        touchPoints: [point(0)],
+      });
+      for (let step = 1; step <= count; step += 1) {
+        await cdp.send("Input.dispatchTouchEvent", {
+          type: "touchMove",
+          touchPoints: [point(step)],
+        });
+      }
+      await activePage.waitForTimeout(Number(holdMs ?? 150));
+      await cdp.send("Input.dispatchTouchEvent", {
+        type: "touchMove",
+        touchPoints: [point(count)],
+      });
+      await cdp.send("Input.dispatchTouchEvent", {
+        type: "touchEnd",
+        touchPoints: [],
+      });
+    } finally {
+      await cdp.detach().catch(() => {});
+    }
+    // Two frames so React state set by the touch handlers has rendered.
+    await activePage.evaluate(
+      () =>
+        new Promise((resolve) => {
+          requestAnimationFrame(() => requestAnimationFrame(resolve));
+        }),
+    );
+    return {
+      selector,
+      box,
+      from: point(0),
+      to: point(count),
+      urlBefore,
+      url: activePage.url(),
+    };
+  },
   async "upload-via"({ trigger, files, timeout }) {
     // The real file chooser opened by a menu item or button.
     const [chooser] = await Promise.all([
@@ -1479,7 +1551,7 @@ const handlers = {
       value: await input.inputValue().catch(() => undefined),
     };
   },
-  async media({ clear, reducedMotion }) {
+  async media({ clear, reducedMotion, voice }) {
     if (reducedMotion !== undefined) {
       if (!["reduce", "no-preference"].includes(reducedMotion))
         throw new Error("media reduced-motion needs reduce | no-preference");
@@ -1492,6 +1564,15 @@ const handlers = {
     }, Boolean(clear));
     return {
       plays,
+      ...(voice
+        ? {
+            voice: await activePage.evaluate(async () =>
+              window.__ohMediaObservation
+                ? window.__ohMediaObservation.snapshot()
+                : { supported: false, reason: "instrumentation-unavailable" },
+            ),
+          }
+        : {}),
       reducedMotion: await activePage.evaluate(() =>
         matchMedia("(prefers-reduced-motion: reduce)").matches
           ? "reduce"

@@ -22,6 +22,7 @@ import { getDisplayConversationTags } from "#/api/agent-server-adapter";
 import { ConversationRepoLink } from "./conversation-repo-link";
 import { NoRepository } from "./no-repository";
 import { ConversationTagChips } from "./conversation-tag-chips";
+import { projectIdKey, useProjectNames } from "#/hooks/query/use-project-names";
 import { CONVERSATION_CARD_META_CHIP_CLASSNAME } from "./conversation-card-meta-chip";
 
 interface ConversationCardFooterProps {
@@ -141,7 +142,23 @@ export function ConversationCardFooter({
   const metadataIndentClass =
     executionStatus !== undefined ? "pl-6.5" : undefined;
 
-  const displayTags = showTags ? getDisplayConversationTags(tags) : [];
+  const projects = useProjectNames();
+  // A ``project`` tag holds the project's id; show its name when known, and
+  // nothing while the backend has Projects turned off.
+  const displayTags: Array<[string, string]> = showTags
+    ? getDisplayConversationTags(tags).flatMap(
+        ([key, value]): Array<[string, string]> => {
+          const normalized = key.trim().toLowerCase();
+          // A project member's resolution is board state, hidden with
+          // Projects off like its project chip.
+          if (normalized === "resolved" && tags?.project && !projects.enabled)
+            return [];
+          if (normalized !== "project") return [[key, value]];
+          if (!projects.enabled) return [];
+          return [[key, projects.names.get(projectIdKey(value)) ?? value]];
+        },
+      )
+    : [];
 
   return (
     <div

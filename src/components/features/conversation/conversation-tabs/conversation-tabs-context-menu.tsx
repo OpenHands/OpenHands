@@ -11,13 +11,20 @@ import {
   type ConversationTab,
 } from "#/stores/conversation-store";
 import { I18nKey } from "#/i18n/declaration";
-import { Gauge, Globe, ListTodo, SquareChevronRight } from "lucide-react";
+import {
+  FolderKanban,
+  Gauge,
+  Globe,
+  ListTodo,
+  SquareChevronRight,
+} from "lucide-react";
 import { LuFileDiff } from "react-icons/lu";
 import DocumentIcon from "#/icons/document.svg?react";
 import PillIcon from "#/icons/pill.svg?react";
 import PillFillIcon from "#/icons/pill-fill.svg?react";
 import DoubleCheckIcon from "#/icons/double-check.svg?react";
 import { useTaskList } from "#/hooks/use-task-list";
+import { useConversationProjectId } from "#/hooks/query/use-conversation-project";
 import { useSelectConversationTab } from "#/hooks/use-select-conversation-tab";
 import { useIsArchivedConversation } from "#/hooks/use-is-archived-conversation";
 import { ArchivedDisabledTooltip } from "../../context-menu/archived-disabled-tooltip";
@@ -129,6 +136,15 @@ export function ConversationTabsContextMenu({
     { tab: "browser", icon: Globe, i18nKey: I18nKey.COMMON$BROWSER },
     { tab: "usage", icon: Gauge, i18nKey: I18nKey.COMMON$USAGE },
   ];
+
+  const projectId = useConversationProjectId();
+  if (projectId) {
+    tabConfig.unshift({
+      tab: "project",
+      icon: FolderKanban,
+      i18nKey: I18nKey.PROJECTS$PROJECT_TAB,
+    });
+  }
 
   if (hasTaskList) {
     tabConfig.unshift({

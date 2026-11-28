@@ -58,6 +58,30 @@ describe("ChatInputField auto-focus", () => {
   });
 });
 
+describe("ChatInputField accessibility semantics", () => {
+  it("exposes the enabled composer as a named multiline textbox", () => {
+    renderWithProviders(
+      <Harness disabled={false} placeholder="Custom placeholder" />,
+    );
+
+    const input = screen.getByRole("textbox", { name: "Custom placeholder" });
+
+    expect(input).toHaveAttribute("aria-multiline", "true");
+    expect(input).toHaveAttribute("contenteditable", "true");
+    expect(input).toHaveAttribute("tabindex", "0");
+  });
+
+  it("keeps the disabled composer out of the tab order", () => {
+    renderWithProviders(<Harness disabled placeholder="Custom placeholder" />);
+
+    const input = screen.getByRole("textbox", { name: "Custom placeholder" });
+
+    expect(input).toHaveAttribute("aria-disabled", "true");
+    expect(input).toHaveAttribute("contenteditable", "false");
+    expect(input).toHaveAttribute("tabindex", "-1");
+  });
+});
+
 function describeEngineeringTask() {
   return "Describe an engineering task…";
 }
