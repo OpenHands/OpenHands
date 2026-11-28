@@ -2,13 +2,12 @@ import type { AgentServerUICssVariableName } from "#/styles/agent-server-ui-styl
 import type { ColorThemeDefinition } from "../types";
 import { NEUTRAL_SCALE, NEUTRAL_HEROUI } from "../palettes/neutral";
 
-/** White primary/accent tokens — used by OpenHands-Neo for button surfaces. */
-const NEO_WHITE_BUTTON_TOKENS: Partial<
-  Record<AgentServerUICssVariableName, string>
-> = {
+/** White button tokens plus the shared dark muted text value. */
+const NEO_TOKENS: Partial<Record<AgentServerUICssVariableName, string>> = {
   "--oh-color-primary": "#ffffff",
   "--oh-accent": "#ffffff",
   "--oh-warning": "#ffffff",
+  "--oh-muted": "#A3A3A3",
 };
 
 export const openhandsNeo: ColorThemeDefinition = {
@@ -16,5 +15,5 @@ export const openhandsNeo: ColorThemeDefinition = {
   appearance: "dark",
   scale: NEUTRAL_SCALE,
   heroui: NEUTRAL_HEROUI,
-  tokens: NEO_WHITE_BUTTON_TOKENS,
+  tokens: NEO_TOKENS,
 };
