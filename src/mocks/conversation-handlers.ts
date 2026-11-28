@@ -139,6 +139,11 @@ const CONVERSATIONS = new Map<string, MockConversation>(
   conversations.map((conversation) => [conversation.id, conversation]),
 );
 
+const MODEL_ROUTER_ROUTES = new Map<
+  string,
+  Array<{ name: string; profile_name?: string }>
+>();
+
 const paginationEventsByConversation = new Map<string, OpenHandsEvent[]>([
   [
     PAGINATION_LOCAL_CONVERSATION_ID,
@@ -407,6 +412,141 @@ export const CONVERSATION_HANDLERS = [
 
   http.post("*/api/conversations/:conversationId/events", async () =>
     HttpResponse.json({ ok: true }),
+  ),
+
+  http.post(
+    "*/api/conversations/:conversationId/secrets",
+    async ({ params, request }) => {
+      if (!CONVERSATIONS.has(params.conversationId as string)) {
+        return HttpResponse.json(
+          { detail: "Conversation not found" },
+          { status: 404 },
+        );
+      }
+      const body = (await request.json()) as {
+        secrets?: Record<string, string>;
+      };
+      if (!body.secrets || Object.keys(body.secrets).length === 0) {
+        return HttpResponse.json(
+          { detail: "Secret required" },
+          { status: 400 },
+        );
+      }
+      return HttpResponse.json({ success: true });
+    },
+  ),
+
+  http.post(
+    "*/api/conversations/:conversationId/mcp",
+    async ({ params, request }) => {
+      if (!CONVERSATIONS.has(params.conversationId as string)) {
+        return HttpResponse.json(
+          { detail: "Conversation not found" },
+          { status: 404 },
+        );
+      }
+      const body = (await request.json()) as {
+        mcp_servers?: Record<string, unknown>;
+      };
+      if (!body.mcp_servers || Object.keys(body.mcp_servers).length === 0) {
+        return HttpResponse.json(
+          { detail: "MCP server required" },
+          { status: 400 },
+        );
+      }
+      return HttpResponse.json({ success: true });
+    },
+  ),
+
+  http.post(
+    "*/api/conversations/:conversationId/switch_llm",
+    async ({ params }) => {
+      if (!CONVERSATIONS.has(params.conversationId as string)) {
+        return HttpResponse.json(
+          { detail: "Conversation not found" },
+          { status: 404 },
+        );
+      }
+      return HttpResponse.json({ success: true });
+    },
+  ),
+
+  http.get(
+    "*/api/conversations/:conversationId/model_router",
+    async ({ params }) => {
+      const conversationId = params.conversationId as string;
+      if (!CONVERSATIONS.has(conversationId)) {
+        return HttpResponse.json(
+          { detail: "Conversation not found" },
+          { status: 404 },
+        );
+      }
+      return HttpResponse.json({
+        enabled: true,
+        routes: MODEL_ROUTER_ROUTES.get(conversationId) ?? [],
+      });
+    },
+  ),
+
+  http.post(
+    "*/api/conversations/:conversationId/model_router/routes",
+    async ({ params, request }) => {
+      const conversationId = params.conversationId as string;
+      if (!CONVERSATIONS.has(conversationId)) {
+        return HttpResponse.json(
+          { detail: "Conversation not found" },
+          { status: 404 },
+        );
+      }
+      const body = (await request.json()) as {
+        profile_name?: string;
+        route_name?: string | null;
+      };
+      const routeName = body.route_name || body.profile_name;
+      if (!body.profile_name || !routeName) {
+        return HttpResponse.json(
+          { detail: "Profile name required" },
+          { status: 400 },
+        );
+      }
+      const routes = MODEL_ROUTER_ROUTES.get(conversationId) ?? [];
+      if (routes.some((route) => route.name === routeName)) {
+        return HttpResponse.json(
+          { detail: "Conversation cannot add this model router route" },
+          { status: 400 },
+        );
+      }
+      const nextRoutes = [
+        ...routes,
+        { name: routeName, profile_name: body.profile_name },
+      ];
+      MODEL_ROUTER_ROUTES.set(conversationId, nextRoutes);
+      return HttpResponse.json({
+        enabled: true,
+        routes: nextRoutes,
+      });
+    },
+  ),
+
+  http.patch(
+    "*/api/conversations/:conversationId/model_router",
+    async ({ params, request }) => {
+      const conversationId = params.conversationId as string;
+      if (!CONVERSATIONS.has(conversationId)) {
+        return HttpResponse.json(
+          { detail: "Conversation not found" },
+          { status: 404 },
+        );
+      }
+      const body = (await request.json()) as {
+        selection?: { manual_route_name?: string | null; mode?: string };
+      };
+      return HttpResponse.json({
+        enabled: true,
+        routes: MODEL_ROUTER_ROUTES.get(conversationId) ?? [],
+        selection: body.selection ?? { mode: "auto" },
+      });
+    },
   ),
 
   // The generated-canvas fixture behaves like a real workspace artifact:

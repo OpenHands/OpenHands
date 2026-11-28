@@ -18,6 +18,8 @@ import {
 interface MarketplaceSectionProps {
   onSelect: (entry: MarketplaceEntry) => void;
   onAdd: (entry: MarketplaceEntry) => void;
+  selectedEntryIds?: Set<string>;
+  onToggleEntry?: (entry: MarketplaceEntry, selected: boolean) => void;
   /** Empty string = no filter. */
   query?: string;
 }
@@ -25,6 +27,8 @@ interface MarketplaceSectionProps {
 export function MarketplaceSection({
   onSelect,
   onAdd,
+  selectedEntryIds,
+  onToggleEntry,
   query = "",
 }: MarketplaceSectionProps) {
   const { t } = useTranslation("openhands");
@@ -63,6 +67,12 @@ export function MarketplaceSection({
                 entry={entry}
                 onClick={() => onSelect(entry)}
                 onAdd={() => onAdd(entry)}
+                selected={selectedEntryIds?.has(entry.id)}
+                onToggle={
+                  onToggleEntry
+                    ? (selected) => onToggleEntry(entry, selected)
+                    : undefined
+                }
               />
             ))}
           </div>

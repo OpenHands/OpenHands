@@ -1,5 +1,12 @@
 import React from "react";
-import { FolderOpen, Paperclip, Plus } from "lucide-react";
+import {
+  FolderOpen,
+  KeyRound,
+  Paperclip,
+  Plus,
+  Puzzle,
+  Sparkles,
+} from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { I18nKey } from "#/i18n/declaration";
 import { cn } from "#/utils/utils";
@@ -15,6 +22,19 @@ import { PluginsModal } from "#/components/features/conversation-panel/plugins-m
 import { HooksModal } from "#/components/features/conversation-panel/hooks-modal";
 import { ProjectFilePicker } from "#/components/features/projects/project-file-picker";
 import { useConversationProjectId } from "#/hooks/query/use-conversation-project";
+import { useIsArchivedConversation } from "#/hooks/use-is-archived-conversation";
+import {
+  useConversationConfigurationCapability,
+  useConversationLlmCapabilities,
+  useConversationMcpCapabilities,
+} from "#/hooks/query/use-conversation-configuration-capability";
+import type { ConversationConfigurationSection } from "./conversation-configuration-modal";
+
+const ConversationConfigurationModal = React.lazy(() =>
+  import("./conversation-configuration-modal").then((module) => ({
+    default: module.ConversationConfigurationModal,
+  })),
+);
 
 export interface ChatAddFileButtonProps {
   handleFileIconClick: () => void;
@@ -36,6 +56,17 @@ export function ChatAddFileButton({
   const { t } = useTranslation("openhands");
   const { conversationId } = useOptionalConversationId();
   const { data: conversation } = useActiveConversation();
+  const isArchived = useIsArchivedConversation();
+  const canAdd =
+    !!conversationId &&
+    conversation?.id === conversationId &&
+    !disabled &&
+    !isArchived;
+  const { data: canConfigure } = useConversationConfigurationCapability(canAdd);
+  const { canInstall } = useConversationMcpCapabilities(canAdd);
+  const { canRoute } = useConversationLlmCapabilities(canAdd);
+  const [configurationSection, setConfigurationSection] =
+    React.useState<ConversationConfigurationSection | null>(null);
   const [menuOpen, setMenuOpen] = React.useState(false);
   const [pickingProjectFile, setPickingProjectFile] = React.useState(false);
   // Only a conversation in a project offers that project's files.
@@ -109,6 +140,36 @@ export function ChatAddFileButton({
           shouldShowHooks={shouldShowHooks}
           shouldShowPlugins={shouldShowPlugins}
           footerActions={[
+            ...(canConfigure
+              ? [
+                  {
+                    testId: "conversation-add-secret-button",
+                    icon: <KeyRound className="size-4" aria-hidden />,
+                    label: t(I18nKey.SECRETS$ADD_SECRET),
+                    onClick: () => setConfigurationSection("secrets" as const),
+                  },
+                ]
+              : []),
+            ...(canConfigure && canInstall && conversation?.agent_kind !== "acp"
+              ? [
+                  {
+                    testId: "conversation-add-mcp-button",
+                    icon: <Puzzle className="size-4" aria-hidden />,
+                    label: t(I18nKey.MCP$INSTALL_BUTTON),
+                    onClick: () => setConfigurationSection("mcp" as const),
+                  },
+                ]
+              : []),
+            ...(canConfigure && canRoute && conversation?.agent_kind !== "acp"
+              ? [
+                  {
+                    testId: "conversation-add-llm-button",
+                    icon: <Sparkles className="size-4" aria-hidden />,
+                    label: t(I18nKey.SETTINGS$ADD_LLM_PROFILE),
+                    onClick: () => setConfigurationSection("models" as const),
+                  },
+                ]
+              : []),
             {
               testId: "add-files-and-images-button",
               icon: (
@@ -140,6 +201,19 @@ export function ChatAddFileButton({
           ]}
         />
       )}
+
+      {configurationSection &&
+        canConfigure &&
+        conversationId === conversation?.id && (
+          <React.Suspense fallback={null}>
+            <ConversationConfigurationModal
+              key={`${conversationId}:${configurationSection}`}
+              conversationId={conversationId}
+              section={configurationSection}
+              onClose={() => setConfigurationSection(null)}
+            />
+          </React.Suspense>
+        )}
 
       <SystemMessageModal
         isOpen={systemModalVisible}

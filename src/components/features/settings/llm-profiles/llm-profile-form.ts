@@ -118,6 +118,7 @@ export function buildProfileLlmConfig({
       llmConfig.model = currentModel;
     }
   }
+  llmConfig.stream = true;
   const authType = resolveLlmAuthType(llmConfig.auth_type);
 
   // A profile linked to a provider connection sources its credential from the

@@ -1,4 +1,5 @@
 import type { KeyboardEvent } from "react";
+import { useTranslation } from "react-i18next";
 import { I18nKey } from "#/i18n/declaration";
 import type { IntegrationCatalogEntry as MarketplaceEntry } from "@openhands/extensions/integrations";
 import { McpLogoBadge } from "#/components/features/mcp-logo-badge";
@@ -14,13 +15,18 @@ interface MarketplaceCardProps {
   entry: MarketplaceEntry;
   onClick: () => void;
   onAdd: () => void;
+  selected?: boolean;
+  onToggle?: (selected: boolean) => void;
 }
 
 export function MarketplaceCard({
   entry,
   onClick,
   onAdd,
+  selected,
+  onToggle,
 }: MarketplaceCardProps) {
+  const { t } = useTranslation("openhands");
   const transport = getDefaultMcpTransport(entry);
   const transportLabel = (() => {
     switch (transport?.kind) {
@@ -48,10 +54,10 @@ export function MarketplaceCard({
 
   return (
     <div
-      role="button"
-      tabIndex={0}
-      onClick={onClick}
-      onKeyDown={handleKeyDown}
+      role={onToggle ? undefined : "button"}
+      tabIndex={onToggle ? undefined : 0}
+      onClick={onToggle ? undefined : onClick}
+      onKeyDown={onToggle ? undefined : handleKeyDown}
       data-testid={`mcp-marketplace-card-${entry.id}`}
       className={cn(
         "flex min-h-33 flex-col overflow-hidden p-4 text-left",
@@ -69,17 +75,25 @@ export function MarketplaceCard({
                 {transportLabel}
               </p>
             </div>
-            <CirclePlusCheckToggle
-              testId={`mcp-marketplace-toggle-${entry.id}`}
-              isSelected={false}
-              onToggle={(selected) => {
-                if (selected) {
-                  onAdd();
-                }
-              }}
-              enableLabelKey={I18nKey.MCP$TOGGLE_ADD_SERVER}
-              disableLabelKey={I18nKey.MCP$TOGGLE_ADD_SERVER}
-            />
+            {onToggle ? (
+              <input
+                type="checkbox"
+                className="size-4 shrink-0 accent-primary"
+                checked={selected ?? false}
+                onChange={(event) => onToggle(event.target.checked)}
+                aria-label={`${t(I18nKey.MCP$TOGGLE_ADD_SERVER)}: ${entry.name}`}
+              />
+            ) : (
+              <CirclePlusCheckToggle
+                testId={`mcp-marketplace-toggle-${entry.id}`}
+                isSelected={false}
+                onToggle={(isSelected) => {
+                  if (isSelected) onAdd();
+                }}
+                enableLabelKey={I18nKey.MCP$TOGGLE_ADD_SERVER}
+                disableLabelKey={I18nKey.MCP$TOGGLE_ADD_SERVER}
+              />
+            )}
           </header>
           <p className="line-clamp-3 text-xs leading-relaxed text-tertiary-light">
             {entry.description}

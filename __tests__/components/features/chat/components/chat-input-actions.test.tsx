@@ -270,9 +270,9 @@ describe("ChatInputActions", () => {
   });
 
   it("renders the LLM-profile switcher inside a cloud OpenHands conversation", () => {
-    // /switch_profile is a real endpoint on both backends (cloud proxies
-    // POST /api/v1/app-conversations/{id}/switch_profile) — cloud OpenHands
-    // conversations get the same live-switch picker as local (#1571 review).
+    // Cloud proxies POST /api/v1/app-conversations/{id}/switch_profile, so
+    // cloud OpenHands conversations get the same live-switch picker as local
+    // (#1571 review).
     setRegisteredBackends([cloudBackend]);
     setActiveSelection({ backendId: cloudBackend.id });
     useActiveConversationMock.mockReturnValue({

@@ -45,6 +45,8 @@ interface MCPServerFormProps {
    * add mode, so the form owns this decision.
    */
   isStdioTestUnavailable?: boolean;
+  /** Runtime additions support stdio and streamable HTTP, not SSE. */
+  runtimeOnly?: boolean;
 }
 
 export function MCPServerForm({
@@ -59,10 +61,11 @@ export function MCPServerForm({
   isTestPending = false,
   testMessage = null,
   isStdioTestUnavailable = false,
+  runtimeOnly = false,
 }: MCPServerFormProps) {
   const { t } = useTranslation("openhands");
   const [serverType, setServerType] = React.useState<MCPServerType>(
-    server?.type || "sse",
+    server?.type || (runtimeOnly ? "shttp" : "sse"),
   );
   const [authMode, setAuthMode] = React.useState<RemoteAuthMode>(() => {
     if (server?.auth?.strategy === "oauth2") return "oauth2";
@@ -85,7 +88,9 @@ export function MCPServerForm({
   const formRef = React.useRef<HTMLFormElement>(null);
 
   const serverTypeOptions = [
-    { key: "sse", label: t(I18nKey.SETTINGS$MCP_SERVER_TYPE_SSE) },
+    ...(!runtimeOnly
+      ? [{ key: "sse", label: t(I18nKey.SETTINGS$MCP_SERVER_TYPE_SSE) }]
+      : []),
     { key: "stdio", label: t(I18nKey.SETTINGS$MCP_SERVER_TYPE_STDIO) },
     { key: "shttp", label: t(I18nKey.SETTINGS$MCP_SERVER_TYPE_SHTTP) },
   ];
