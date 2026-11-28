@@ -748,10 +748,64 @@ describe("ManageBackendsModal", () => {
       "manage-backends-reconnect-cloud-login-button",
     );
     expect(reconnectButton).toHaveTextContent("BACKEND$RECONNECT_CLOUD");
+    expect(
+      screen.getByTestId("manage-backends-recovery-reason"),
+    ).toHaveTextContent("BACKEND$RECOVERY_REASON_RECONNECT");
 
     await user.click(reconnectButton);
     expect(deviceFlowMocks.startDeviceFlow).toHaveBeenCalledWith(
       "https://app.all-hands.dev",
+    );
+  });
+
+  it("explains why the recovery gate cannot be dismissed", () => {
+    renderWithProviders(
+      <TestSeed onMount={vi.fn()}>
+        <ManageBackendsModal onClose={vi.fn()} recoveryMode />
+      </TestSeed>,
+    );
+
+    const title = screen.getByRole("heading", {
+      name: "BACKEND$MANAGE_TITLE",
+    });
+    const dialog = screen.getByLabelText("BACKEND$MANAGE_TITLE");
+    const reason = screen.getByTestId("manage-backends-recovery-reason");
+    expect(reason).toHaveTextContent("BACKEND$RECOVERY_REASON");
+    expect(title).toHaveAttribute("id", "manage-backends-title");
+    expect(reason).toHaveAttribute("id", "manage-backends-recovery-reason");
+    expect(dialog).toHaveAttribute(
+      "aria-describedby",
+      reason.getAttribute("id"),
+    );
+  });
+
+  it("names the required action when the gate has no backend", () => {
+    renderWithProviders(
+      <TestSeed onMount={vi.fn()}>
+        <ManageBackendsModal onClose={vi.fn()} recoveryMode />
+      </TestSeed>,
+    );
+
+    expect(screen.getByTestId("manage-backends-add")).toHaveTextContent(
+      "BACKEND$ADD_TO_CONTINUE",
+    );
+  });
+
+  it("leaves the normal modal without the gate explanation", () => {
+    renderWithProviders(
+      <TestSeed onMount={vi.fn()}>
+        <ManageBackendsModal onClose={vi.fn()} />
+      </TestSeed>,
+    );
+
+    expect(
+      screen.getByRole("heading", { name: "BACKEND$MANAGE_TITLE" }),
+    ).not.toHaveAttribute("id");
+    expect(
+      screen.queryByTestId("manage-backends-recovery-reason"),
+    ).not.toBeInTheDocument();
+    expect(screen.getByTestId("manage-backends-add")).toHaveTextContent(
+      "BACKEND$ADD",
     );
   });
 

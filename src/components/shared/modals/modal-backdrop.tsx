@@ -13,6 +13,8 @@ interface ModalBackdropProps {
   /** When true, renders above the default modal layer. Defaults to false. */
   elevated?: boolean;
   "aria-label"?: string;
+  /** Ids of the elements that explain the dialog, read right after its label. */
+  "aria-describedby"?: string;
 }
 
 export function ModalBackdrop({
@@ -22,6 +24,7 @@ export function ModalBackdrop({
   closeOnBackdropClick = true,
   elevated = false,
   "aria-label": ariaLabel,
+  "aria-describedby": ariaDescribedBy,
 }: ModalBackdropProps) {
   const focus = useModalFocus({ elevated });
   // The dialog is on top: menus and drawers opened before it never take its
@@ -86,6 +89,7 @@ export function ModalBackdrop({
         role="dialog"
         aria-modal="true"
         aria-label={ariaLabel}
+        aria-describedby={ariaDescribedBy}
         tabIndex={-1}
         onFocus={focus.onFocus}
         onKeyDown={focus.onKeyDown}
