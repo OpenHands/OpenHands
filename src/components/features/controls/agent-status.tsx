@@ -112,8 +112,17 @@ export function AgentStatus({
     !shouldShownAgentError &&
     (curAgentState === AgentState.STOPPED ||
       curAgentState === AgentState.PAUSED);
+
+  const canRetryError =
+    !isLaunching &&
+    (curAgentState === AgentState.ERROR ||
+      curAgentState === AgentState.RATE_LIMITED) &&
+    webSocketStatus !== "CLOSED" &&
+    taskStatus !== "ERROR";
+
   const isInteractive =
-    !isLoading && (shouldShownAgentStop || shouldShownAgentResume);
+    !isLoading &&
+    (shouldShownAgentStop || shouldShownAgentResume || canRetryError);
   const compactStatus =
     compact || (progressInChat && (isLoading || shouldShownAgentStop));
   const isDoneStatus =
@@ -202,12 +211,28 @@ export function AgentStatus({
             disabled={disabled}
           />
         )}
-        {!isLoading && shouldShownAgentError && (
-          <CircleErrorIcon
-            className="w-4 h-4 text-current"
-            data-testid="circle-error-icon"
-          />
-        )}
+        {!isLoading &&
+          shouldShownAgentError &&
+          (canRetryError ? (
+            <button
+              type="button"
+              onClick={handleResumeAgent}
+              disabled={disabled}
+              aria-label={t(I18nKey.CHAT_INTERFACE$MESSAGE_RETRY)}
+              data-testid="error-retry-button"
+              className={cn("cursor-pointer", disabled && "cursor-not-allowed")}
+            >
+              <CircleErrorIcon
+                className="w-4 h-4 text-current"
+                data-testid="circle-error-icon"
+              />
+            </button>
+          ) : (
+            <CircleErrorIcon
+              className="w-4 h-4 text-current"
+              data-testid="circle-error-icon"
+            />
+          ))}
         {!isLoading &&
           !shouldShownAgentStop &&
           !shouldShownAgentResume &&

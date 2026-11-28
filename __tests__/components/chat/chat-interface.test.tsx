@@ -69,6 +69,15 @@ vi.mock("#/hooks/use-send-message", () => ({
 
 vi.mock("#/hooks/query/use-config");
 vi.mock("#/hooks/mutation/use-unified-upload-files");
+const { mockResumeConversation } = vi.hoisted(() => ({
+  mockResumeConversation: vi.fn(),
+}));
+vi.mock("#/hooks/mutation/use-resume-conversation", () => ({
+  useResumeConversation: () => ({
+    mutate: mockResumeConversation,
+    isPending: false,
+  }),
+}));
 // Treat the LLM as configured by default so the "not configured" gate/banner
 // stays inert for these tests (its own behavior is covered elsewhere).
 vi.mock("#/hooks/use-llm-configured", () => ({
@@ -180,6 +189,7 @@ beforeEach(() => {
     hasMore: false,
     loadOlder: vi.fn().mockResolvedValue(undefined),
   });
+  mockResumeConversation.mockClear();
 });
 
 describe("ChatInterface - Chat Suggestions", () => {
@@ -880,6 +890,105 @@ describe("ChatInterface - Pending message queue", () => {
     expect(screen.getByTestId("chat-message-retry")).toBeVisible();
     expect(
       screen.queryByText(I18nKey.CHAT_INTERFACE$RESUMING_SANDBOX),
+    ).not.toBeInTheDocument();
+  });
+
+  it("allows retrying failed agent turn from ErrorMessageBanner when in ERROR state", async () => {
+    vi.mocked(useAgentState).mockReturnValue({
+      curAgentState: AgentState.ERROR,
+      executionStatus: null,
+    });
+
+    useErrorMessageStore.setState({
+      errorMessage: "LLM provider rate limit exceeded",
+      errorType: "conversation",
+      errorCode: null,
+    });
+
+    renderInterface();
+
+    const retryButton = screen.getByTestId("error-message-banner-retry");
+    expect(retryButton).toBeInTheDocument();
+
+    fireEvent.click(retryButton);
+    expect(mockResumeConversation).toHaveBeenCalledWith(
+      {
+        conversationId: "test-conversation-id",
+      },
+      expect.objectContaining({ onSuccess: expect.any(Function) }),
+    );
+
+    // Error remains visible until resume mutation succeeds
+    expect(useErrorMessageStore.getState().errorMessage).not.toBeNull();
+
+    // Trigger onSuccess
+    const options = mockResumeConversation.mock.calls[0][1];
+    options.onSuccess();
+    expect(useErrorMessageStore.getState().errorMessage).toBeNull();
+  });
+
+  it("does not show retry button on banner for non-retryable error classification", async () => {
+    vi.mocked(useAgentState).mockReturnValue({
+      curAgentState: AgentState.ERROR,
+      executionStatus: null,
+    });
+
+    useErrorMessageStore.setState({
+      errorMessage: "Invalid API key",
+      errorType: "conversation",
+      errorCode: null,
+      errorClassification: {
+        kind: "auth",
+        retryable: false,
+        user_action: "settings",
+      },
+    });
+
+    renderInterface();
+
+    expect(screen.getByText("Invalid API key")).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("error-message-banner-retry"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("does not show retry button on banner for ACP auth error", async () => {
+    vi.mocked(useAgentState).mockReturnValue({
+      curAgentState: AgentState.ERROR,
+      executionStatus: null,
+    });
+
+    useErrorMessageStore.setState({
+      errorMessage: "ACP Authentication Required",
+      errorType: "conversation",
+      errorCode: "ACPAuthRequired",
+    });
+
+    renderInterface();
+
+    expect(screen.getByText("ACP Authentication Required")).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("error-message-banner-retry"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("does not show retry button on banner for archived conversations", async () => {
+    seedResolvedConversation("MISSING");
+    vi.mocked(useAgentState).mockReturnValue({
+      curAgentState: AgentState.ERROR,
+      executionStatus: null,
+    });
+
+    useErrorMessageStore.setState({
+      errorMessage: "LLM rate limit",
+      errorType: "conversation",
+      errorCode: null,
+    });
+
+    renderInterface();
+
+    expect(
+      screen.queryByTestId("error-message-banner-retry"),
     ).not.toBeInTheDocument();
   });
 
